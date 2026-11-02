@@ -44,24 +44,42 @@ flowchart TD
     end
 ```
 
-### Các Lệnh Quản Trị Docker Compose Chuẩn:
+### Các Script Quản Trị & Vận Hành Nhanh (Build / Start / Stop / Reload / Restart):
+
+Hệ thống hỗ trợ script điều phối đa nền tảng (`manage.sh` trên Linux/VPS, `manage.ps1` trên Windows, và npm scripts):
+
+| Thao tác | Mục đích | Lệnh Linux (VPS) | Lệnh Windows (PowerShell) | Lệnh npm |
+| :--- | :--- | :--- | :--- | :--- |
+| **Build** | Build mới images `api` và `web` | `./manage.sh build` | `.\manage.ps1 build` | `npm run prod:build` |
+| **Start** | Khởi động hệ thống ngầm | `./manage.sh start` | `.\manage.ps1 start` | `npm run prod:start` |
+| **Stop** | Dừng an toàn (bảo toàn data DB) | `./manage.sh stop` | `.\manage.ps1 stop` | `npm run prod:stop` |
+| **Reload** | **Chạy lại giao diện mới (Zero-Downtime)** | `./manage.sh reload` | `.\manage.ps1 reload` | `npm run prod:reload` |
+| **Restart** | **Chạy lại với thay đổi lớn (Rebuild + Sync DB + Prune)** | `./manage.sh restart` | `.\manage.ps1 restart` | `npm run prod:restart` |
+| **Status** | Kiểm tra danh sách container | `./manage.sh status` | `.\manage.ps1 status` | `npm run prod:status` |
+| **Logs** | Xem logs thời gian thực | `./manage.sh logs` | `.\manage.ps1 logs` | `npm run prod:logs` |
+
+> 💡 **Mẹo:**
+> - Thêm cờ `--pull` (Linux) hoặc `-Pull` (Windows) để tự động kéo code mới nhất từ Git trước khi reload/restart (Ví dụ: `./manage.sh reload --pull`).
+> - Thêm cờ `--dev` (Linux) hoặc `-Dev` (Windows) nếu muốn thao tác trên file local `docker-compose.yml`.
+
+### Các Lệnh Docker Compose Thủ Công Chuẩn:
 
 ```powershell
-# 1. Khởi chạy toàn bộ 4 dịch vụ ngầm (Background)
-docker compose up -d
+# 1. Khởi chạy toàn bộ dịch vụ ngầm (Background)
+docker compose -f docker-compose.prod.yml up -d
 
 # 2. Xem log theo thời gian thực của toàn bộ hệ thống
-docker compose logs -f
+docker compose -f docker-compose.prod.yml logs -f
 
 # 3. Xem log riêng của Backend API hoặc Web Frontend
-docker compose logs -f api
-docker compose logs -f web
+docker compose -f docker-compose.prod.yml logs -f api
+docker compose -f docker-compose.prod.yml logs -f web
 
 # 4. Kiểm tra trạng thái sức khỏe (Healthcheck) của các container
-docker compose ps
+docker compose -f docker-compose.prod.yml ps
 
 # 5. Dừng hệ thống khi không sử dụng
-docker compose down
+docker compose -f docker-compose.prod.yml stop
 ```
 
 ---

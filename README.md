@@ -48,11 +48,25 @@ TOPRunAssistant/
 
 ---
 
-## ⚡ Hướng Dẫn Chạy Nhanh (Quickstart)
+## ⚡ Hướng Dẫn Chạy Nhanh & Quản Trị Hệ Thống (Quickstart & Operations)
 
-### Cách 1: Khởi chạy trọn gói bằng Docker Compose (Khuyên dùng)
+### Bộ Lệnh Quản Trị Đa Nền Tảng (`manage.sh` / `manage.ps1` / `npm run`)
+
+| Thao tác | Mô tả | Linux / VPS | Windows PowerShell | npm Script |
+| :--- | :--- | :--- | :--- | :--- |
+| **Build** | Build mới images `api` và `web` | `./manage.sh build` | `.\manage.ps1 build` | `npm run prod:build` |
+| **Start** | Khởi động toàn bộ container | `./manage.sh start` | `.\manage.ps1 start` | `npm run prod:start` |
+| **Stop** | Dừng an toàn (giữ nguyên DB) | `./manage.sh stop` | `.\manage.ps1 stop` | `npm run prod:stop` |
+| **Reload** | **Chạy lại giao diện mới (Zero-Downtime)** | `./manage.sh reload` | `.\manage.ps1 reload` | `npm run prod:reload` |
+| **Restart** | **Chạy lại thay đổi lớn (Rebuild + Sync DB + Prune)** | `./manage.sh restart` | `.\manage.ps1 restart` | `npm run prod:restart` |
+| **Status** | Xem trạng thái các container | `./manage.sh status` | `.\manage.ps1 status` | `npm run prod:status` |
+| **Logs** | Xem logs hệ thống theo thời gian thực | `./manage.sh logs` | `.\manage.ps1 logs` | `npm run prod:logs` |
+
+> 💡 Thêm cờ `--pull` (Linux) hoặc `-Pull` (Windows) để kéo code Git mới nhất trước khi reload/restart. Thêm cờ `--dev` hoặc `-Dev` nếu muốn thao tác trên môi trường local compose.
+
+### Cách 2: Khởi chạy thủ công bằng Docker Compose
 ```bash
-# Khởi chạy toàn bộ hệ sinh thái (PostgreSQL 5433, Redis 6380, API 4000, Web 3005)
+# Khởi chạy hệ sinh thái
 docker compose up -d
 
 # Xem log thời gian thực

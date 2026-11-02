@@ -1,215 +1,100 @@
-# Design System Master File
+# Design System Master File — TOPRunAssistant
 
-> **LOGIC:** When building a specific page, first check `design-system/pages/[page-name].md`.
-> If that file exists, its rules **override** this Master file.
-> If not, strictly follow the rules below.
+> **HIERARCHICAL LOGIC (UI/UX Pro Max & Impeccable Shared Source of Truth):**
+> 1. When building or auditing a specific page/screen, first check `design-system/toprunassistant/pages/[page-name].md`.
+> 2. If that page file exists, its layout/component rules **override** this Master file.
+> 3. Otherwise, strictly follow the global tokens, typography, and athletic telemetry rules below.
+> 4. For product context, domain personas, and anti-slop philosophy, see [PRODUCT.md](../../PRODUCT.md).
 
 ---
 
 **Project:** TOPRunAssistant
-**Generated:** 2026-10-29 16:23:03
-**Category:** RPA / Automation Dashboard
+**Updated:** 2026-11-02
+**Category:** Athletic / Running Management, Virtual Race & Strava Telemetry Platform (Web + iOS/Android)
+**Aesthetic Direction:** High-Contrast Athletic Performance (Strava-inspired Energetic Orange + Precision Telemetry Monospace + Dual Light/Dark Mode)
 
 ---
 
-## Global Rules
+## 1. Global Color Tokens (Dual Theme: Light & Dark Mode)
 
-### Color Palette
+`TOPRunAssistant` uses `darkMode: 'class'` in Tailwind CSS (`apps/web`) and adaptive athletic themes on Mobile (`apps/mobile`). Never hardcode random greys or generic AI purple/indigo gradients.
 
-| Role | Hex | CSS Variable |
-|------|-----|--------------|
-| Primary | `#0F172A` | `--color-primary` |
-| On Primary | `#FFFFFF` | `--color-on-primary` |
-| Secondary | `#1E293B` | `--color-secondary` |
-| On Secondary | `#FFFFFF` | `--color-on-secondary` |
-| Accent/CTA | `#16A34A` | `--color-accent` |
-| On Accent/CTA | `#0F172A` | `--color-on-accent` |
-| Background | `#020617` | `--color-background` |
-| Foreground | `#F8FAFC` | `--color-foreground` |
-| Card | `#0E1223` | `--color-card` |
-| Card Foreground | `#F8FAFC` | `--color-card-foreground` |
-| Muted | `#1A1E2F` | `--color-muted` |
-| Muted Foreground | `#94A3B8` | `--color-muted-foreground` |
-| Border | `#334155` | `--color-border` |
-| Destructive | `#DC2626` | `--color-destructive` |
-| On Destructive | `#FFFFFF` | `--color-on-destructive` |
-| Ring | `#FFFFFF` | `--color-ring` |
+### Brand & Semantic Accents
 
-**Color Notes:** Dark terminal + running green + failed red + queued amber
+| Role | Token / Tailwind | Hex | Usage |
+| :--- | :--- | :--- | :--- |
+| **Brand Primary (Strava Orange)** | `strava` / `--color-brand` | `#FC4C02` | Primary CTAs, Strava Sync buttons, active route polylines, Target progress highlights |
+| **Brand Primary Hover** | `strava-hover` | `#E34402` | Hover/active state for primary brand buttons |
+| **Brand Tint Surface** | `strava-light` | `#FFF3EE` (Light) / `rgba(252,76,2,0.12)` (Dark) | Subtle badge backgrounds, selected state highlights |
+| **Target Finisher (Tier 1)** | `sky-500` / `--color-target` | `#0EA5E9` | Finisher Target progress bar, E-BIB & E-Certificate qualification indicators |
+| **Challenge Tier — Silver** | `slate-300` | `#CBD5E1` | Over-achievement Silver milestone badges |
+| **Challenge Tier — Gold** | `amber-400` | `#FBBF24` | Over-achievement Gold milestone badges, PR crowns, top-3 podium |
+| **Challenge Tier — Diamond** | `cyan-400` | `#22D3EE` | Elite Diamond tier badges & streak rewards |
 
-### Typography
+### Telemetry & Anti-Cheat Split Status Colors
 
-- **Heading Font:** Fira Code
-- **Body Font:** Fira Sans
-- **Mood:** dashboard, data, analytics, code, technical, precise
-- **Google Fonts:** [Fira Code + Fira Sans](https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600;700&family=Fira+Sans:wght@300;400;500;600;700&display=swap)
+| Telemetry State | Hex | Tailwind | Usage |
+| :--- | :--- | :--- | :--- |
+| **Valid Split / Approved** | `#10B981` | `emerald-500` | Valid km split bar (`min_pace <= pace <= max_pace`), `APPROVED` badge |
+| **Warning / Flagged Review** | `#F59E0B` | `amber-500` | Cadence/HR anomaly warning, `FLAGGED_FOR_REVIEW`, weekend `x2` multiplier tag |
+| **Invalid Split / Anti-Cheat Reject** | `#EF4444` | `rose-500` / `red-500` | Excluded km split (`INVALID_FAST_PACE` e.g. motorbike `< 03:00/km`), `REJECTED` status |
+| **Heart Rate Zone Accent** | `#F43F5E` | `rose-500` | Heart rate (bpm) chart line & icon |
+| **Elevation Gain Accent** | `#8B5CF6` | `violet-500` | Elevation profile (m) area chart |
 
-**CSS Import:**
-```css
-@import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600;700&family=Fira+Sans:wght@300;400;500;600;700&display=swap');
-```
+### Surface Palette (Dark Mode Default & Outdoor High-Contrast Light Mode)
 
-### Spacing Variables
-
-| Token | Value | Usage |
-|-------|-------|-------|
-| `--space-xs` | `4px` / `0.25rem` | Tight gaps |
-| `--space-sm` | `8px` / `0.5rem` | Icon gaps, inline spacing |
-| `--space-md` | `16px` / `1rem` | Standard padding |
-| `--space-lg` | `24px` / `1.5rem` | Section padding |
-| `--space-xl` | `32px` / `2rem` | Large gaps |
-| `--space-2xl` | `48px` / `3rem` | Section margins |
-| `--space-3xl` | `64px` / `4rem` | Hero padding |
-
-### Shadow Depths
-
-| Level | Value | Usage |
-|-------|-------|-------|
-| `--shadow-sm` | `0 1px 2px rgba(0,0,0,0.05)` | Subtle lift |
-| `--shadow-md` | `0 4px 6px rgba(0,0,0,0.1)` | Cards, buttons |
-| `--shadow-lg` | `0 10px 15px rgba(0,0,0,0.1)` | Modals, dropdowns |
-| `--shadow-xl` | `0 20px 25px rgba(0,0,0,0.15)` | Hero images, featured cards |
+| Surface Role | Dark Mode (`html.dark`) | Light Mode (`html`) |
+| :--- | :--- | :--- |
+| **App Background** | `#090D16` (`slate-950`) | `#F8FAFC` (`slate-50`) |
+| **Card / Panel Surface** | `#0F172A` (`slate-900`) | `#FFFFFF` (`white`) |
+| **Elevated / Sub-card Surface** | `#1E293B` (`slate-800/70`) | `#F1F5F9` (`slate-100`) |
+| **Border / Hairline** | `#1E293B` (`slate-800`) | `#E2E8F0` (`slate-200`) |
+| **Primary Text** | `#F8FAFC` (`slate-50`) | `#0F172A` (`slate-900`) |
+| **Secondary / Label Text** | `#94A3B8` (`slate-400`) | `#475569` (`slate-600`) |
+| **Muted / Caption Text** | `#64748B` (`slate-500`) | `#64748B` (`slate-500`) |
 
 ---
 
-## Component Specs
+## 2. Typography & Numeric Telemetry Rules
 
-### Buttons
+### Font Stack
+- **Sans-Serif (UI & Vietnamese Copy):** `'Be Vietnam Pro', Inter, 'Segoe UI', Roboto, sans-serif`
+  - Chosen specifically for crisp Vietnamese diacritics (`Giải chạy ảo`, `Bảng xếp hạng`, `Kiểm duyệt Tracklog`).
+- **Monospace (Telemetry, Pace, Distance, Splits, BIB):** `'JetBrains Mono', 'Fira Code', Consolas, monospace`
 
-```css
-/* Primary Button */
-.btn-primary {
-  background: #16A34A;
-  color: #0F172A;
-  padding: 12px 24px;
-  border-radius: 8px;
-  font-weight: 600;
-  transition: all 200ms ease;
-  cursor: pointer;
-}
-
-.btn-primary:hover {
-  opacity: 0.9;
-  transform: translateY(-1px);
-}
-
-/* Secondary Button */
-.btn-secondary {
-  background: transparent;
-  color: #F8FAFC;
-  border: 2px solid #0F172A;
-  padding: 12px 24px;
-  border-radius: 8px;
-  font-weight: 600;
-  transition: all 200ms ease;
-  cursor: pointer;
-}
-```
-
-### Cards
-
-```css
-.card {
-  background: #020617;
-  border-radius: 12px;
-  padding: 24px;
-  box-shadow: var(--shadow-md);
-  transition: all 200ms ease;
-  cursor: pointer;
-}
-
-.card:hover {
-  box-shadow: var(--shadow-lg);
-  transform: translateY(-2px);
-}
-```
-
-### Inputs
-
-```css
-.input {
-  padding: 12px 16px;
-  border: 1px solid #E2E8F0;
-  border-radius: 8px;
-  font-size: 16px;
-  transition: border-color 200ms ease;
-}
-
-.input:focus {
-  border-color: #0F172A;
-  outline: none;
-  box-shadow: 0 0 0 3px #0F172A20;
-}
-```
-
-### Modals
-
-```css
-.modal-overlay {
-  background: rgba(0, 0, 0, 0.5);
-  backdrop-filter: blur(4px);
-}
-
-.modal {
-  background: white;
-  border-radius: 16px;
-  padding: 32px;
-  box-shadow: var(--shadow-xl);
-  max-width: 500px;
-  width: 90%;
-}
-```
+### Mandatory Numeric Formatting (`tabular-nums`)
+All running telemetry MUST use `font-mono tabular-nums` so columns and live counters never jitter:
+- **Pace:** `04:35 /km`
+- **Distance:** `21.10 km` (2 decimal places via `roundKm`)
+- **Duration:** `01:42:18` (`hh:mm:ss` or `mm:ss` via `formatDuration`)
+- **Cadence & HR:** `178 spm`, `162 bpm`
+- **E-BIB Number:** `TOP-21K-00128`
 
 ---
 
-## Style Guidelines
+## 3. Core Domain Component Specifications
 
-**Style:** Dark Mode (OLED)
+### 3.1. Dual-Goal Progress Card (Target vs Challenge Tiers)
+- **Tier 1 (Target Finisher):** Full-width primary progress bar (`#0EA5E9` or `#FC4C02`) showing `currentMultipliedDistanceKm / targetDistanceKm` and Finisher E-Cert unlock status.
+- **Tier 2 (Challenge Awards):** Distinct milestone pills/cards (Silver 100K, Gold 150K, Streak 5d/7d, Single Long Run >= 15K) with clear locked/unlocked visual states.
 
-**Keywords:** Dark theme, low light, high contrast, deep black, midnight blue, eye-friendly, OLED, night mode, power efficient
+### 3.2. Split-Level Anti-Cheat Chart (`splits_metric`)
+- Horizontal bar list or compact table indexed by `Km 1, Km 2, ...`.
+- Each row shows: `Km #` | visual pace bar | `Pace (mm:ss/km)` | `HR / Cadence` | `Status Badge`.
+- **Valid km:** Emerald bar (`#10B981`).
+- **Violating km (`pace < minPace` or `pace > maxPace`):** Red bar (`#EF4444`) with strikethrough distance and explicit reason tag (e.g., `Vi phạm tốc độ < 03:00/km - Không tính điểm`).
 
-**Best For:** Night-mode apps, coding platforms, entertainment, eye-strain prevention, OLED devices, low-light
-
-**Key Effects:** Minimal glow (text-shadow: 0 0 10px), dark-to-light transitions, low white emission, high readability, visible focus
-
-### Page Pattern
-
-**Pattern Name:** Real-Time / Operations Landing
-
-- **Conversion Strategy:** Offer a demo or sandbox and show trust signals. Label telemetry as live only when backed by a current source, with update time and stale state. Provide pause/hide or update-frequency controls for tickers and previews, stop offscreen/hidden work, support keyboard controls, and render a static final snapshot under reduced motion.
-- **CTA Placement:** Primary CTA in nav + After metrics
-- **Section Order:** Hero (product + live preview or status) > Key metrics/indicators > How it works > CTA (Start trial / Contact)
+### 3.3. Interactive GPS Polyline Map & Share Card
+- Render decoded polyline (`polylineToSvgPath` or MapLibre/MapView) with high-contrast stroke (`#FC4C02`, `strokeWidth: 3.5`, rounded caps).
+- Mark Start point (Emerald dot `#10B981`) and Finish point (Checkered/Orange dot `#FC4C02`).
 
 ---
 
-## Anti-Patterns (Do NOT Use)
+## 4. Forbidden Anti-Patterns (Strict Enforcement)
 
-- ❌ Slow dashboards
-- ❌ decorative charts
-- ❌ hidden error states
-
-### Additional Forbidden Patterns
-
-- ❌ **Emojis as icons** — Use SVG icons (Heroicons, Lucide, Simple Icons)
-- ❌ **Missing cursor:pointer** — All clickable elements must have cursor:pointer
-- ❌ **Layout-shifting hovers** — Avoid scale transforms that shift layout
-- ❌ **Low contrast text** — Maintain 4.5:1 minimum contrast ratio
-- ❌ **Instant state changes** — Always use transitions (150-300ms)
-- ❌ **Invisible focus states** — Focus states must be visible for a11y
-
----
-
-## Pre-Delivery Checklist
-
-Before delivering any UI code, verify:
-
-- [ ] No emojis used as icons (use SVG instead)
-- [ ] All icons from consistent icon set (Heroicons/Lucide)
-- [ ] `cursor-pointer` on all clickable elements
-- [ ] Hover states with smooth transitions (150-300ms)
-- [ ] Light mode: text contrast 4.5:1 minimum
-- [ ] Focus states visible for keyboard navigation
-- [ ] `prefers-reduced-motion` respected
-- [ ] Responsive: 375px, 768px, 1024px, 1440px
-- [ ] No content hidden behind fixed navbars
-- [ ] No horizontal scroll on mobile
+- ❌ **No RPA/Terminal Green Default:** Never revert to `#16A34A` terminal matrix theme as the primary brand color.
+- ❌ **No Generic AI Purple/Indigo Gradients:** Avoid `from-indigo-500 via-purple-500 to-pink-500` on cards or headers.
+- ❌ **No Proportional Fonts on Leaderboards/Splits:** Never render pace, rank, distance, or time columns without `tabular-nums` / `font-mono`.
+- ❌ **No Native Browser `alert()` / `confirm()` in New UI:** Use inline status banners, toast notifications, or confirmation modals instead of blocking browser dialogs.
+- ❌ **No Emojis as Functional Navigation Icons on Web:** Use `lucide-react` icons consistently (`Activity`, `Trophy`, `Target`, `ShieldCheck`, `MapPin`, `Flame`, `Award`).
+- ❌ **No Nested Cards-in-Cards (>2 levels):** Keep hierarchy flat using hairline borders (`border-slate-800` / `border-slate-200`) and spacing.

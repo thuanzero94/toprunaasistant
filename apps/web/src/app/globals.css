@@ -3,6 +3,15 @@
 @tailwind utilities;
 
 @layer base {
+  :root {
+    --color-brand: #FC4C02;
+    --color-brand-hover: #E34402;
+    --color-target: #0EA5E9;
+    --color-valid: #10B981;
+    --color-warning: #F59E0B;
+    --color-invalid: #EF4444;
+  }
+
   body {
     font-family: 'Be Vietnam Pro', Inter, 'Segoe UI', Roboto, sans-serif;
     -webkit-font-smoothing: antialiased;
@@ -10,8 +19,13 @@
     text-rendering: optimizeLegibility;
   }
 
-  code, pre, .font-mono {
+  code,
+  pre,
+  .font-mono,
+  .tabular-nums,
+  table td {
     font-family: 'JetBrains Mono', 'Fira Code', Consolas, monospace;
+    font-variant-numeric: tabular-nums;
   }
 }
 

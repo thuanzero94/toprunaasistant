@@ -36,6 +36,8 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import AccountAndStravaPanel from '../components/AccountAndStravaPanel';
+import AdminManagementPortal from '../components/AdminManagementPortal';
+import RunnerEventModals from '../components/RunnerEventModals';
 import UserTracklogExplorer, { TracklogActivityItem } from '../components/UserTracklogExplorer';
 import {
   AntiCheatStatus,
@@ -48,6 +50,7 @@ import {
   formatDuration,
   formatPace,
   parseGpxToActivityInput,
+  parsePaceToSeconds,
   polylineToSvgPath,
   roundKm,
   RunMode,
@@ -284,19 +287,16 @@ export default function TopRunWebApp() {
         setTimeout(() => setAdminUserActionMsg(null), 4000);
       } else {
         const err = await res.json();
-        alert(err.message || 'Không thể cập nhật vai trò');
+        setAdminUserActionMsg(err.message || 'Không thể cập nhật vai trò');
       }
     } catch (err: any) {
-      alert(err.message || 'Lỗi kết nối khi cập nhật vai trò');
+      setAdminUserActionMsg(err.message || 'Lỗi kết nối khi cập nhật vai trò');
     }
   };
 
   const handleDeleteUser = async (targetUserId: string, targetName: string) => {
     if (targetUserId === user?.id) {
-      alert('Bạn không thể tự xoá tài khoản Admin đang đăng nhập!');
-      return;
-    }
-    if (!confirm(`Bạn có chắc chắn muốn xoá tài khoản của "${targetName}" khỏi hệ thống?`)) {
+      setAdminUserActionMsg('Bạn không thể tự xoá tài khoản Admin đang đăng nhập!');
       return;
     }
     try {
@@ -312,10 +312,10 @@ export default function TopRunWebApp() {
         setTimeout(() => setAdminUserActionMsg(null), 4000);
       } else {
         const err = await res.json();
-        alert(err.message || 'Không thể xoá người dùng');
+        setAdminUserActionMsg(err.message || 'Không thể xoá người dùng');
       }
     } catch (err: any) {
-      alert(err.message || 'Lỗi khi xoá người dùng');
+      setAdminUserActionMsg(err.message || 'Lỗi khi xoá người dùng');
     }
   };
 
@@ -355,8 +355,8 @@ export default function TopRunWebApp() {
           status: ev.status || 'ACTIVE',
           startDateIso: ev.startDateIso ? ev.startDateIso.slice(0, 10) : '2026-10-01',
           endDateIso: ev.endDateIso ? ev.endDateIso.slice(0, 10) : '2026-11-30',
-          minPaceFormatted: `${String(Math.floor(minPaceSec / 60)).padStart(2, '0')}:${String(minPaceSec % 60).padStart(2, '0')}`,
-          maxPaceFormatted: `${String(Math.floor(maxPaceSec / 60)).padStart(2, '0')}:${String(maxPaceSec % 60).padStart(2, '0')}`,
+          minPaceFormatted: formatPace(minPaceSec, false),
+          maxPaceFormatted: formatPace(maxPaceSec, false),
           minActivityDistanceKm: ev.ruleConfig?.minActivityDistanceKm ?? 1.0,
           weekendMultiplier: ev.ruleConfig?.weekendMultiplier ?? 1.0,
         });
@@ -383,16 +383,6 @@ export default function TopRunWebApp() {
     try {
       const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1';
       const token = typeof window !== 'undefined' ? localStorage.getItem('toprun_auth_token') : null;
-      
-      const parsePace = (str: string, defaultSec: number) => {
-        const parts = str.split(':');
-        if (parts.length === 2) {
-          const m = parseInt(parts[0], 10);
-          const s = parseInt(parts[1], 10);
-          if (!isNaN(m) && !isNaN(s)) return m * 60 + s;
-        }
-        return defaultSec;
-      };
 
       const payload = {
         title: eventForm.title,
@@ -401,8 +391,8 @@ export default function TopRunWebApp() {
         startDateIso: new Date(eventForm.startDateIso).toISOString(),
         endDateIso: new Date(eventForm.endDateIso).toISOString(),
         ruleConfig: {
-          minPaceSecPerKm: parsePace(eventForm.minPaceFormatted, 180),
-          maxPaceSecPerKm: parsePace(eventForm.maxPaceFormatted, 900),
+          minPaceSecPerKm: parsePaceToSeconds(eventForm.minPaceFormatted) || 180,
+          maxPaceSecPerKm: parsePaceToSeconds(eventForm.maxPaceFormatted) || 900,
           minActivityDistanceKm: Number(eventForm.minActivityDistanceKm) || 1.0,
           weekendMultiplier: Number(eventForm.weekendMultiplier) || 1.0,
         },
@@ -424,10 +414,10 @@ export default function TopRunWebApp() {
         setTimeout(() => setAdminEventSaveMsg(null), 4000);
       } else {
         const err = await res.json();
-        alert(err.message || 'Lỗi khi lưu cấu hình');
+        setAdminEventSaveMsg(err.message || 'Lỗi khi lưu cấu hình');
       }
     } catch (err: any) {
-      alert(err.message || 'Lỗi kết nối khi lưu giải chạy');
+      setAdminEventSaveMsg(err.message || 'Lỗi kết nối khi lưu giải chạy');
     }
   };
 
@@ -436,15 +426,6 @@ export default function TopRunWebApp() {
     try {
       const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1';
       const token = typeof window !== 'undefined' ? localStorage.getItem('toprun_auth_token') : null;
-      const parsePace = (str: string, defaultSec: number) => {
-        const parts = str.split(':');
-        if (parts.length === 2) {
-          const m = parseInt(parts[0], 10);
-          const s = parseInt(parts[1], 10);
-          if (!isNaN(m) && !isNaN(s)) return m * 60 + s;
-        }
-        return defaultSec;
-      };
 
       const payload = {
         title: newEventForm.title,
@@ -454,8 +435,8 @@ export default function TopRunWebApp() {
         runMode: newEventForm.runMode,
         startDateIso: new Date(newEventForm.startDateIso).toISOString(),
         endDateIso: new Date(newEventForm.endDateIso).toISOString(),
-        minPaceSecPerKm: parsePace(newEventForm.minPaceFormatted, 210),
-        maxPaceSecPerKm: parsePace(newEventForm.maxPaceFormatted, 900),
+        minPaceSecPerKm: parsePaceToSeconds(newEventForm.minPaceFormatted) || 210,
+        maxPaceSecPerKm: parsePaceToSeconds(newEventForm.maxPaceFormatted) || 900,
         minActivityDistanceKm: Number(newEventForm.minActivityDistanceKm) || 1.0,
         weekendMultiplier: Number(newEventForm.weekendMultiplier) || 1.0,
         allowSplitFiltering: true,
@@ -466,7 +447,7 @@ export default function TopRunWebApp() {
             tierLevel: 'GOLD',
             conditionType: ChallengeConditionType.DISTANCE_OVERACHIEVE,
             thresholdValue: 50,
-            awardBadgeUrl: '🥇',
+            awardBadgeUrl: 'GOLD',
             rewardDescription: 'Huy hiệu Chiến Binh Hoàn Thành',
           },
         ],
@@ -483,16 +464,16 @@ export default function TopRunWebApp() {
 
       if (res.ok) {
         const created = await res.json();
-        alert(`Tạo giải đấu "${created.title}" thành công!`);
+        setSyncBannerMessage(`Tạo giải đấu "${created.title}" thành công!`);
         setShowCreateEventModal(false);
         await fetchEventsList();
         setSelectedEventId(created.id);
       } else {
         const err = await res.json();
-        alert(err.message || 'Lỗi khi tạo giải đấu');
+        setSyncBannerMessage(err.message || 'Lỗi khi tạo giải đấu');
       }
     } catch (err: any) {
-      alert(err.message || 'Lỗi kết nối');
+      setSyncBannerMessage(err.message || 'Lỗi kết nối khi tạo giải đấu');
     }
   };
 
@@ -1039,7 +1020,7 @@ export default function TopRunWebApp() {
       );
       setActiveTab('tracklogs');
     } catch (err: any) {
-      alert(err.message || 'Không thể đọc file GPX');
+      setSyncBannerMessage(err.message || 'Không thể đọc file GPX');
     }
   };
 
@@ -1991,919 +1972,60 @@ export default function TopRunWebApp() {
               VIEW 6: QUẢN TRỊ VIÊN — PHÂN QUYỀN, GIẢI CHẠY, KIỂM DUYỆT & RACE-KIT
              ================================================================= */}
           {activeTab === 'admin' && (
-            <div className="space-y-6">
-              {/* Admin Navigation Pills */}
-              <div className="rounded-2xl bg-white dark:bg-[#0F1420] border border-slate-200/80 dark:border-slate-800/80 p-3 shadow-sm flex flex-wrap items-center justify-between gap-3">
-                <div className="flex flex-wrap items-center gap-1.5">
-                  {[
-                    { id: 'users' as const, label: 'Quản lý VĐV & Phân quyền', icon: Users, count: adminUsers.length },
-                    { id: 'races' as const, label: 'Quản lý Giải & Thử thách', icon: Trophy },
-                    {
-                      id: 'moderation' as const,
-                      label: 'Kiểm duyệt GPS & Gian lận',
-                      icon: ShieldAlert,
-                      count: activities.filter((a) => a.antiCheatStatus !== AntiCheatStatus.VALID).length,
-                    },
-                    { id: 'fulfillment' as const, label: 'Giao hàng Race-Kit', icon: Truck, count: raceKitOrders.length },
-                  ].map((tab) => {
-                    const Icon = tab.icon;
-                    const isActive = adminSubTab === tab.id;
-                    return (
-                      <button
-                        key={tab.id}
-                        type="button"
-                        onClick={() => setAdminSubTab(tab.id)}
-                        className={`px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition cursor-pointer ${
-                          isActive
-                            ? 'bg-[#FC4C02] text-white shadow-sm'
-                            : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white'
-                        }`}
-                      >
-                        <Icon className="w-3.5 h-3.5" />
-                        <span>{tab.label}</span>
-                        {tab.count !== undefined && (
-                          <span
-                            className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
-                              isActive
-                                ? 'bg-white/20 text-white'
-                                : 'bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300'
-                            }`}
-                          >
-                            {tab.count}
-                          </span>
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <span className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
-                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                    Quản trị viên tối cao (SuperAdmin)
-                  </span>
-                </div>
-              </div>
-
-              {/* Action Banner Message */}
-              {adminUserActionMsg && (
-                <div className="p-4 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200 text-xs font-medium flex items-center gap-2 animate-fadeIn">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
-                  <span>{adminUserActionMsg}</span>
-                </div>
-              )}
-
-              {/* SUB-VIEW 1: QUẢN LÝ VẬN ĐỘNG VIÊN & PHÂN QUYỀN */}
-              {adminSubTab === 'users' && (
-                <div className="space-y-6">
-                  {/* KPI Stats Bar */}
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                    <div className="p-4 rounded-2xl bg-white dark:bg-[#0F1420] border border-slate-200/80 dark:border-slate-800/80 shadow-sm">
-                      <div className="text-xs text-slate-500 dark:text-slate-400">Tổng Vận Động Viên</div>
-                      <div className="text-2xl font-extrabold font-mono text-slate-900 dark:text-white mt-1">
-                        {adminUsers.length}
-                      </div>
-                      <div className="text-[11px] text-slate-400 mt-1">Lưu trữ PostgreSQL</div>
-                    </div>
-
-                    <div className="p-4 rounded-2xl bg-white dark:bg-[#0F1420] border border-slate-200/80 dark:border-slate-800/80 shadow-sm">
-                      <div className="text-xs text-slate-500 dark:text-slate-400">Quản trị viên (ADMIN)</div>
-                      <div className="text-2xl font-extrabold font-mono text-amber-500 mt-1">
-                        {adminUsers.filter((u) => u.role === 'ADMIN').length}
-                      </div>
-                      <div className="text-[11px] text-amber-500/80 mt-1">Toàn quyền hệ thống</div>
-                    </div>
-
-                    <div className="p-4 rounded-2xl bg-white dark:bg-[#0F1420] border border-slate-200/80 dark:border-slate-800/80 shadow-sm">
-                      <div className="text-xs text-slate-500 dark:text-slate-400">Ban tổ chức (ORGANIZER)</div>
-                      <div className="text-2xl font-extrabold font-mono text-blue-500 mt-1">
-                        {adminUsers.filter((u) => u.role === 'ORGANIZER').length}
-                      </div>
-                      <div className="text-[11px] text-blue-500/80 mt-1">Quản lý giải &amp; Kiểm duyệt</div>
-                    </div>
-
-                    <div className="p-4 rounded-2xl bg-white dark:bg-[#0F1420] border border-slate-200/80 dark:border-slate-800/80 shadow-sm">
-                      <div className="text-xs text-slate-500 dark:text-slate-400">VĐV Thi đấu (RUNNER)</div>
-                      <div className="text-2xl font-extrabold font-mono text-emerald-500 mt-1">
-                        {adminUsers.filter((u) => u.role === 'RUNNER' || !u.role).length}
-                      </div>
-                      <div className="text-[11px] text-emerald-500/80 mt-1">Tham gia thi đấu &amp; Đua top</div>
-                    </div>
-                  </div>
-
-                  {/* Users Table Card */}
-                  <div className="rounded-2xl bg-white dark:bg-[#0F1420] border border-slate-200/80 dark:border-slate-800/80 p-6 space-y-5 shadow-sm">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                      <div>
-                        <h2 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                          <Users className="w-4 h-4 text-[#FC4C02]" />
-                          <span>Danh sách tài khoản &amp; Phân quyền người dùng</span>
-                        </h2>
-                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                          Quản lý phân quyền vai trò (Admin / Organizer / Runner) và xem thông tin cá nhân
-                        </p>
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        <div className="relative">
-                          <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                          <input
-                            type="text"
-                            value={adminUserSearch}
-                            onChange={(e) => setAdminUserSearch(e.target.value)}
-                            placeholder="Tìm tên, email, SĐT, đơn vị..."
-                            className="pl-8 pr-3 py-1.5 text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-[#FC4C02] w-64"
-                          />
-                        </div>
-                        <button
-                          type="button"
-                          onClick={fetchAdminUsers}
-                          disabled={isAdminUsersLoading}
-                          className="p-2 rounded-xl border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 cursor-pointer"
-                          title="Làm mới danh sách"
-                        >
-                          <RefreshCw className={`w-3.5 h-3.5 ${isAdminUsersLoading ? 'animate-spin text-[#FC4C02]' : ''}`} />
-                        </button>
-                      </div>
-                    </div>
-
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-left border-collapse">
-                        <thead>
-                          <tr className="border-b border-slate-200/70 dark:border-slate-800 text-[11px] font-semibold uppercase text-slate-400">
-                            <th className="py-3 px-3">Vận động viên</th>
-                            <th className="py-3 px-3">Email &amp; SĐT</th>
-                            <th className="py-3 px-3">Phòng ban</th>
-                            <th className="py-3 px-3">Size áo / Địa chỉ</th>
-                            <th className="py-3 px-3">Vai trò hệ thống</th>
-                            <th className="py-3 px-3">Ngày tạo</th>
-                            <th className="py-3 px-3 text-right">Thao tác</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 text-sm">
-                          {adminUsers
-                            .filter((u) => {
-                              if (!adminUserSearch.trim()) return true;
-                              const q = adminUserSearch.toLowerCase();
-                              return (
-                                (u.fullName || '').toLowerCase().includes(q) ||
-                                (u.email || '').toLowerCase().includes(q) ||
-                                (u.phone || '').toLowerCase().includes(q) ||
-                                (u.departmentOrUnit || '').toLowerCase().includes(q)
-                              );
-                            })
-                            .map((u) => {
-                              const isCurrentAdmin = u.id === user.id;
-                              return (
-                                <tr key={u.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-900/40 transition">
-                                  <td className="py-3 px-3">
-                                    <div className="flex items-center gap-2.5">
-                                      <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-[#FC4C02] to-amber-500 text-white font-bold text-xs flex items-center justify-center shrink-0">
-                                        {(u.fullName || 'U').charAt(0).toUpperCase()}
-                                      </div>
-                                      <div>
-                                        <div className="font-semibold text-slate-900 dark:text-white flex items-center gap-1.5">
-                                          <span>{u.fullName || 'Chưa cập nhật tên'}</span>
-                                          {isCurrentAdmin && (
-                                            <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300">
-                                              Bạn
-                                            </span>
-                                          )}
-                                        </div>
-                                        <div className="text-[11px] font-mono text-slate-400">ID: {u.id}</div>
-                                      </div>
-                                    </div>
-                                  </td>
-                                  <td className="py-3 px-3">
-                                    <div className="font-mono text-xs text-slate-800 dark:text-slate-200">{u.email}</div>
-                                    <div className="text-xs text-slate-500">{u.phone || '—'}</div>
-                                  </td>
-                                  <td className="py-3 px-3 text-xs text-slate-600 dark:text-slate-300">
-                                    {u.departmentOrUnit || 'ASSA ABLOY Vietnam'}
-                                  </td>
-                                  <td className="py-3 px-3">
-                                    <span className="px-2 py-0.5 rounded font-mono text-xs font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
-                                      {u.defaultShirtSize || 'L'}
-                                    </span>
-                                    <div className="text-[11px] text-slate-400 truncate max-w-[140px] mt-0.5">
-                                      {u.defaultShippingAddress || 'Chưa có địa chỉ'}
-                                    </div>
-                                  </td>
-                                  <td className="py-3 px-3">
-                                    <select
-                                      value={u.role || 'RUNNER'}
-                                      onChange={(e) => handleUpdateUserRole(u.id, e.target.value)}
-                                      className={`px-2.5 py-1 rounded-lg text-xs font-bold border transition cursor-pointer ${
-                                        u.role === 'ADMIN'
-                                          ? 'bg-amber-50 dark:bg-amber-950/40 border-amber-300 dark:border-amber-800 text-amber-700 dark:text-amber-300'
-                                          : u.role === 'ORGANIZER'
-                                          ? 'bg-blue-50 dark:bg-blue-950/40 border-blue-300 dark:border-blue-800 text-blue-700 dark:text-blue-300'
-                                          : 'bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300'
-                                      }`}
-                                    >
-                                      <option value="ADMIN">ADMIN (Quản trị viên)</option>
-                                      <option value="ORGANIZER">ORGANIZER (Ban tổ chức)</option>
-                                      <option value="RUNNER">RUNNER (Vận động viên)</option>
-                                    </select>
-                                  </td>
-                                  <td className="py-3 px-3 text-xs font-mono text-slate-500">
-                                    {u.createdAt ? new Date(u.createdAt).toLocaleDateString('vi-VN') : '—'}
-                                  </td>
-                                  <td className="py-3 px-3 text-right">
-                                    <button
-                                      type="button"
-                                      disabled={isCurrentAdmin}
-                                      onClick={() => handleDeleteUser(u.id, u.fullName || u.email)}
-                                      title={isCurrentAdmin ? 'Không thể tự xoá tài khoản đang đăng nhập' : 'Xoá người dùng'}
-                                      className={`p-1.5 rounded-lg border transition ${
-                                        isCurrentAdmin
-                                          ? 'border-slate-200 dark:border-slate-800 text-slate-300 dark:text-slate-600 cursor-not-allowed opacity-50'
-                                          : 'border-rose-200 dark:border-rose-900/60 hover:bg-rose-50 dark:hover:bg-rose-950/40 text-rose-500 cursor-pointer'
-                                      }`}
-                                    >
-                                      <Trash2 className="w-3.5 h-3.5" />
-                                    </button>
-                                  </td>
-                                </tr>
-                              );
-                            })}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* SUB-VIEW 2: QUẢN LÝ GIẢI CHẠY & THỬ THÁCH */}
-              {adminSubTab === 'races' && (
-                <div className="space-y-6">
-                  {adminEventSaveMsg && (
-                    <div className="p-4 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200 text-xs font-medium flex items-center gap-2 animate-fadeIn">
-                      <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
-                      <span>{adminEventSaveMsg}</span>
-                    </div>
-                  )}
-
-                  <div className="rounded-2xl bg-white dark:bg-[#0F1420] border border-slate-200/80 dark:border-slate-800/80 p-6 space-y-6 shadow-sm">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                      <div>
-                        <h2 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                          <Trophy className="w-4 h-4 text-[#FC4C02]" />
-                          <span>Cấu hình Quy chế Giải Chạy &amp; Thử thách ảo (Virtual Race)</span>
-                        </h2>
-                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                          Tùy chỉnh pace hợp lệ, cự ly tối thiểu, thời gian thi đấu và các mốc Challenge nhận huy hiệu
-                        </p>
-                      </div>
-
-                      <div className="flex flex-wrap items-center gap-2.5">
-                        <div className="flex items-center gap-2 bg-slate-100 dark:bg-slate-800/80 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700">
-                          <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase">Giải:</span>
-                          <select
-                            value={selectedEventId}
-                            onChange={(e) => setSelectedEventId(e.target.value)}
-                            className="bg-transparent text-xs font-bold text-slate-900 dark:text-white focus:outline-none cursor-pointer"
-                          >
-                            {eventsList.map((ev) => (
-                              <option key={ev.id} value={ev.id} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
-                                {ev.title}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-
-                        <button
-                          type="button"
-                          onClick={() => setShowCreateEventModal(true)}
-                          className="px-3.5 py-1.5 rounded-xl bg-[#FC4C02] hover:bg-[#E34402] text-white text-xs font-bold flex items-center gap-1.5 shadow-sm transition cursor-pointer"
-                        >
-                          <span>+ Tạo Giải Mới</span>
-                        </button>
-
-                        <span className="px-2.5 py-1 rounded-lg text-xs font-mono font-bold bg-[#FC4C02]/10 text-[#FC4C02] border border-[#FC4C02]/20">
-                          {selectedEventId}
-                        </span>
-                      </div>
-                    </div>
-
-                    <form onSubmit={handleSaveEventRules} className="space-y-6">
-                      {/* Section 1: Thông tin cơ bản */}
-                      <div className="space-y-3">
-                        <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">
-                          1. Thông tin giải &amp; Trạng thái
-                        </h3>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                          <div className="md:col-span-2 space-y-1">
-                            <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                              Tên Giải Chạy
-                            </label>
-                            <input
-                              type="text"
-                              value={eventForm.title}
-                              onChange={(e) => setEventForm({ ...eventForm, title: e.target.value })}
-                              required
-                              className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-[#FC4C02]"
-                            />
-                          </div>
-
-                          <div className="space-y-1">
-                            <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                              Trạng Thái
-                            </label>
-                            <select
-                              value={eventForm.status}
-                              onChange={(e) => setEventForm({ ...eventForm, status: e.target.value })}
-                              className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-[#FC4C02] font-semibold"
-                            >
-                              <option value="ACTIVE">ACTIVE (Đang diễn ra)</option>
-                              <option value="UPCOMING">UPCOMING (Sắp diễn ra)</option>
-                              <option value="DRAFT">DRAFT (Bản nháp)</option>
-                              <option value="CLOSED">CLOSED (Đã kết thúc)</option>
-                            </select>
-                          </div>
-                        </div>
-
-                        <div className="space-y-1">
-                          <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                            Phụ đề &amp; Thông điệp giải
-                          </label>
-                          <input
-                            type="text"
-                            value={eventForm.subtitle}
-                            onChange={(e) => setEventForm({ ...eventForm, subtitle: e.target.value })}
-                            className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-[#FC4C02]"
-                          />
-                        </div>
-                      </div>
-
-                      {/* Section 2: Thời gian & Quy tắc tính km */}
-                      <div className="space-y-3">
-                        <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">
-                          2. Thời gian thi đấu &amp; Ngưỡng Pace hợp lệ
-                        </h3>
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                          <div className="space-y-1">
-                            <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                              Ngày Bắt Đầu
-                            </label>
-                            <input
-                              type="date"
-                              value={eventForm.startDateIso}
-                              onChange={(e) => setEventForm({ ...eventForm, startDateIso: e.target.value })}
-                              required
-                              className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-[#FC4C02]"
-                            />
-                          </div>
-
-                          <div className="space-y-1">
-                            <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                              Ngày Kết Thúc
-                            </label>
-                            <input
-                              type="date"
-                              value={eventForm.endDateIso}
-                              onChange={(e) => setEventForm({ ...eventForm, endDateIso: e.target.value })}
-                              required
-                              className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-[#FC4C02]"
-                            />
-                          </div>
-
-                          <div className="space-y-1">
-                            <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                              Pace Tối Thiểu (Min Pace)
-                            </label>
-                            <input
-                              type="text"
-                              value={eventForm.minPaceFormatted}
-                              onChange={(e) => setEventForm({ ...eventForm, minPaceFormatted: e.target.value })}
-                              placeholder="03:00"
-                              className="w-full px-3 py-2 text-xs font-mono rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-[#FC4C02]"
-                            />
-                            <span className="text-[10px] text-slate-400">Nhanh hơn ngưỡng này bị cắt đoạn</span>
-                          </div>
-
-                          <div className="space-y-1">
-                            <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                              Pace Tối Đa (Max Pace)
-                            </label>
-                            <input
-                              type="text"
-                              value={eventForm.maxPaceFormatted}
-                              onChange={(e) => setEventForm({ ...eventForm, maxPaceFormatted: e.target.value })}
-                              placeholder="15:00"
-                              className="w-full px-3 py-2 text-xs font-mono rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-[#FC4C02]"
-                            />
-                            <span className="text-[10px] text-slate-400">Chậm hơn ngưỡng này bị loại</span>
-                          </div>
-                        </div>
-
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
-                          <div className="space-y-1">
-                            <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                              Cự ly tối thiểu mỗi buổi chạy (KM)
-                            </label>
-                            <input
-                              type="number"
-                              step="0.1"
-                              min="0.5"
-                              value={eventForm.minActivityDistanceKm}
-                              onChange={(e) => setEventForm({ ...eventForm, minActivityDistanceKm: parseFloat(e.target.value) || 1.0 })}
-                              className="w-full px-3 py-2 text-xs font-mono rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-[#FC4C02]"
-                            />
-                            <span className="text-[10px] text-slate-400">Dưới cự ly này không được ghi nhận vào giải</span>
-                          </div>
-
-                          <div className="space-y-1">
-                            <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                              Hệ số nhân cuối tuần (Thứ 7 &amp; Chủ Nhật)
-                            </label>
-                            <input
-                              type="number"
-                              step="0.1"
-                              min="1.0"
-                              max="2.0"
-                              value={eventForm.weekendMultiplier}
-                              onChange={(e) => setEventForm({ ...eventForm, weekendMultiplier: parseFloat(e.target.value) || 1.0 })}
-                              className="w-full px-3 py-2 text-xs font-mono rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-[#FC4C02]"
-                            />
-                            <span className="text-[10px] text-slate-400">Mặc định 1.0x (đã tắt x2 theo yêu cầu)</span>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Section 3: Danh sách các Mốc Challenge */}
-                      <div className="space-y-3">
-                        <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center justify-between">
-                          <span>3. Các Mốc Thử Thách Mở Rộng (Challenge Tiers)</span>
-                          <span className="text-[11px] font-normal text-slate-500">
-                            {adminEventData?.challengeTiers?.length || INITIAL_CHALLENGE_TIERS.length} mốc thử thách đang kích hoạt
-                          </span>
-                        </h3>
-
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                          {(adminEventData?.challengeTiers || INITIAL_CHALLENGE_TIERS).map((tier: any) => (
-                            <div
-                              key={tier.id}
-                              className="p-3.5 rounded-xl border border-slate-200/80 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/60 flex items-start gap-3"
-                            >
-                              <div className="w-8 h-8 rounded-lg bg-[#FC4C02]/15 text-[#FC4C02] font-bold text-xs flex items-center justify-center shrink-0">
-                                <Award className="w-4 h-4" />
-                              </div>
-                              <div className="space-y-0.5 min-w-0">
-                                <div className="font-bold text-xs text-slate-900 dark:text-white truncate">
-                                  {tier.tierName}
-                                </div>
-                                <div className="text-[11px] text-slate-500 dark:text-slate-400">
-                                  {tier.rewardDescription}
-                                </div>
-                                <div className="text-[10px] font-mono text-emerald-600 dark:text-emerald-400 font-semibold pt-0.5">
-                                  Điều kiện: {tier.conditionType} ({tier.thresholdValue}
-                                  {tier.conditionType === 'STREAK_DAYS' ? ' ngày' : ' km'})
-                                </div>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-
-                      <div className="pt-2 flex justify-end">
-                        <button
-                          type="submit"
-                          className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-[#FC4C02] to-amber-500 hover:from-[#E34402] hover:to-amber-600 text-white text-xs font-bold flex items-center gap-2 shadow-sm transition cursor-pointer"
-                        >
-                          <Save className="w-4 h-4" />
-                          <span>Lưu &amp; Cập nhật Quy Chế Giải Chạy</span>
-                        </button>
-                      </div>
-                    </form>
-                  </div>
-                </div>
-              )}
-
-              {/* SUB-VIEW 3: HÀNG ĐỢI KIỂM DUYỆT TỐC ĐỘ & GIAN LẬN GPS */}
-              {adminSubTab === 'moderation' && (
-                <div className="rounded-2xl bg-white dark:bg-[#0F1420] border border-slate-200/80 dark:border-slate-800/80 p-6 space-y-4 shadow-sm">
-                  <div>
-                    <h2 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                      <ShieldAlert className="w-4 h-4 text-amber-500" />
-                      <span>Danh sách hoạt động có cắt đoạn tốc độ bất thường</span>
-                    </h2>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                      Các buổi chạy có km vượt ngưỡng 03:00/km đã được hệ thống tự động tách phần lỗi
-                    </p>
-                  </div>
-
-                  <div className="space-y-3">
-                    {activities
-                      .filter((a) => a.antiCheatStatus !== AntiCheatStatus.VALID)
-                      .map((flaggedAct) => (
-                        <div
-                          key={flaggedAct.id}
-                          className="p-4 rounded-xl bg-slate-50 dark:bg-slate-900/70 border border-slate-200/80 dark:border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-4"
-                        >
-                          <div className="space-y-1">
-                            <div className="flex items-center gap-2">
-                              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300">
-                                Đã cắt km lỗi
-                              </span>
-                              <span className="font-bold text-slate-900 dark:text-white text-sm">
-                                {flaggedAct.userName}
-                              </span>
-                              <span className="text-xs text-slate-400">• {flaggedAct.name}</span>
-                            </div>
-                            <p className="text-xs text-slate-600 dark:text-slate-300">
-                              {flaggedAct.flagReasons[0]}
-                            </p>
-                          </div>
-
-                          <div className="flex items-center gap-2 shrink-0">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setSelectedActivityId(flaggedAct.id);
-                                setActiveTab('tracklogs');
-                              }}
-                              className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 cursor-pointer"
-                            >
-                              Xem chi tiết
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    {activities.filter((a) => a.antiCheatStatus !== AntiCheatStatus.VALID).length === 0 && (
-                      <div className="text-center py-8 text-xs text-slate-400">
-                        Không có hoạt động nào bị gắn cờ bất thường trong hệ thống.
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* SUB-VIEW 4: QUẢN LÝ GIAO HÀNG RACE-KIT */}
-              {adminSubTab === 'fulfillment' && (
-                <div className="rounded-2xl bg-white dark:bg-[#0F1420] border border-slate-200/80 dark:border-slate-800/80 p-6 space-y-5 shadow-sm">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                    <div>
-                      <h2 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                        <Truck className="w-4 h-4 text-[#FC4C02]" />
-                        <span>Danh sách cấp phát Áo &amp; Huy chương Finisher</span>
-                      </h2>
-                      <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                        Xuất danh sách vận động viên hoàn thành mục tiêu để gửi đơn vị vận chuyển
-                      </p>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={handleExportRaceKitCsv}
-                      className="px-4 py-2 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-xs font-semibold flex items-center gap-2 cursor-pointer"
-                    >
-                      <Download className="w-3.5 h-3.5" />
-                      <span>Xuất file CSV giao hàng</span>
-                    </button>
-                  </div>
-
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left border-collapse">
-                      <thead>
-                        <tr className="border-b border-slate-200/70 dark:border-slate-800 text-[11px] font-semibold uppercase text-slate-400">
-                          <th className="py-3 px-3">Mã BIB</th>
-                          <th className="py-3 px-3">Vận động viên</th>
-                          <th className="py-3 px-3">Mục tiêu</th>
-                          <th className="py-3 px-3">Size áo</th>
-                          <th className="py-3 px-3">Khắc tên huy chương</th>
-                          <th className="py-3 px-3">Trạng thái</th>
-                          <th className="py-3 px-3">Mã vận đơn</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 text-sm">
-                        {raceKitOrders.map((ord) => (
-                          <tr key={ord.id}>
-                            <td className="py-3 px-3 font-mono text-xs font-semibold text-slate-700 dark:text-slate-300">
-                              {ord.bibNumber}
-                            </td>
-                            <td className="py-3 px-3">
-                              <div className="font-semibold text-slate-900 dark:text-white">
-                                {ord.runnerName}
-                              </div>
-                              <div className="text-xs text-slate-500">{ord.department}</div>
-                            </td>
-                            <td className="py-3 px-3 text-xs font-mono">
-                              <div>{ord.targetName}</div>
-                              <div className="text-emerald-600 dark:text-emerald-400 font-bold">
-                                {ord.currentKm} km
-                              </div>
-                            </td>
-                            <td className="py-3 px-3 font-mono font-bold">{ord.shirtSize}</td>
-                            <td className="py-3 px-3 font-mono text-xs text-slate-600 dark:text-slate-300">
-                              {ord.engraving}
-                            </td>
-                            <td className="py-3 px-3 text-xs font-semibold">{ord.status}</td>
-                            <td className="py-3 px-3 font-mono text-xs text-slate-500">
-                              {ord.carrier !== '-' ? `${ord.carrier}: ${ord.trackingCode}` : '—'}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-            </div>
+            <AdminManagementPortal
+              currentUserId={user.id}
+              adminSubTab={adminSubTab}
+              onChangeSubTab={setAdminSubTab}
+              adminUsers={adminUsers}
+              isAdminUsersLoading={isAdminUsersLoading}
+              adminUserSearch={adminUserSearch}
+              onChangeUserSearch={setAdminUserSearch}
+              adminUserActionMsg={adminUserActionMsg}
+              onRefreshUsers={fetchAdminUsers}
+              onUpdateUserRole={handleUpdateUserRole}
+              onDeleteUser={handleDeleteUser}
+              adminEventSaveMsg={adminEventSaveMsg}
+              eventsList={eventsList}
+              selectedEventId={selectedEventId}
+              onSelectEventId={setSelectedEventId}
+              onOpenCreateEventModal={() => setShowCreateEventModal(true)}
+              eventForm={eventForm}
+              onChangeEventForm={setEventForm}
+              onSaveEventRules={handleSaveEventRules}
+              challengeTiers={adminEventData?.challengeTiers || INITIAL_CHALLENGE_TIERS}
+              activities={activities}
+              onInspectFlaggedActivity={(activityId) => {
+                setSelectedActivityId(activityId);
+                setActiveTab('tracklogs');
+              }}
+              raceKitOrders={raceKitOrders}
+              onExportRaceKitCsv={handleExportRaceKitCsv}
+            />
           )}
         </main>
       </div>
 
-      {/* =====================================================================
-          MODAL 1: SHARE CARD
-         ===================================================================== */}
-      {showShareModal && (
-        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="max-w-lg w-full rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0F1420] p-6 space-y-5 shadow-2xl">
-            <div className="flex items-center justify-between">
-              <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                <Share2 className="w-4 h-4 text-[#FC4C02]" />
-                <span>Thẻ chia sẻ thành tích chạy bộ</span>
-              </h3>
-              <button
-                type="button"
-                onClick={() => setShowShareModal(false)}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-white cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <div className="rounded-2xl overflow-hidden border border-slate-800 bg-[#090D16] p-6 space-y-5">
-              <div className="flex items-center justify-between">
-                <div>
-                  <span className="text-[10px] font-bold tracking-widest uppercase text-[#FC4C02]">
-                    TOPRUN VIRTUAL RACE 2026
-                  </span>
-                  <h4 className="text-base font-bold text-white mt-0.5">{selectedActivity?.name || 'Chưa chọn hoạt động'}</h4>
-                </div>
-                <span className="px-2.5 py-1 rounded-md bg-white/10 text-xs font-mono font-bold text-white">
-                  {myBibNumber}
-                </span>
-              </div>
-
-              <div className="h-44 flex items-center justify-center bg-slate-950 rounded-xl border border-slate-800 p-3">
-                <svg viewBox="0 0 520 260" className="w-full h-full">
-                  {svgMap.pathData && (
-                    <path
-                      d={svgMap.pathData}
-                      fill="none"
-                      stroke="#FC4C02"
-                      strokeWidth="5"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                  )}
-                </svg>
-              </div>
-
-              <div className="grid grid-cols-3 gap-3 text-center">
-                <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800">
-                  <div className="text-[10px] text-slate-400 uppercase">Quãng đường</div>
-                  <div className="text-xl font-extrabold font-mono text-white mt-0.5">
-                    {selectedActivity?.validDistanceKm ?? 0} km
-                  </div>
-                </div>
-                <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800">
-                  <div className="text-[10px] text-slate-400 uppercase">Pace TB</div>
-                  <div className="text-xl font-extrabold font-mono text-white mt-0.5">
-                    {formatPace(selectedActivity?.avgPaceSecPerKm ?? 360, false)}
-                  </div>
-                </div>
-                <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800">
-                  <div className="text-[10px] text-slate-400 uppercase">Điểm giải</div>
-                  <div className="text-xl font-extrabold font-mono text-emerald-400 mt-0.5">
-                    +{selectedActivity?.finalCountedDistanceKm ?? 0} km
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex justify-end">
-              <button
-                type="button"
-                onClick={() => setShowShareModal(false)}
-                className="px-4 py-2 rounded-xl bg-[#FC4C02] text-white text-xs font-semibold cursor-pointer"
-              >
-                Đóng
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* =====================================================================
-          MODAL 2: ĐỔI HẠNG MỤC MỤC TIÊU & SIZE ÁO
-         ===================================================================== */}
-      {showRegisterModal && (
-        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="max-w-md w-full rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0F1420] p-6 space-y-5 shadow-2xl">
-            <div className="flex items-center justify-between">
-              <h3 className="text-base font-bold text-slate-900 dark:text-white">
-                Đổi cự ly mục tiêu &amp; Size áo Finisher
-              </h3>
-              <button
-                type="button"
-                onClick={() => setShowRegisterModal(false)}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-white cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <div className="space-y-4 text-sm">
-              <div>
-                <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1.5">
-                  Chọn cự ly mục tiêu (Target Finisher):
-                </label>
-                <select
-                  value={myTargetKm}
-                  onChange={(e) => {
-                    const km = Number(e.target.value);
-                    setMyTargetKm(km);
-                    setMyBibNumber(`TOP${km}-0018`);
-                  }}
-                  className="w-full rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 px-3.5 py-2.5 text-slate-900 dark:text-white font-semibold"
-                >
-                  <option value={30}>Cự ly 30KM (Starter)</option>
-                  <option value={50}>Cự ly 50KM (Finisher)</option>
-                  <option value={100}>Cự ly 100KM (Pro Runner)</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1.5">
-                  Chọn Size áo Finisher:
-                </label>
-                <select
-                  value={myShirtSize}
-                  onChange={(e) => setMyShirtSize(e.target.value)}
-                  className="w-full rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 px-3.5 py-2.5 text-slate-900 dark:text-white font-semibold"
-                >
-                  {['XS', 'S', 'M', 'L', 'XL', 'XXL'].map((s) => (
-                    <option key={s} value={s}>
-                      Size {s}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            <div className="flex justify-end gap-2 pt-2">
-              <button
-                type="button"
-                onClick={() => setShowRegisterModal(false)}
-                className="px-4 py-2 rounded-xl bg-[#FC4C02] text-white text-xs font-semibold cursor-pointer"
-              >
-                Lưu thay đổi
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* =====================================================================
-          MODAL 3: TẠO GIẢI ĐẤU MỚI (CREATE EVENT MODAL)
-         ===================================================================== */}
-      {showCreateEventModal && (
-        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
-          <div className="max-w-xl w-full my-8 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0F1420] p-6 space-y-5 shadow-2xl">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Trophy className="w-5 h-5 text-[#FC4C02]" />
-                <h3 className="text-base font-bold text-slate-900 dark:text-white">
-                  Khởi Tạo Giải Chạy Ảo / Thử Thách Mới
-                </h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setShowCreateEventModal(false)}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-white cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <form onSubmit={handleCreateNewEvent} className="space-y-4 text-xs">
-              <div>
-                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  Tên giải đấu *
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Ví dụ: TOPRUN SPRING HALF MARATHON 2026"
-                  value={newEventForm.title}
-                  onChange={(e) => setNewEventForm({ ...newEventForm, title: e.target.value })}
-                  className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-[#FC4C02]"
-                />
-              </div>
-
-              <div>
-                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  Thông điệp / Phụ đề
-                </label>
-                <input
-                  type="text"
-                  placeholder="Ví dụ: Giải chạy đón xuân • Chạy bộ vì sức khỏe doanh nghiệp"
-                  value={newEventForm.subtitle}
-                  onChange={(e) => setNewEventForm({ ...newEventForm, subtitle: e.target.value })}
-                  className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-[#FC4C02]"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    Ngày bắt đầu *
-                  </label>
-                  <input
-                    type="date"
-                    required
-                    value={newEventForm.startDateIso}
-                    onChange={(e) => setNewEventForm({ ...newEventForm, startDateIso: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-[#FC4C02]"
-                  />
-                </div>
-                <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    Ngày kết thúc *
-                  </label>
-                  <input
-                    type="date"
-                    required
-                    value={newEventForm.endDateIso}
-                    onChange={(e) => setNewEventForm({ ...newEventForm, endDateIso: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-[#FC4C02]"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    Pace tối thiểu
-                  </label>
-                  <input
-                    type="text"
-                    value={newEventForm.minPaceFormatted}
-                    onChange={(e) => setNewEventForm({ ...newEventForm, minPaceFormatted: e.target.value })}
-                    placeholder="03:30"
-                    className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white font-mono focus:outline-none focus:ring-1 focus:ring-[#FC4C02]"
-                  />
-                </div>
-                <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    Pace tối đa
-                  </label>
-                  <input
-                    type="text"
-                    value={newEventForm.maxPaceFormatted}
-                    onChange={(e) => setNewEventForm({ ...newEventForm, maxPaceFormatted: e.target.value })}
-                    placeholder="15:00"
-                    className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white font-mono focus:outline-none focus:ring-1 focus:ring-[#FC4C02]"
-                  />
-                </div>
-                <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    Nhân hệ số cuối tuần
-                  </label>
-                  <select
-                    value={newEventForm.weekendMultiplier}
-                    onChange={(e) => setNewEventForm({ ...newEventForm, weekendMultiplier: parseFloat(e.target.value) || 1.0 })}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white font-semibold focus:outline-none focus:ring-1 focus:ring-[#FC4C02]"
-                  >
-                    <option value={1.0}>1.0x (Không nhân)</option>
-                    <option value={1.5}>1.5x (Thứ 7 &amp; CN)</option>
-                    <option value={2.0}>2.0x (Cuối tuần x2)</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="pt-3 border-t border-slate-200 dark:border-slate-800 flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setShowCreateEventModal(false)}
-                  className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 font-semibold cursor-pointer"
-                >
-                  Hủy
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 rounded-xl bg-[#FC4C02] hover:bg-[#E34402] text-white font-bold shadow-md shadow-[#FC4C02]/20 transition cursor-pointer"
-                >
-                  Tạo Giải Ngay
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      <RunnerEventModals
+        showShareModal={showShareModal}
+        onCloseShareModal={() => setShowShareModal(false)}
+        selectedActivity={selectedActivity}
+        myBibNumber={myBibNumber}
+        svgPathData={svgMap.pathData}
+        showRegisterModal={showRegisterModal}
+        onCloseRegisterModal={() => setShowRegisterModal(false)}
+        myTargetKm={myTargetKm}
+        onChangeTargetKm={(km) => {
+          setMyTargetKm(km);
+          setMyBibNumber(`TOP${km}-0018`);
+        }}
+        myShirtSize={myShirtSize}
+        onChangeShirtSize={setMyShirtSize}
+        showCreateEventModal={showCreateEventModal}
+        onCloseCreateEventModal={() => setShowCreateEventModal(false)}
+        newEventForm={newEventForm}
+        onChangeNewEventForm={setNewEventForm}
+        onSubmitCreateNewEvent={handleCreateNewEvent}
+      />
     </div>
   );
 }

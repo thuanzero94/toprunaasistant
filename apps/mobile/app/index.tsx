@@ -61,7 +61,7 @@ export default function TopRunMobileApp() {
         tierLevel: 'SILVER',
         conditionType: ChallengeConditionType.DISTANCE_OVERACHIEVE,
         thresholdValue: 100,
-        awardBadgeUrl: '🥈',
+        awardBadgeUrl: '[SILVER]',
         rewardDescription: 'Huy hiệu Chiến Binh Bạc 100KM',
       },
       {
@@ -70,7 +70,7 @@ export default function TopRunMobileApp() {
         tierLevel: 'GOLD',
         conditionType: ChallengeConditionType.SINGLE_LONG_RUN,
         thresholdValue: 15,
-        awardBadgeUrl: '🔥',
+        awardBadgeUrl: '[GOLD]',
         rewardDescription: 'Huy hiệu Long Run Finisher 15KM',
       },
     ],
@@ -114,7 +114,7 @@ export default function TopRunMobileApp() {
       {/* HEADER */}
       <View style={styles.header}>
         <View>
-          <Text style={styles.brandTitle}>🏃‍♂️ TOPRunAssistant</Text>
+          <Text style={styles.brandTitle}>TOPRunAssistant</Text>
           <Text style={styles.brandSubtitle}>iOS &amp; Android • Strava Webhook Sync</Text>
         </View>
         <TouchableOpacity style={styles.syncButton} onPress={handleQuickStravaSync}>
@@ -136,7 +136,7 @@ export default function TopRunMobileApp() {
 
             {/* TẦNG 1: TARGET FINISHER */}
             <View style={styles.cardTarget}>
-              <Text style={styles.tierTagSky}>🎯 TẦNG 1: TÍCH LŨY MỐC TARGET (FINISHER)</Text>
+              <Text style={styles.tierTagSky}>TẦNG 1: TÍCH LŨY MỐC TARGET (FINISHER)</Text>
               <Text style={styles.cardHeading}>{progress.target.categoryName}</Text>
               <Text style={styles.bigDistance}>
                 {progress.target.currentMultipliedDistanceKm} / {progress.target.targetDistanceKm} KM (
@@ -153,14 +153,14 @@ export default function TopRunMobileApp() {
               <Text style={styles.subNote}>
                 Thực chạy GPS: {progress.target.currentRawDistanceKm} km •{' '}
                 {progress.target.isCompleted
-                  ? '✅ Đã mở khóa E-Cert & Huy chương Finisher!'
+                  ? 'Đã mở khóa E-Cert & Huy chương Finisher'
                   : `Còn thiếu ${progress.target.remainingDistanceKm} km`}
               </Text>
             </View>
 
             {/* TẦNG 2: CHALLENGE AWARDS */}
             <View style={styles.cardChallenge}>
-              <Text style={styles.tierTagAmber}>🏆 TẦNG 2: TÍCH LŨY CHALLENGE (NHẬN AWARD)</Text>
+              <Text style={styles.tierTagAmber}>TẦNG 2: TÍCH LŨY CHALLENGE (NHẬN AWARD)</Text>
               {progress.challenges.map((chal) => (
                 <View key={chal.tierId} style={styles.challengeItem}>
                   <Text style={styles.challengeTitle}>
@@ -168,7 +168,7 @@ export default function TopRunMobileApp() {
                   </Text>
                   <Text style={styles.challengeMeta}>
                     Tiến độ: {chal.currentValue}/{chal.thresholdValue} ({chal.progressPercentage}%) —{' '}
-                    {chal.isUnlocked ? 'ĐÃ NHẬN AWARD 🎉' : 'Đang chinh phục'}
+                    {chal.isUnlocked ? 'ĐÃ NHẬN AWARD' : 'Đang chinh phục'}
                   </Text>
                 </View>
               ))}
@@ -178,7 +178,7 @@ export default function TopRunMobileApp() {
               style={styles.shareCardBtn}
               onPress={() => setShareModalVisible(true)}
             >
-              <Text style={styles.shareCardBtnText}>📸 Tạo Ảnh Share Card Khoe Facebook / Zalo</Text>
+              <Text style={styles.shareCardBtnText}>Tạo Ảnh Share Card Khoe Facebook / Zalo</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -216,7 +216,7 @@ export default function TopRunMobileApp() {
         {(activeTab === 'profile' || activeTab === 'feed' || activeTab === 'clubs') && (
           <View style={styles.section}>
             <View style={styles.cardTarget}>
-              <Text style={styles.tierTagSky}>🟠 TRẠNG THÁI ĐỒNG BỘ STRAVA API (#292007)</Text>
+              <Text style={styles.tierTagSky}>TRẠNG THÁI ĐỒNG BỘ STRAVA API (#292007)</Text>
               <Text style={styles.cardHeading}>Nguyễn Hữu Thuận • Athlete #126278000</Text>
               <Text style={styles.subNote}>
                 Phạm vi quyền: read, activity:read_all • Tự động đồng bộ 30 ngày gần nhất • Cân nặng: 68kg • Cao: 173cm • Max HR: 192 bpm • Size áo Race-kit: L
@@ -239,7 +239,7 @@ export default function TopRunMobileApp() {
             <Text style={styles.ebibEvent}>TOPRUN SHARE CARD • STRAVA VERIFIED</Text>
             <Text style={styles.ebibNumber}>{progress.target.currentMultipliedDistanceKm} KM</Text>
             <Text style={styles.ebibRunner}>
-              🎯 Target 50KM: {progress.target.progressPercentage}% • BIB: TOP50-0018
+              Target 50KM: {progress.target.progressPercentage}% • BIB: TOP50-0018
             </Text>
             <TouchableOpacity
               style={[styles.syncButton, { marginTop: 18, alignSelf: 'center' }]}
@@ -303,13 +303,13 @@ const styles = StyleSheet.create({
   content: { flex: 1, padding: 16 },
   section: { gap: 14 },
   heroCard: {
-    backgroundColor: '#1e1b4b',
+    backgroundColor: '#0f172a',
     borderRadius: 18,
     padding: 16,
     borderWidth: 1,
-    borderColor: '#4338ca',
+    borderColor: '#fc4c02',
   },
-  badgeActive: { color: '#34d399', fontSize: 11, fontWeight: '800' },
+  badgeActive: { color: '#10b981', fontSize: 11, fontWeight: '800' },
   eventTitle: { color: '#ffffff', fontSize: 20, fontWeight: '900', marginTop: 6 },
   eventDesc: { color: '#cbd5e1', fontSize: 12, marginTop: 4 },
   cardTarget: {
@@ -317,26 +317,32 @@ const styles = StyleSheet.create({
     borderRadius: 18,
     padding: 16,
     borderWidth: 1,
-    borderColor: '#0284c7',
+    borderColor: '#0ea5e9',
   },
-  tierTagSky: { color: '#38bdf8', fontSize: 11, fontWeight: '800' },
+  tierTagSky: { color: '#0ea5e9', fontSize: 11, fontWeight: '800' },
   tierTagAmber: { color: '#fbbf24', fontSize: 11, fontWeight: '800', marginBottom: 8 },
   cardHeading: { color: '#ffffff', fontSize: 17, fontWeight: '800', marginTop: 6 },
-  bigDistance: { color: '#38bdf8', fontSize: 24, fontWeight: '900', marginVertical: 8 },
+  bigDistance: {
+    color: '#0ea5e9',
+    fontSize: 24,
+    fontWeight: '900',
+    marginVertical: 8,
+    fontVariant: ['tabular-nums'],
+  },
   progressBarBg: {
     height: 10,
     backgroundColor: '#1e293b',
     borderRadius: 999,
     overflow: 'hidden',
   },
-  progressBarFillSky: { height: '100%', backgroundColor: '#22c55e' },
-  subNote: { color: '#94a3b8', fontSize: 12, marginTop: 8 },
+  progressBarFillSky: { height: '100%', backgroundColor: '#10b981' },
+  subNote: { color: '#94a3b8', fontSize: 12, marginTop: 8, fontVariant: ['tabular-nums'] },
   cardChallenge: {
     backgroundColor: '#0f172a',
     borderRadius: 18,
     padding: 16,
     borderWidth: 1,
-    borderColor: '#d97706',
+    borderColor: '#f59e0b',
     gap: 10,
   },
   challengeItem: {
@@ -347,9 +353,9 @@ const styles = StyleSheet.create({
     borderColor: '#334155',
   },
   challengeTitle: { color: '#ffffff', fontSize: 14, fontWeight: '800' },
-  challengeMeta: { color: '#fde047', fontSize: 12, marginTop: 4 },
+  challengeMeta: { color: '#fbbf24', fontSize: 12, marginTop: 4, fontVariant: ['tabular-nums'] },
   shareCardBtn: {
-    backgroundColor: '#f97316',
+    backgroundColor: '#fc4c02',
     paddingVertical: 14,
     borderRadius: 14,
     alignItems: 'center',
@@ -365,21 +371,27 @@ const styles = StyleSheet.create({
     borderColor: '#1e293b',
   },
   splitRowInvalid: { backgroundColor: '#450a0a', borderColor: '#ef4444' },
-  splitKm: { color: '#e2e8f0', fontWeight: '700' },
-  splitPace: { color: '#38bdf8', fontWeight: '800' },
-  splitValidText: { color: '#34d399', fontWeight: '700', fontSize: 12 },
+  splitKm: { color: '#e2e8f0', fontWeight: '700', fontVariant: ['tabular-nums'] },
+  splitPace: { color: '#0ea5e9', fontWeight: '800', fontVariant: ['tabular-nums'] },
+  splitValidText: { color: '#10b981', fontWeight: '700', fontSize: 12, fontVariant: ['tabular-nums'] },
   splitInvalidText: { color: '#fca5a5', fontWeight: '800', fontSize: 12 },
   ebibBox: {
-    backgroundColor: '#1e1b4b',
+    backgroundColor: '#0f172a',
     borderRadius: 20,
     padding: 24,
     alignItems: 'center',
     borderWidth: 2,
-    borderColor: '#f97316',
+    borderColor: '#fc4c02',
   },
-  ebibEvent: { color: '#f97316', fontSize: 12, fontWeight: '800' },
-  ebibNumber: { color: '#ffffff', fontSize: 42, fontWeight: '900', marginVertical: 12 },
-  ebibRunner: { color: '#38bdf8', fontSize: 14, fontWeight: '700' },
+  ebibEvent: { color: '#fc4c02', fontSize: 12, fontWeight: '800' },
+  ebibNumber: {
+    color: '#ffffff',
+    fontSize: 42,
+    fontWeight: '900',
+    marginVertical: 12,
+    fontVariant: ['tabular-nums'],
+  },
+  ebibRunner: { color: '#0ea5e9', fontSize: 14, fontWeight: '700', fontVariant: ['tabular-nums'] },
   modalBackdrop: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.8)',
@@ -392,7 +404,7 @@ const styles = StyleSheet.create({
     padding: 24,
     alignItems: 'center',
     borderWidth: 2,
-    borderColor: '#f97316',
+    borderColor: '#fc4c02',
   },
   bottomBar: {
     flexDirection: 'row',
@@ -403,6 +415,6 @@ const styles = StyleSheet.create({
   },
   tabItem: { flex: 1, alignItems: 'center' },
   tabLabel: { color: '#64748b', fontSize: 12, fontWeight: '700' },
-  tabLabelActive: { color: '#f97316', fontWeight: '900' },
+  tabLabelActive: { color: '#fc4c02', fontWeight: '900' },
 });
 
