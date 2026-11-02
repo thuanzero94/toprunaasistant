@@ -1,0 +1,32 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: toprun-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: toprun
+      POSTGRES_PASSWORD: toprun_secret_2026
+      POSTGRES_DB: toprun_db
+    ports:
+      - '5433:5432'
+    volumes:
+      - toprun_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U toprun -d toprun_db']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: toprun-redis
+    restart: unless-stopped
+    ports:
+      - '6380:6379'
+    volumes:
+      - toprun_redisdata:/data
+    command: redis-server --appendonly yes
+
+volumes:
+  toprun_pgdata:
+  toprun_redisdata:

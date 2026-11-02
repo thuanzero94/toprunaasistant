@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 256" width="960" height="256" role="img" aria-labelledby="title">
+  <title id="title">TOPRunAssistant Horizontal Master Lockup</title>
+  <rect width="960" height="256" rx="32" fill="#090D16"/>
+  <!-- Symbol Group -->
+  <g id="symbol" transform="translate(24, 0)">
+    <path fill="#FC4C02" d="M 24 76 L 64 36 H 232 L 192 76 Z"/>
+    <path fill="#FBBF24" d="M 96 96 L 128 64 L 160 96 V 140 L 128 108 L 96 140 Z"/>
+    <path fill="#FFFFFF" d="M 96 164 L 128 132 L 160 164 V 220 H 96 Z"/>
+  </g>
+  <!-- Constructed Geometric Wordmark Paths: TOPRUN -->
+  <g id="wordmark" transform="translate(288, 0)">
+    <!-- T -->
+    <path fill="#FFFFFF" d="M 0 76 H 88 V 104 H 58 V 188 H 30 V 104 H 0 Z"/>
+    <!-- O -->
+    <path fill="#FFFFFF" fill-rule="evenodd" d="M 104 76 H 192 V 188 H 104 Z M 132 104 V 160 H 164 V 104 Z"/>
+    <!-- P -->
+    <path fill="#FFFFFF" fill-rule="evenodd" d="M 212 76 H 296 V 144 H 240 V 188 H 212 Z M 240 104 V 118 H 268 V 104 Z"/>
+    <!-- R (Orange Accent) -->
+    <path fill="#FC4C02" fill-rule="evenodd" d="M 320 76 H 404 V 136 L 424 188 H 392 L 374 142 H 348 V 188 H 320 Z M 348 104 V 118 H 376 V 104 Z"/>
+    <!-- U -->
+    <path fill="#FC4C02" d="M 440 76 H 468 V 160 H 504 V 76 H 532 V 188 H 440 Z"/>
+    <!-- N -->
+    <path fill="#FC4C02" d="M 552 76 H 580 L 620 144 V 76 H 648 V 188 H 620 L 580 120 V 188 H 552 Z"/>
+  </g>
+</svg>
+

@@ -1,0 +1,24 @@
+{
+  "name": "@toprun/database",
+  "version": "1.0.0",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "db:generate": "node -e \"process.env.NODE_TLS_REJECT_UNAUTHORIZED='0'; require('child_process').execSync('npx prisma generate', {stdio: 'inherit'})\"",
+    "db:push": "node -e \"process.env.NODE_TLS_REJECT_UNAUTHORIZED='0'; require('child_process').execSync('npx prisma db push', {stdio: 'inherit'})\"",
+    "db:migrate": "node -e \"process.env.NODE_TLS_REJECT_UNAUTHORIZED='0'; require('child_process').execSync('npx prisma migrate dev', {stdio: 'inherit'})\"",
+    "db:seed": "tsx prisma/seed.ts"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.1.0",
+    "@toprun/shared": "1.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "prisma": "^6.1.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}
+

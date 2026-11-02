@@ -1,0 +1,98 @@
+# ==============================================================================
+# TOPRunAssistant - Production Docker Compose Deployment
+# Domain: toprunassistant.io.vn & api.toprunassistant.io.vn
+# ==============================================================================
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: toprun-prod-postgres
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-toprun}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-toprun_secure_prod_2026}
+      POSTGRES_DB: ${POSTGRES_DB:-toprun_db}
+    volumes:
+      - toprun_pgdata_prod:/var/lib/postgresql/data
+    networks:
+      - toprun-network
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-toprun} -d ${POSTGRES_DB:-toprun_db}']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: toprun-prod-redis
+    restart: always
+    command: redis-server --appendonly yes
+    volumes:
+      - toprun_redisdata_prod:/data
+    networks:
+      - toprun-network
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    container_name: toprun-prod-api
+    restart: always
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      DATABASE_URL: postgresql://${POSTGRES_USER:-toprun}:${POSTGRES_PASSWORD:-toprun_secure_prod_2026}@postgres:5432/${POSTGRES_DB:-toprun_db}?schema=public
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      FRONTEND_URL: https://toprunassistant.io.vn
+      API_BASE_URL: https://api.toprunassistant.io.vn
+      STRAVA_REDIRECT_URI: https://api.toprunassistant.io.vn/api/v1/strava/callback
+    networks:
+      - toprun-network
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: https://api.toprunassistant.io.vn/api/v1
+    container_name: toprun-prod-web
+    restart: always
+    depends_on:
+      - api
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      NEXT_PUBLIC_API_URL: https://api.toprunassistant.io.vn/api/v1
+    networks:
+      - toprun-network
+
+  nginx:
+    image: nginx:alpine
+    container_name: toprun-prod-nginx
+    restart: always
+    ports:
+      - '80:80'
+      - '443:443'
+    volumes:
+      - ./docker/nginx/conf.d:/etc/nginx/conf.d:ro
+    depends_on:
+      - web
+      - api
+    networks:
+      - toprun-network
+
+networks:
+  toprun-network:
+    driver: bridge
+
+volumes:
+  toprun_pgdata_prod:
+  toprun_redisdata_prod:
+

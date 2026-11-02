@@ -1,0 +1,80 @@
+# ==============================================================================
+# TOPRunAssistant - Local & Docker Deployment
+# ==============================================================================
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: toprun-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-toprun}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-toprun_secret_2026}
+      POSTGRES_DB: ${POSTGRES_DB:-toprun_db}
+    ports:
+      - '5433:5432'
+    volumes:
+      - toprun_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-toprun} -d ${POSTGRES_DB:-toprun_db}']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: toprun-redis
+    restart: unless-stopped
+    ports:
+      - '6380:6379'
+    volumes:
+      - toprun_redisdata:/data
+    command: redis-server --appendonly yes
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    container_name: toprun-api
+    restart: unless-stopped
+    ports:
+      - '4000:4000'
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      DATABASE_URL: postgresql://${POSTGRES_USER:-toprun}:${POSTGRES_PASSWORD:-toprun_secret_2026}@postgres:5432/${POSTGRES_DB:-toprun_db}?schema=public
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-toprunassistant@gmail.com}
+      SMTP_PASS: ${SMTP_PASS:-ocyhhckxfwrnmdak}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3005}
+      API_BASE_URL: ${API_BASE_URL:-http://localhost:4000/api/v1}
+      STRAVA_REDIRECT_URI: ${STRAVA_REDIRECT_URI:-http://localhost:4000/api/v1/strava/callback}
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:4000/api/v1}
+    container_name: toprun-web
+    restart: unless-stopped
+    ports:
+      - '3005:3000'
+    depends_on:
+      - api
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:4000/api/v1}
+
+volumes:
+  toprun_pgdata:
+  toprun_redisdata:
+

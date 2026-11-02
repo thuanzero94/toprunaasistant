@@ -1,0 +1,36 @@
+{
+  "name": "top-run-assistant",
+  "version": "1.0.0",
+  "private": true,
+  "description": "TOPRunAssistant - Multi-platform Running Management, Tracklog, Challenge & Virtual Race Platform (Android, iOS, Web) with Strava API Sync",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev --parallel",
+    "dev:api": "npm run dev --workspace=@toprun/api",
+    "dev:web": "npm run dev --workspace=@toprun/web",
+    "dev:mobile": "npm run start --workspace=@toprun/mobile",
+    "test": "turbo run test",
+    "lint": "turbo run lint",
+    "db:generate": "npm run db:generate --workspace=@toprun/database",
+    "db:push": "npm run db:push --workspace=@toprun/database",
+    "db:seed": "npm run db:seed --workspace=@toprun/database",
+    "docker:up": "docker compose -f docker/docker-compose.yml up -d",
+    "docker:down": "docker compose -f docker/docker-compose.yml down"
+  },
+  "dependencies": {
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "turbo": "^2.3.3",
+    "typescript": "^5.7.2"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}
+

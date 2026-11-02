@@ -1,0 +1,212 @@
+import { z } from 'zod';
+
+// ============================================================================
+// 1. ENUMS & CONSTANTS
+// ============================================================================
+
+export enum UserRole {
+  RUNNER = 'RUNNER',
+  ORGANIZER = 'ORGANIZER',
+  ADMIN = 'ADMIN',
+}
+
+export enum ActivitySource {
+  STRAVA = 'STRAVA',
+  GPX_UPLOAD = 'GPX_UPLOAD',
+  MANUAL_ADMIN = 'MANUAL_ADMIN',
+}
+
+export enum SportType {
+  RUN = 'Run',
+  TRAIL_RUN = 'TrailRun',
+  VIRTUAL_RUN = 'VirtualRun',
+  WALK = 'Walk',
+  HIKE = 'Hike',
+}
+
+export enum AntiCheatStatus {
+  VALID = 'VALID',
+  PARTIAL_VALID = 'PARTIAL_VALID', // Có một số km (splits) bị cắt do quá tốc độ nhưng các km khác vẫn hợp lệ
+  FLAGGED = 'FLAGGED',             // Nghi vấn gian lận cao, chờ Admin duyệt
+  REJECTED = 'REJECTED',           // Bị hủy toàn bộ (Manual entry, sai môn, hoặc Admin từ chối)
+}
+
+export enum SplitInvalidReason {
+  PACE_TOO_FAST = 'PACE_TOO_FAST',       // Nghi vấn đi xe máy / phương tiện cơ giới
+  PACE_TOO_SLOW = 'PACE_TOO_SLOW',       // Đi bộ quá chậm vượt ngưỡng quy định
+  HEART_RATE_MISSING = 'HEART_RATE_MISSING',
+  CADENCE_TOO_LOW = 'CADENCE_TOO_LOW',
+  GPS_SPIKE = 'GPS_SPIKE',
+}
+
+export enum EventType {
+  VIRTUAL_RACE = 'VIRTUAL_RACE',     // Giải chạy chính thức (Admin/Organizer tạo, có BIB, E-Cert, Race-kit Medal/Áo)
+  MINI_CHALLENGE = 'MINI_CHALLENGE', // Thử thách cộng đồng/nhóm (User tạo miễn phí, nhận Badge)
+}
+
+export enum RunMode {
+  ACCUMULATIVE = 'ACCUMULATIVE', // Cộng dồn nhiều buổi chạy trong thời gian diễn ra giải
+  SINGLE_RUN = 'SINGLE_RUN',     // Hoàn thành cự ly Target chỉ trong 1 buổi chạy duy nhất
+}
+
+export enum EventStatus {
+  DRAFT = 'DRAFT',
+  UPCOMING = 'UPCOMING',
+  ACTIVE = 'ACTIVE',
+  COMPLETED = 'COMPLETED',
+  CANCELLED = 'CANCELLED',
+}
+
+export enum ChallengeConditionType {
+  DISTANCE_OVERACHIEVE = 'DISTANCE_OVERACHIEVE', // Vượt mốc km mở rộng (VD: Target 50km, nhưng đạt Challenge Bạc 100km, Vàng 150km)
+  STREAK_DAYS = 'STREAK_DAYS',                   // Chạy liên tục N ngày (mỗi ngày tối thiểu X km)
+  SINGLE_LONG_RUN = 'SINGLE_LONG_RUN',           // Có ít nhất 1 buổi chạy dài >= X km
+  ELEVATION_GAIN = 'ELEVATION_GAIN',             // Tích lũy độ cao leo núi (gain >= X mét)
+  TOP_RANK = 'TOP_RANK',                         // Đạt Top N Bảng xếp hạng chung cuộc
+}
+
+export enum FulfillmentStatus {
+  PENDING_TARGET = 'PENDING_TARGET',           // Đang chạy, chưa hoàn thành mốc Target
+  QUALIFIED_FINISHER = 'QUALIFIED_FINISHER',   // Đã đạt Target, đủ điều kiện nhận Huy chương / Race-kit
+  PACKING = 'PACKING',                         // Ban tổ chức đang đóng gói & khắc tên huy chương
+  SHIPPED = 'SHIPPED',                         // Đã bàn giao đơn vị vận chuyển (GHTK/GHN/ViettelPost)
+  DELIVERED = 'DELIVERED',                     // VĐV đã nhận hàng thành công
+}
+
+// ============================================================================
+// 2. ZOD SCHEMAS & INTERFACES CHO RULE ENGINE
+// ============================================================================
+
+export const EventRuleConfigSchema = z.object({
+  allowedSportTypes: z.array(z.nativeEnum(SportType)).default([
+    SportType.RUN,
+    SportType.TRAIL_RUN,
+    SportType.VIRTUAL_RUN,
+  ]),
+  minPaceSecPerKm: z.number().min(120).default(180), // Mặc định 03:00 /km (180s) -> Nhanh hơn bị coi là xe máy
+  maxPaceSecPerKm: z.number().max(2400).default(900), // Mặc định 15:00 /km (900s) -> Chậm hơn không tính
+  minActivityDistanceKm: z.number().min(0).default(1.0), // Quãng đường tối thiểu mỗi buổi chạy (VD: >= 1km)
+  minStepCadenceSpm: z.number().optional().nullable(),   // Ngưỡng guồng chân tối thiểu (VD: 110 spm)
+  requireHeartRate: z.boolean().default(false),          // Bắt buộc có nhịp tim từ đồng hồ
+  allowSplitFiltering: z.boolean().default(true),        // True: Cắt bỏ km vi phạm, giữ lại km hợp lệ. False: Hủy cả bài chạy.
+  weekendMultiplier: z.number().min(1).max(5).default(1.0), // Hệ số nhân ngày Thứ 7 & Chủ Nhật (VD: x2)
+  specialMultiplierDates: z
+    .array(
+      z.object({
+        date: z.string(), // YYYY-MM-DD
+        multiplier: z.number().min(1).max(5),
+        label: z.string(),
+      })
+    )
+    .optional()
+    .default([]),
+});
+
+export type EventRuleConfig = z.infer<typeof EventRuleConfigSchema>;
+
+export interface RawActivitySplitInput {
+  splitIndex: number;       // Km thứ 1, 2, 3...
+  distanceMeters: number;   // Thường là 1000m (hoặc phần lẻ ở km cuối)
+  movingTimeSec: number;    // Thời gian di chuyển của split này
+  elapsedTimeSec?: number;
+  elevationDiffMeters?: number;
+  averageHeartrate?: number | null;
+  averageCadenceSpm?: number | null; // Bước chân / phút (2 chân)
+}
+
+export interface RawActivityInput {
+  externalId: string;
+  name: string;
+  sportType: SportType | string;
+  startDateIso: string;
+  distanceMeters: number;
+  movingTimeSec: number;
+  elapsedTimeSec: number;
+  totalElevationGainMeters: number;
+  averageHeartrate?: number | null;
+  maxHeartrate?: number | null;
+  averageCadenceSpm?: number | null;
+  isManual: boolean;
+  mapPolyline?: string | null;
+  splits: RawActivitySplitInput[];
+}
+
+export interface EvaluatedSplitResult {
+  splitIndex: number;
+  distanceMeters: number;
+  movingTimeSec: number;
+  paceSecPerKm: number;
+  formattedPace: string;
+  elevationDiffMeters: number;
+  averageHeartrate: number | null;
+  isValid: boolean;
+  invalidReason: SplitInvalidReason | null;
+}
+
+export interface ActivityEvaluationResult {
+  antiCheatStatus: AntiCheatStatus;
+  rejectionReason: string | null;
+  rawDistanceKm: number;
+  validDistanceKm: number;
+  invalidDistanceKm: number;
+  validMovingTimeSec: number;
+  validAvgPaceSecPerKm: number;
+  appliedMultiplier: number;
+  multiplierReason: string | null;
+  finalCountedDistanceKm: number; // Quãng đường cuối cùng sau khi lọc Split & nhân hệ số
+  evaluatedSplits: EvaluatedSplitResult[];
+  flagReasons: string[];
+}
+
+// ============================================================================
+// 3. DUAL-GOAL (TARGET VS CHALLENGE TIERS) INTERFACES
+// ============================================================================
+
+export interface TargetCategoryInfo {
+  id: string;
+  name: string;               // VD: "Finisher 50KM", "Half Marathon 21.1KM"
+  targetDistanceKm: number;   // 50, 21.1, 100...
+  bibPrefix: string;          // "TOP50-"
+}
+
+export interface ChallengeTierInfo {
+  id: string;
+  tierName: string;           // VD: "Chiến Binh Bạc (100KM)", "Thợ Săn Bình Minh (Streak 7 Ngày)"
+  tierLevel: 'BRONZE' | 'SILVER' | 'GOLD' | 'DIAMOND' | 'SPECIAL';
+  conditionType: ChallengeConditionType;
+  thresholdValue: number;     // VD: 100 (km), 7 (ngày liên tiếp), 15 (km single run)
+  minDailyDistanceKm?: number;// Dùng cho STREAK_DAYS (VD: mỗi ngày >= 2km)
+  awardBadgeUrl: string;
+  rewardDescription: string;
+}
+
+export interface DualGoalProgressSummary {
+  // 1. Tầng TARGET (Mục tiêu cơ bản nhận Finisher Medal & E-Cert)
+  target: {
+    categoryName: string;
+    targetDistanceKm: number;
+    currentRawDistanceKm: number;
+    currentMultipliedDistanceKm: number;
+    progressPercentage: number; // 0 -> 100%
+    remainingDistanceKm: number;
+    isCompleted: boolean;
+    completedAtIso: string | null;
+    eCertUnlocked: boolean;
+    raceKitQualified: boolean;
+  };
+  // 2. Tầng CHALLENGE (Các mốc Award mở rộng vượt ngưỡng / Streak / Long Run)
+  challenges: Array<{
+    tierId: string;
+    tierName: string;
+    tierLevel: string;
+    conditionType: ChallengeConditionType;
+    thresholdValue: number;
+    currentValue: number;
+    progressPercentage: number;
+    isUnlocked: boolean;
+    unlockedAtIso: string | null;
+    awardBadgeUrl: string;
+    rewardDescription: string;
+  }>;
+}
+

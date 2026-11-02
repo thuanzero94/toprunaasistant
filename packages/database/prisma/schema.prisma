@@ -1,0 +1,559 @@
+// ============================================================================
+// TOPRunAssistant — Prisma Database Schema (PostgreSQL)
+// Bao quát toàn bộ nghiệp vụ:
+// - Quản lý Users, Clubs/Phòng ban, Strava OAuth2 Connection
+// - Tracklog (Activities) & Chi tiết từng km (ActivitySplits) + Anti-cheat Flags
+// - Giải chạy ảo (Virtual Race) & Thử thách (Mini Challenge)
+// - Phân tách rõ 2 tầng: EventCategory (Mốc TARGET) & EventChallengeTier (Mốc CHALLENGE nhận Award)
+// - Bảng xếp hạng Cá nhân & Đội/Nhóm (EventTeam)
+// - Quản lý E-BIB, E-Certificate & Đơn hàng Vật phẩm Race-kit (Áo, Medal, Vận chuyển)
+// - Tương tác cộng đồng: Kudos, Comments, Activity Reports, Push Notifications
+// ============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  RUNNER
+  ORGANIZER
+  ADMIN
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+}
+
+enum ActivitySource {
+  STRAVA
+  GPX_UPLOAD
+  MANUAL_ADMIN
+}
+
+enum AntiCheatStatus {
+  VALID
+  PARTIAL_VALID
+  FLAGGED
+  REJECTED
+}
+
+enum EventType {
+  VIRTUAL_RACE
+  MINI_CHALLENGE
+}
+
+enum RunMode {
+  ACCUMULATIVE
+  SINGLE_RUN
+}
+
+enum EventStatus {
+  DRAFT
+  UPCOMING
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
+enum ChallengeConditionType {
+  DISTANCE_OVERACHIEVE
+  STREAK_DAYS
+  SINGLE_LONG_RUN
+  ELEVATION_GAIN
+  TOP_RANK
+}
+
+enum FulfillmentStatus {
+  PENDING_TARGET
+  QUALIFIED_FINISHER
+  PACKING
+  SHIPPED
+  DELIVERED
+}
+
+// ----------------------------------------------------------------------------
+// 1. NGƯỜI DÙNG & LIÊN KẾT STRAVA (USERS & STRAVA OAUTH2)
+// ----------------------------------------------------------------------------
+
+model User {
+  id                     String          @id @default(cuid())
+  email                  String          @unique
+  passwordHash           String?
+  fullName               String
+  avatarUrl              String?
+  gender                 Gender?         @default(MALE)
+  dateOfBirth            DateTime?
+  phone                  String?
+  departmentOrUnit       String?         // Phòng ban / Đơn vị (dành cho giải nội bộ công ty)
+  bio                    String?
+  role                   UserRole        @default(RUNNER)
+
+  // Thông số Thể chất & Cấu hình Race-kit mặc định
+  weightKg               Float?          @default(65)
+  heightCm               Float?          @default(170)
+  maxHeartRate           Int?            @default(190)
+  defaultShirtSize       String?         @default("L") // XS, S, M, L, XL, XXL
+  defaultShippingAddress String?
+
+  // Thống kê tổng hợp & Kỷ lục cá nhân (PR - Personal Records tính bằng giây + Link chứng nhận)
+  totalDistanceKm        Float           @default(0)
+  totalActivities        Int             @default(0)
+  pr5kSec                Int?
+  pr10kSec               Int?
+  pr21kSec               Int?
+  pr42kSec               Int?
+  prCertLink             String?
+
+  expoPushToken          String?
+  createdAt              DateTime        @default(now())
+  updatedAt              DateTime        @updatedAt
+
+  // Quan hệ
+  stravaConnection       StravaConnection?
+  stravaSyncLogs         StravaSyncLog[]
+  activities             Activity[]
+  clubMemberships        ClubMember[]
+  participations         EventParticipation[]
+  createdEvents          Event[]         @relation("EventCreator")
+  kudosGiven             ActivityKudo[]
+  comments               ActivityComment[]
+  reportsFiled           ActivityReport[] @relation("Reporter")
+  notifications          Notification[]
+
+  @@index([email])
+  @@index([role])
+  @@map("users")
+}
+
+model StravaConnection {
+  id             String   @id @default(cuid())
+  userId         String   @unique
+  athleteId      String   @unique // Strava Athlete ID
+  username       String?
+  firstname      String?
+  lastname       String?
+  city           String?
+  country        String?
+  profilePicUrl  String?
+  accessToken    String
+  refreshToken   String
+  expiresAt      Int      // Unix Epoch timestamp (seconds)
+  scopes         String   @default("read,activity:read_all")
+  syncStatus     String   @default("CONNECTED") // CONNECTED, REQUIRE_ACTIVITY_SCOPE, TOKEN_EXPIRED, DISCONNECTED
+  isActive       Boolean  @default(true)
+  lastSyncAt     DateTime?
+  lastErrorMsg   String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([athleteId])
+  @@map("strava_connections")
+}
+
+model StravaSyncLog {
+  id                  String   @id @default(cuid())
+  userId              String
+  triggerType         String   @default("MANUAL_SYNC") // OAUTH_CALLBACK, MANUAL_SYNC, WEBHOOK, TOKEN_REFRESH
+  windowDays          Int      @default(30)
+  status              String   @default("SUCCESS")     // SUCCESS, PARTIAL_WARNING, REQUIRE_SCOPE, ERROR
+  fetchedCount        Int      @default(0)
+  newlySyncedCount    Int      @default(0)
+  validCount          Int      @default(0)
+  flaggedOrCutCount   Int      @default(0)
+  summaryMessage      String
+  detailsJson         Json?
+  createdAt           DateTime @default(now())
+
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@map("strava_sync_logs")
+}
+
+// ----------------------------------------------------------------------------
+// 2. CÂU LẠC BỘ / ĐỘI NHÓM / PHÒNG BAN (CLUBS & DEPARTMENTS)
+// ----------------------------------------------------------------------------
+
+model Club {
+  id              String       @id @default(cuid())
+  slug            String       @unique
+  name            String
+  description     String?
+  logoUrl         String?
+  coverUrl        String?
+  isPrivate       Boolean      @default(false)
+  inviteCode      String?      @unique
+  totalDistanceKm Float        @default(0)
+  memberCount     Int          @default(1)
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  members         ClubMember[]
+  eventTeams      EventTeam[]
+
+  @@map("clubs")
+}
+
+model ClubMember {
+  id        String   @id @default(cuid())
+  clubId    String
+  userId    String
+  role      String   @default("MEMBER") // ADMIN, CAPTAIN, MEMBER
+  joinedAt  DateTime @default(now())
+
+  club      Club     @relation(fields: [clubId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([clubId, userId])
+  @@map("club_members")
+}
+
+// ----------------------------------------------------------------------------
+// 3. TRACKLOG HOẠT ĐỘNG & SPLITS TỪNG KM (ACTIVITIES & ANTI-CHEAT)
+// ----------------------------------------------------------------------------
+
+model Activity {
+  id                    String                     @id @default(cuid())
+  userId                String
+  source                ActivitySource             @default(STRAVA)
+  externalId            String                     // Strava Activity ID hoặc mã GPX
+  name                  String
+  sportType             String                     @default("Run") // Run, TrailRun, VirtualRun
+  startDate             DateTime
+  distanceMeters        Float                      // Quãng đường gốc từ Strava (mét)
+  validDistanceKm       Float                      // Quãng đường hợp lệ sau khi lọc từng km (km)
+  movingTimeSec         Int
+  elapsedTimeSec        Int
+  avgPaceSecPerKm       Int                        // Pace trung bình của các km hợp lệ (giây/km)
+  totalElevationGain    Float                      @default(0)
+  avgHeartrate          Float?
+  maxHeartrate          Float?
+  avgCadenceSpm         Float?                     // Bước chân / phút (2 chân)
+  calories              Float?
+  mapPolyline           String?                    @db.Text // Google Encoded Polyline
+  deviceName            String?
+  isManual              Boolean                    @default(false)
+
+  // Trạng thái chống gian lận
+  antiCheatStatus       AntiCheatStatus            @default(VALID)
+  flagReasons           Json?                      // Mảng lý do cảnh báo (VD: cắt 1km quá tốc độ)
+  reviewedByAdminId     String?
+  reviewedAt            DateTime?
+  adminReviewNote       String?
+  rawPayload            Json?                      // Lưu trữ JSON gốc từ Strava để đối chiếu
+
+  kudosCount            Int                        @default(0)
+  commentCount          Int                        @default(0)
+  createdAt             DateTime                   @default(now())
+  updatedAt             DateTime                   @updatedAt
+
+  user                  User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  splits                ActivitySplit[]
+  participationLogs     ParticipationActivityLog[]
+  kudos                 ActivityKudo[]
+  comments              ActivityComment[]
+  reports               ActivityReport[]
+
+  @@unique([source, externalId])
+  @@index([userId, startDate(sort: Desc)])
+  @@index([antiCheatStatus])
+  @@map("activities")
+}
+
+model ActivitySplit {
+  id                  String   @id @default(cuid())
+  activityId          String
+  splitIndex          Int      // Km thứ 1, 2, 3...
+  distanceMeters      Float
+  movingTimeSec       Int
+  paceSecPerKm        Int
+  elevationDiffMeters Float    @default(0)
+  avgHeartrate        Float?
+  avgCadenceSpm       Float?
+  isValid             Boolean  @default(true)
+  invalidReason       String?  // PACE_TOO_FAST, PACE_TOO_SLOW...
+
+  activity            Activity @relation(fields: [activityId], references: [id], onDelete: Cascade)
+
+  @@index([activityId, splitIndex])
+  @@map("activity_splits")
+}
+
+model ActivityKudo {
+  id         String   @id @default(cuid())
+  activityId String
+  userId     String
+  createdAt  DateTime @default(now())
+
+  activity   Activity @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([activityId, userId])
+  @@map("activity_kudos")
+}
+
+model ActivityComment {
+  id         String   @id @default(cuid())
+  activityId String
+  userId     String
+  content    String
+  createdAt  DateTime @default(now())
+
+  activity   Activity @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([activityId, createdAt])
+  @@map("activity_comments")
+}
+
+model ActivityReport {
+  id          String   @id @default(cuid())
+  activityId  String
+  reporterId  String
+  reason      String
+  status      String   @default("PENDING") // PENDING, RESOLVED_VALID, RESOLVED_REJECTED
+  adminNote   String?
+  createdAt   DateTime @default(now())
+  resolvedAt  DateTime?
+
+  activity    Activity @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  reporter    User     @relation("Reporter", fields: [reporterId], references: [id], onDelete: Cascade)
+
+  @@index([status])
+  @@map("activity_reports")
+}
+
+// ----------------------------------------------------------------------------
+// 4. GIẢI CHẠY ẢO (VIRTUAL RACE) & THỬ THÁCH (CHALLENGE) — MÔ HÌNH 2 TẦNG
+// ----------------------------------------------------------------------------
+
+model Event {
+  id              String               @id @default(cuid())
+  slug            String               @unique
+  title           String
+  subtitle        String?
+  description     String               @db.Text
+  bannerUrl       String?
+  eventType       EventType            @default(VIRTUAL_RACE)
+  runMode         RunMode              @default(ACCUMULATIVE)
+  status          EventStatus          @default(ACTIVE)
+  isPrivate       Boolean              @default(false)
+  invitePasscode  String?
+
+  startDate       DateTime
+  endDate         DateTime
+  registrationEnd DateTime?
+
+  // Cấu hình Quy tắc Chấm điểm & Chống gian lận (EventRuleConfig JSON)
+  ruleConfig      Json                 // { allowedSportTypes, minPaceSecPerKm, maxPaceSecPerKm, weekendMultiplier, allowSplitFiltering... }
+
+  creatorId       String
+  participantCount Int                 @default(0)
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+
+  creator         User                 @relation("EventCreator", fields: [creatorId], references: [id])
+  categories      EventCategory[]      // Tầng 1: Các hạng mục TARGET (VD: 21K, 50K, 100K nhận Finisher Medal & E-Cert)
+  challengeTiers  EventChallengeTier[] // Tầng 2: Các mốc CHALLENGE mở rộng (Vượt ngưỡng, Streak, Long Run nhận Award/Badge)
+  teams           EventTeam[]
+  participations  EventParticipation[]
+
+  @@index([status, eventType])
+  @@index([startDate, endDate])
+  @@map("events")
+}
+
+// TẦNG 1: Mốc TARGET cơ bản VĐV đăng ký để trở thành Finisher
+model EventCategory {
+  id                 String               @id @default(cuid())
+  eventId            String
+  name               String               // VD: "Hạng mục 50KM Finisher", "Half Marathon 21.1KM"
+  targetDistanceKm   Float                // 50, 21.1, 100...
+  bibPrefix          String               @default("TOP-") // Sinh số BIB: TOP50-0001
+  slotLimit          Int?
+  finisherMedalUrl   String?
+  eCertTemplateUrl   String?
+
+  event              Event                @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  participations     EventParticipation[]
+
+  @@index([eventId])
+  @@map("event_categories")
+}
+
+// TẦNG 2: Mốc CHALLENGE mở rộng trong cùng giải đấu để nhận Award / Huy hiệu đặc biệt
+model EventChallengeTier {
+  id                 String                 @id @default(cuid())
+  eventId            String
+  tierName           String                 // VD: "Chiến Binh Bạc (100KM)", "Thợ Săn Bình Minh (Streak 7 Ngày)"
+  tierLevel          String                 @default("GOLD") // BRONZE, SILVER, GOLD, DIAMOND, SPECIAL
+  conditionType      ChallengeConditionType @default(DISTANCE_OVERACHIEVE)
+  thresholdValue     Float                  // 100 (km), 7 (ngày liên tiếp), 15 (km single run)
+  minDailyDistanceKm Float?                 @default(2.0) // Dùng cho STREAK_DAYS
+  awardBadgeUrl      String
+  rewardDescription  String
+
+  event              Event                  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  awardsUnlocked     ParticipationAward[]
+
+  @@index([eventId])
+  @@map("event_challenge_tiers")
+}
+
+// Đội thi đấu trong giải (Phòng ban / CLB)
+model EventTeam {
+  id                      String               @id @default(cuid())
+  eventId                 String
+  clubId                  String?
+  name                    String               // VD: "Khối Công Nghệ (IT Team)", "Phòng Kinh Doanh"
+  avatarUrl               String?
+  memberCount             Int                  @default(0)
+  totalValidDistanceKm    Float                @default(0)
+  totalMultipliedDistanceKm Float              @default(0)
+
+  event                   Event                @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  club                    Club?                @relation(fields: [clubId], references: [id])
+  participations          EventParticipation[]
+
+  @@index([eventId, totalMultipliedDistanceKm(sort: Desc)])
+  @@map("event_teams")
+}
+
+// Bản ghi VĐV đăng ký tham gia Giải đấu (Theo dõi song song Tiến độ Target & Challenge)
+model EventParticipation {
+  id                        String                     @id @default(cuid())
+  eventId                   String
+  userId                    String
+  categoryId                String                     // Hạng mục TARGET đã chọn
+  teamId                    String?                    // Đội/Phòng ban thi đấu
+
+  bibNumber                 String                     // VD: "TOP50-0018"
+  eBibSvgUrl                String?
+
+  // Tiến độ Tầng 1: TARGET (Finisher Goal)
+  validRawDistanceKm        Float                      @default(0) // Tổng km thực tế hợp lệ
+  validMultipliedDistanceKm Float                      @default(0) // Tổng km sau khi nhân hệ số cuối tuần (x2)
+  bestSingleRunKm           Float                      @default(0)
+  bestSingleRunPaceSec      Int?
+  targetProgressPct         Float                      @default(0) // 0 -> 100%
+  isTargetCompleted         Boolean                    @default(false)
+  targetCompletedAt         DateTime?
+  eCertSvgUrl               String?
+
+  // Thống kê phụ phục vụ Tầng 2: CHALLENGE TIERS
+  currentStreakDays         Int                        @default(0)
+  maxStreakDays             Int                        @default(0)
+  totalElevationGainMeters  Float                      @default(0)
+  completedActivitiesCount  Int                        @default(0)
+
+  joinedAt                  DateTime                   @default(now())
+  updatedAt                 DateTime                   @updatedAt
+
+  event                     Event                      @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user                      User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category                  EventCategory              @relation(fields: [categoryId], references: [id])
+  team                      EventTeam?                 @relation(fields: [teamId], references: [id])
+  activityLogs              ParticipationActivityLog[]
+  awardsUnlocked            ParticipationAward[]
+  raceKitOrder              RaceKitOrder?
+
+  @@unique([eventId, userId])
+  @@unique([eventId, bibNumber])
+  @@index([eventId, validMultipliedDistanceKm(sort: Desc)])
+  @@index([eventId, categoryId, validMultipliedDistanceKm(sort: Desc)])
+  @@map("event_participations")
+}
+
+// Bảng nối ghi nhận mỗi buổi chạy đóng góp bao nhiêu km hợp lệ vào từng giải đấu
+model ParticipationActivityLog {
+  id                       String             @id @default(cuid())
+  participationId          String
+  activityId               String
+  activityDate             DateTime
+  rawDistanceKm            Float
+  validDistanceKm          Float              // Km hợp lệ sau khi cắt các split quá tốc độ
+  appliedMultiplier        Float              @default(1.0)
+  multiplierReason         String?            // VD: "Cuối tuần x2"
+  finalMultipliedDistanceKm Float             // validDistanceKm * appliedMultiplier
+  status                   AntiCheatStatus    @default(VALID)
+  createdAt                DateTime           @default(now())
+
+  participation            EventParticipation @relation(fields: [participationId], references: [id], onDelete: Cascade)
+  activity                 Activity           @relation(fields: [activityId], references: [id], onDelete: Cascade)
+
+  @@unique([participationId, activityId])
+  @@index([participationId, activityDate])
+  @@map("participation_activity_logs")
+}
+
+// Bảng lưu các Giải thưởng / Huy hiệu thuộc Tầng 2 (CHALLENGE TIERS) mà VĐV đã mở khóa
+model ParticipationAward {
+  id              String             @id @default(cuid())
+  participationId String
+  challengeTierId String
+  unlockedValue   Float              // Giá trị lúc đạt giải (VD: 105.4 km hoặc 7 ngày streak)
+  unlockedAt      DateTime           @default(now())
+
+  participation   EventParticipation @relation(fields: [participationId], references: [id], onDelete: Cascade)
+  challengeTier   EventChallengeTier @relation(fields: [challengeTierId], references: [id], onDelete: Cascade)
+
+  @@unique([participationId, challengeTierId])
+  @@map("participation_awards")
+}
+
+// ----------------------------------------------------------------------------
+// 5. QUẢN LÝ ĐƠN HÀNG VẬT PHẨM & VẬN CHUYỂN (RACE-KIT FULFILLMENT)
+// ----------------------------------------------------------------------------
+
+model RaceKitOrder {
+  id                 String             @id @default(cuid())
+  participationId    String             @unique
+  shirtSize          String             @default("L") // XS, S, M, L, XL, XXL
+  medalEngravingName String?            // Tên khắc lên huy chương thật
+  recipientName      String
+  phone              String
+  shippingAddress    String
+  cityProvince       String?
+  fulfillmentStatus  FulfillmentStatus  @default(PENDING_TARGET)
+  shippingProvider   String?            // GHTK, GHN, ViettelPost, Internal_Pickup
+  trackingCode       String?
+  shippedAt          DateTime?
+  deliveredAt        DateTime?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  participation      EventParticipation @relation(fields: [participationId], references: [id], onDelete: Cascade)
+
+  @@index([fulfillmentStatus])
+  @@map("race_kit_orders")
+}
+
+// ----------------------------------------------------------------------------
+// 6. HỆ THỐNG THÔNG BÁO (PUSH & IN-APP NOTIFICATIONS)
+// ----------------------------------------------------------------------------
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  title     String
+  body      String
+  type      String   @default("STRAVA_SYNC") // STRAVA_SYNC, TARGET_COMPLETED, CHALLENGE_AWARD, RANK_UP, ANTI_CHEAT
+  actionUrl String?
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead, createdAt(sort: Desc)])
+  @@map("notifications")
+}
+

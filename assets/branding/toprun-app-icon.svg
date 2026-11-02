@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-labelledby="title">
+  <title id="title">TOPRunAssistant Official App Icon - The Apex Track T</title>
+  <!-- Deep Midnight Stadium Container (rx=112 = 22% squircle) -->
+  <rect x="0" y="0" width="512" height="512" rx="112" fill="#090D16"/>
+  <!-- Subtle inner border rim -->
+  <rect x="16" y="16" width="480" height="480" rx="96" fill="none" stroke="#1E293B" stroke-width="8"/>
+  <!-- Top Horizontal Sprint Bar (Electric Stride Orange #FC4C02) -->
+  <path fill="#FC4C02" d="M 76 164 L 140 100 H 436 L 372 164 Z"/>
+  <!-- Tier 2 Challenge Ascent Chevron (Amber Gold #FBBF24) - separated by crisp 24px negative-space gap -->
+  <path fill="#FBBF24" d="M 200 244 L 256 188 L 312 244 V 308 L 256 252 L 200 308 Z"/>
+  <!-- Tier 1 Target Base Pillar (Pure White #FFFFFF) -->
+  <path fill="#FFFFFF" d="M 200 344 L 256 288 L 312 344 V 420 H 200 Z"/>
+</svg>

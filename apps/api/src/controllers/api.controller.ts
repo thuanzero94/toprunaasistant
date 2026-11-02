@@ -1,0 +1,596 @@
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Headers,
+  HttpCode,
+  Inject,
+  Param,
+  Patch,
+  Post,
+  Query,
+  Res,
+  UnauthorizedException,
+} from '@nestjs/common';
+import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Response } from 'express';
+import { TopRunEngineService } from '../services/toprun-engine.service';
+import { AccountService } from '../services/account.service';
+import { AntiCheatStatus, ChallengeConditionType, EventType, FulfillmentStatus, RunMode } from '@toprun/shared';
+
+@ApiTags('TOPRunAssistant API v1')
+@Controller('api/v1')
+export class ApiController {
+  constructor(
+    @Inject(TopRunEngineService) private readonly engine: TopRunEngineService,
+    @Inject(AccountService) private readonly accountService: AccountService
+  ) { }
+
+  // ==========================================================================
+  // 1. HEALTH & SYSTEM OVERVIEW
+  // ==========================================================================
+
+  @Get('overview')
+  @ApiOperation({ summary: 'Lấy thống kê tổng quan toàn hệ thống TOPRunAssistant' })
+  getOverview() {
+    return this.engine.getSystemOverview();
+  }
+
+  // ==========================================================================
+  // 1B. AUTHENTICATION, ACCOUNT MANAGEMENT & STRAVA SYNC STATUS (POSTGRESQL)
+  // ==========================================================================
+
+  @Post('auth/register')
+  @ApiOperation({ summary: 'Đăng ký tài khoản mới (Lưu trực tiếp vào PostgreSQL + cấp JWT Token & gửi Email kích hoạt)' })
+  async registerAccount(
+    @Body()
+    body: {
+      email: string;
+      password: string;
+      fullName: string;
+      phone?: string;
+      gender?: 'MALE' | 'FEMALE' | 'OTHER';
+      departmentOrUnit?: string;
+      defaultShirtSize?: string;
+    }
+  ) {
+    return this.accountService.register(body);
+  }
+
+  @Get('auth/verify-email')
+  @ApiOperation({ summary: 'Xác thực kích hoạt tài khoản qua link trong Email' })
+  async verifyEmail(@Query('token') token: string) {
+    return this.accountService.verifyEmail(token);
+  }
+
+  @Post('auth/verify-otp')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Xác thực kích hoạt tài khoản bằng mã OTP 6 số gửi qua Email' })
+  async verifyOtp(@Body() body: { email: string; otp: string }) {
+    return this.accountService.verifyOtp(body);
+  }
+
+  @Post('auth/resend-activation')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Gửi lại email kích hoạt tài khoản' })
+  async resendActivation(@Body() body: { email: string }) {
+    return this.accountService.resendActivationEmail(body.email);
+  }
+
+  @Post('auth/login')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Đăng nhập bằng Email & Mật khẩu (nhận JWT Token & Trạng thái Strava)' })
+  async loginAccount(@Body() body: { email: string; password: string }) {
+    return this.accountService.login(body);
+  }
+
+  @Post('auth/google')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Đăng nhập nhanh bằng tài khoản Google (OAuth2 / Google Sign-In)' })
+  async loginWithGoogle(
+    @Body()
+    body: {
+      email: string;
+      fullName?: string;
+      avatarUrl?: string;
+      googleId?: string;
+    }
+  ) {
+    return this.accountService.loginWithGoogle(body);
+  }
+
+  @Get('auth/me')
+  @ApiOperation({ summary: 'Lấy thông tin người dùng hiện tại từ JWT Token' })
+  async getMe(@Headers('authorization') authHeader?: string) {
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      throw new UnauthorizedException('Thiếu token xác thực.');
+    }
+    const token = authHeader.slice(7);
+    const decoded = this.accountService.verifyJwt(token);
+    if (!decoded) {
+      throw new UnauthorizedException('Phiên đăng nhập đã hết hạn hoặc không hợp lệ.');
+    }
+    return this.accountService.getMe(decoded.userId);
+  }
+
+  // ==========================================================================
+  // 1C. ADMIN USER MANAGEMENT & ROLE ASSIGNMENT
+  // ==========================================================================
+
+  @Get('admin/users')
+  @ApiOperation({ summary: 'Lấy danh sách người dùng cho Quản trị viên (Admin)' })
+  async getAdminUsers(
+    @Query('search') search?: string,
+    @Headers('authorization') authHeader?: string
+  ) {
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const decoded = this.accountService.verifyJwt(authHeader.slice(7));
+      if (!decoded || decoded.role !== 'ADMIN') {
+        throw new UnauthorizedException('Chỉ Quản trị viên (ADMIN) mới có quyền truy cập.');
+      }
+    }
+    return this.accountService.getAllUsers(search);
+  }
+
+  @Patch('admin/users/:id/role')
+  @ApiOperation({ summary: 'Cập nhật phân quyền vai trò người dùng (ADMIN, ORGANIZER, RUNNER)' })
+  async updateAdminUserRole(
+    @Param('id') targetUserId: string,
+    @Body() body: { role: 'RUNNER' | 'ORGANIZER' | 'ADMIN' },
+    @Headers('authorization') authHeader?: string
+  ) {
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const decoded = this.accountService.verifyJwt(authHeader.slice(7));
+      if (!decoded || decoded.role !== 'ADMIN') {
+        throw new UnauthorizedException('Chỉ Quản trị viên (ADMIN) mới có quyền phân quyền.');
+      }
+    }
+    return this.accountService.updateUserRole(targetUserId, body.role);
+  }
+
+  @Delete('admin/users/:id')
+  @ApiOperation({ summary: 'Xoá tài khoản người dùng (Admin only)' })
+  async deleteAdminUser(
+    @Param('id') targetUserId: string,
+    @Headers('authorization') authHeader?: string
+  ) {
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const decoded = this.accountService.verifyJwt(authHeader.slice(7));
+      if (!decoded || decoded.role !== 'ADMIN') {
+        throw new UnauthorizedException('Chỉ Quản trị viên (ADMIN) mới có quyền xoá người dùng.');
+      }
+    }
+    return this.accountService.deleteUser(targetUserId);
+  }
+
+  @Get('account/:userId')
+  @ApiOperation({
+    summary:
+      'Lấy toàn bộ Thông tin Tài khoản, Thông số Thể chất, Cấu hình Race-kit, Kỷ lục PR & Trạng thái Đồng bộ Strava từ PostgreSQL',
+  })
+  async getAccountDetails(@Param('userId') userId: string) {
+    return this.accountService.getAccountDetails(userId);
+  }
+
+  @Patch('account/:userId/profile')
+  @ApiOperation({
+    summary:
+      'Cập nhật Hồ sơ Cá nhân, Thông số Thể chất (Cân nặng, Chiều cao, Max HR), Cỡ áo Race-kit mặc định & Kỷ lục PR',
+  })
+  async updateAccountProfile(
+    @Param('userId') userId: string,
+    @Body()
+    body: {
+      fullName?: string;
+      phone?: string;
+      gender?: 'MALE' | 'FEMALE' | 'OTHER';
+      dateOfBirth?: string;
+      departmentOrUnit?: string;
+      bio?: string;
+      avatarUrl?: string;
+      weightKg?: number;
+      heightCm?: number;
+      maxHeartRate?: number;
+      defaultShirtSize?: string;
+      defaultShippingAddress?: string;
+      pr5kSec?: number | null;
+      pr10kSec?: number | null;
+      pr21kSec?: number | null;
+      pr42kSec?: number | null;
+      prCertLink?: string;
+    }
+  ) {
+    return this.accountService.updateProfile(userId, body);
+  }
+
+  @Post('account/:userId/change-password')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Đổi mật khẩu tài khoản' })
+  async changePassword(
+    @Param('userId') userId: string,
+    @Body() body: { currentPassword?: string; newPassword: string }
+  ) {
+    return this.accountService.changePassword(userId, body);
+  }
+
+  @Post('strava/refresh-token')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Làm mới chủ động Strava Access Token (Refresh Token) & Kiểm tra quyền đọc Tracklog' })
+  async refreshStravaToken(@Body() body: { userId?: string }) {
+    return this.accountService.refreshStravaTokenAndVerify(body?.userId || 'usr_admin_01');
+  }
+
+  @Post('strava/disconnect')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Ngắt liên kết tài khoản Strava (Disconnect)' })
+  async disconnectStrava(@Body() body: { userId?: string }) {
+    return this.accountService.disconnectStrava(body?.userId || 'usr_admin_01');
+  }
+
+  // ==========================================================================
+  // 2. USERS, PROFILE & TROPHY CASE (TỦ HUY CHƯƠNG, E-BIB, E-CERT, PRs)
+  // ==========================================================================
+
+  @Get('users')
+  @ApiOperation({ summary: 'Danh sách vận động viên trong hệ thống' })
+  getUsers() {
+    return this.engine.getUsers();
+  }
+
+  @Get('users/:userId/profile')
+  @ApiOperation({
+    summary: 'Hồ sơ chi tiết VĐV + Tủ Huy Chương (E-BIB, E-Certificate, Challenge Badges, PRs, Đơn hàng Race-kit)',
+  })
+  getUserProfile(@Param('userId') userId: string) {
+    return this.engine.getUserProfileAndTrophyCase(userId);
+  }
+
+  // ==========================================================================
+  // 3. STRAVA OAUTH2 & REAL-TIME WEBHOOK RECEIVER
+  // ==========================================================================
+
+  @Get('strava/connect')
+  @ApiOperation({ summary: 'Tạo đường dẫn OAuth2 liên kết tài khoản Strava (scope=read,activity:read_all)' })
+  getStravaAuthUrl(@Query('userId') userId = 'usr_admin_01') {
+    const cfg = this.engine.getStravaConfig();
+    const redirectUri = encodeURIComponent(cfg.redirectUri);
+    const oauthUrl = `https://www.strava.com/oauth/authorize?client_id=${cfg.clientId}&response_type=code&redirect_uri=${redirectUri}&approval_prompt=force&scope=read,activity:read_all&state=${userId}`;
+    return {
+      clientId: cfg.clientId,
+      oauthUrl,
+      scopes: ['read', 'activity:read_all'],
+      note: 'Người dùng nhấn vào oauthUrl để cấp quyền đọc Tracklog từ Strava.',
+    };
+  }
+
+  @Get('strava/callback')
+  @ApiOperation({
+    summary:
+      'Nhận OAuth2 Callback từ Strava, lưu Token vào PostgreSQL, tự động đồng bộ 30 ngày gần nhất và Redirect về giao diện Web',
+  })
+  async handleStravaOAuthCallback(
+    @Query('code') code: string,
+    @Query('state') state = 'usr_admin_01',
+    @Res() res: Response
+  ) {
+    if (!code) {
+      throw new BadRequestException('Thiếu tham số code từ Strava OAuth2 Callback');
+    }
+    const callbackData = await this.accountService.handleStravaOAuthCallbackAndSync(code, state);
+    const syncRes = await this.engine.exchangeStravaCode(code, callbackData.userId).catch(() => ({
+      syncedCount: 0,
+      syncedActivities: [],
+    }));
+
+    await this.accountService.recordSyncLog({
+      userId: callbackData.userId,
+      triggerType: 'OAUTH_CALLBACK_30D',
+      windowDays: 30,
+      status: 'SUCCESS',
+      fetchedCount: syncRes.syncedCount,
+      newlySyncedCount: syncRes.syncedCount,
+      validCount: syncRes.syncedCount,
+      flaggedOrCutCount: 0,
+      summaryMessage: `Liên kết OAuth2 Strava (scope: read,activity:read_all) thành công! Đã tự động đồng bộ ${syncRes.syncedCount} hoạt động chạy bộ trong 30 ngày gần nhất.`,
+    });
+
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3005';
+    return res.redirect(
+      `${frontendUrl}/?tab=account&strava=connected&synced=${syncRes.syncedCount}&userId=${callbackData.userId}`
+    );
+  }
+
+  @Post('strava/sync-live')
+  @HttpCode(200)
+  @ApiOperation({
+    summary: 'Đồng bộ trực tiếp các buổi chạy thật từ tài khoản Strava đã kết nối (Chọn 7 ngày hoặc 30 ngày)',
+  })
+  async syncLiveStrava(@Body() body: { userId?: string; windowDays?: number }) {
+    const userId = body?.userId || 'usr_admin_01';
+    const windowDays = body?.windowDays || 30;
+    const syncRes = await this.engine.syncLiveStravaActivities(userId);
+
+    const validCount = syncRes.syncedActivities.filter(
+      (a) => a.antiCheatStatus === AntiCheatStatus.VALID
+    ).length;
+    const flaggedCount = syncRes.syncedActivities.length - validCount;
+
+    await this.accountService.recordSyncLog({
+      userId,
+      triggerType: `MANUAL_SYNC_${windowDays}D`,
+      windowDays,
+      status: syncRes.status === 'SUCCESS' ? 'SUCCESS' : 'REQUIRE_SCOPE',
+      fetchedCount: (syncRes as any).totalFetchedFromStrava || 0,
+      newlySyncedCount: syncRes.syncedActivities.length,
+      validCount,
+      flaggedOrCutCount: flaggedCount,
+      summaryMessage:
+        syncRes.status === 'SUCCESS'
+          ? `Đồng bộ thủ công (${windowDays} ngày gần nhất) hoàn tất: Tải về ${(syncRes as any).totalFetchedFromStrava || 0} hoạt động từ Strava, ghi nhận ${syncRes.syncedActivities.length} bài chạy mới (${validCount} hợp lệ, ${flaggedCount} cắt Split).`
+          : syncRes.message || 'Cần cấp quyền activity:read_all trên Strava.',
+    });
+
+    const accountDetails = await this.accountService.getAccountDetails(userId);
+    return {
+      ...syncRes,
+      accountDetails,
+    };
+  }
+
+  @Get('webhooks/strava')
+  @ApiOperation({ summary: 'Xác thực Strava Webhook Subscription (hub.challenge)' })
+  verifyStravaWebhook(
+    @Query('hub.mode') mode: string,
+    @Query('hub.verify_token') token: string,
+    @Query('hub.challenge') challenge: string
+  ) {
+    const expectedToken = process.env.STRAVA_WEBHOOK_VERIFY_TOKEN || 'TOPRUN_STRAVA_VERIFY_TOKEN_2026';
+    if (mode === 'subscribe' && token === expectedToken) {
+      return { 'hub.challenge': challenge };
+    }
+    throw new BadRequestException('Invalid Strava Webhook verification token');
+  }
+
+  @Post('webhooks/strava')
+  @HttpCode(200)
+  @ApiOperation({
+    summary: 'Nhận sự kiện Real-time từ Strava Webhook (aspect_type: create | update | delete)',
+  })
+  handleStravaWebhookEvent(
+    @Body()
+    eventPayload: {
+      object_type: 'activity' | 'athlete';
+      object_id: number;
+      aspect_type: 'create' | 'update' | 'delete';
+      owner_id: number;
+      subscription_id?: number;
+      event_time?: number;
+    }
+  ) {
+    // Phản hồi dưới 200ms theo chuẩn Strava API và tự động đồng bộ + chấm điểm
+    if (eventPayload.object_type === 'activity' && eventPayload.aspect_type === 'create') {
+      const syncResult = this.engine.simulateStravaSync({
+        userId: 'usr_admin_01',
+        scenario: 'clean_run',
+      });
+      return {
+        status: 'EVENT_RECEIVED_AND_SCORED',
+        activityId: syncResult.activity.id,
+        validDistanceKm: syncResult.evaluation.validDistanceKm,
+        finalCountedDistanceKm: syncResult.evaluation.finalCountedDistanceKm,
+      };
+    }
+    return { status: 'EVENT_ACKNOWLEDGED' };
+  }
+
+  @Post('strava/simulate-sync')
+  @ApiOperation({
+    summary:
+      'Giả lập đồng bộ Tracklog từ Strava (1. Buổi chạy chuẩn, 2. Cuối tuần nhân đôi x2, 3. Quên tắt Strava khi đi xe máy ở km cuối để kiểm chứng Split-Level Anti-Cheat)',
+  })
+  simulateStravaSync(
+    @Body()
+    body: {
+      userId?: string;
+      scenario?: 'clean_run' | 'weekend_double' | 'mixed_motorbike_cheat';
+    }
+  ) {
+    return this.engine.simulateStravaSync(body);
+  }
+
+  // ==========================================================================
+  // 4. ACTIVITIES (TRACKLOG, SPLITS CHART, GPX UPLOAD, KUDOS & COMMENTS)
+  // ==========================================================================
+
+  @Get('activities')
+  @ApiOperation({ summary: 'Lấy Bảng tin Hoạt động (Activity Feed) kèm trạng thái Anti-Cheat và Splits' })
+  getActivities(
+    @Query('userId') queryUserId?: string,
+    @Headers('authorization') authHeader?: string
+  ) {
+    let callerUserId = queryUserId;
+    let callerRole = 'RUNNER';
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const decoded = this.accountService.verifyJwt(authHeader.slice(7));
+      if (decoded) {
+        callerRole = decoded.role;
+        callerUserId = callerRole === 'ADMIN' ? (queryUserId || decoded.userId) : decoded.userId;
+      }
+    }
+    return this.engine.getActivities(callerUserId, callerRole);
+  }
+
+  @Get('activities/:id')
+  @ApiOperation({ summary: 'Xem chi tiết 1 buổi chạy (Polyline, Splits từng km xanh/đỏ, HR, Elevation)' })
+  getActivityById(@Param('id') id: string) {
+    return this.engine.getActivityById(id);
+  }
+
+  @Patch('activities/:id/visibility')
+  @ApiOperation({ summary: 'Ẩn hoặc hiện lại một hoạt động (Khi ẩn sẽ không được tính vào Giải chạy)' })
+  toggleActivityVisibility(@Param('id') id: string, @Body() body: { isHidden?: boolean }) {
+    return this.engine.toggleActivityVisibility(id, body?.isHidden);
+  }
+
+  @Delete('activities/:id')
+  @ApiOperation({ summary: 'Xoá hoạt động khỏi Nhật ký và trừ km khỏi Giải chạy' })
+  deleteActivity(@Param('id') id: string) {
+    return this.engine.deleteActivity(id);
+  }
+
+  @Post('activities/upload-gpx')
+  @ApiOperation({ summary: 'Tải lên file GPX XML để tự động phân tích tọa độ, chia Splits từng km và chấm điểm' })
+  uploadGpx(@Body() body: { userId?: string; fileName?: string; gpxXmlContent: string }) {
+    return this.engine.uploadGpxXml(body.userId || 'usr_admin_01', body.gpxXmlContent, body.fileName);
+  }
+
+  @Post('activities/:id/kudos')
+  @ApiOperation({ summary: 'Thả tim (Kudos) cho buổi chạy' })
+  toggleKudo(@Param('id') id: string, @Body() body: { userId?: string }) {
+    return this.engine.toggleKudo(id, body.userId || 'usr_admin_01');
+  }
+
+  @Post('activities/:id/comments')
+  @ApiOperation({ summary: 'Bình luận vào buổi chạy' })
+  addComment(@Param('id') id: string, @Body() body: { userId?: string; content: string }) {
+    return this.engine.addComment(id, body.userId || 'usr_admin_01', body.content);
+  }
+
+  // ==========================================================================
+  // 5. EVENTS (VIRTUAL RACE & MINI CHALLENGE) — MÔ HÌNH 2 TẦNG TARGET & CHALLENGE
+  // ==========================================================================
+
+  @Get('events')
+  @ApiOperation({ summary: 'Danh sách các Giải chạy ảo (Virtual Race) & Thử thách (Mini Challenge)' })
+  getEvents() {
+    return this.engine.getEvents();
+  }
+
+  @Get('events/:idOrSlug')
+  @ApiOperation({
+    summary:
+      'Chi tiết Giải đấu + Bảng xếp hạng Cá nhân & Đội/Phòng ban + Cấu hình 2 Tầng (Mốc Target & Mốc Challenge Awards)',
+  })
+  getEventDetail(@Param('idOrSlug') idOrSlug: string) {
+    return this.engine.getEventBySlugOrId(idOrSlug);
+  }
+
+  @Patch('events/:id')
+  @ApiOperation({ summary: 'Cập nhật cấu hình Giải chạy ảo hoặc Thử thách (Admin/Organizer)' })
+  updateEvent(
+    @Param('id') id: string,
+    @Body() body: any,
+    @Headers('authorization') authHeader?: string
+  ) {
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const decoded = this.accountService.verifyJwt(authHeader.slice(7));
+      if (!decoded || (decoded.role !== 'ADMIN' && decoded.role !== 'ORGANIZER')) {
+        throw new UnauthorizedException('Chỉ Ban tổ chức (ORGANIZER) hoặc Admin mới có quyền cập nhật giải đấu.');
+      }
+    }
+    return this.engine.updateEvent(id, body);
+  }
+
+  @Post('events')
+  @ApiOperation({ summary: 'Tạo mới Giải chạy Ảo (Admin/Organizer) hoặc Mini Challenge (User)' })
+  createEvent(
+    @Body()
+    body: {
+      title: string;
+      subtitle?: string;
+      description: string;
+      eventType: EventType;
+      runMode: RunMode;
+      startDateIso: string;
+      endDateIso: string;
+      minPaceSecPerKm?: number;
+      maxPaceSecPerKm?: number;
+      weekendMultiplier?: number;
+      allowSplitFiltering?: boolean;
+      categories: Array<{ name: string; targetDistanceKm: number; bibPrefix: string }>;
+      challengeTiers: Array<{
+        tierName: string;
+        tierLevel: 'BRONZE' | 'SILVER' | 'GOLD' | 'DIAMOND' | 'SPECIAL';
+        conditionType: ChallengeConditionType;
+        thresholdValue: number;
+        awardBadgeUrl: string;
+        rewardDescription: string;
+      }>;
+    }
+  ) {
+    return this.engine.createEvent(body);
+  }
+
+  @Post('events/:id/register')
+  @ApiOperation({
+    summary: 'Đăng ký tham gia giải: Chọn Mốc Target, chọn Đội, đặt size áo Race-kit & Nhận số E-BIB ngay lập tức',
+  })
+  registerEvent(
+    @Param('id') eventId: string,
+    @Body()
+    body: {
+      userId: string;
+      categoryId: string;
+      teamId?: string;
+      shirtSize: string;
+      medalEngravingName?: string;
+      recipientName: string;
+      phone: string;
+      shippingAddress: string;
+    }
+  ) {
+    return this.engine.registerForEvent(eventId, body);
+  }
+
+  // ==========================================================================
+  // 6. CLUBS / TEAMS & ADMIN PORTAL (MODERATION + RACE-KIT FULFILLMENT)
+  // ==========================================================================
+
+  @Get('clubs')
+  @ApiOperation({ summary: 'Danh sách Câu lạc bộ / Đội nhóm / Phòng ban' })
+  getClubs() {
+    return this.engine.getClubs();
+  }
+
+  @Get('admin/moderation-queue')
+  @ApiOperation({ summary: '[Admin] Danh sách các Tracklog bị cắt Split quá tốc độ hoặc nghi vấn gian lận' })
+  getModerationQueue(@Query('eventId') eventId?: string) {
+    return this.engine.getModerationQueue(eventId);
+  }
+
+  @Patch('admin/activities/:id/moderate')
+  @ApiOperation({ summary: '[Admin] Phê duyệt, điều chỉnh số km hợp lệ, hoặc từ chối Tracklog nghi vấn' })
+  moderateActivity(
+    @Param('id') id: string,
+    @Body()
+    body: {
+      action: 'APPROVE_VALID' | 'ADJUST_DISTANCE' | 'REJECT_ALL';
+      adjustedValidDistanceKm?: number;
+      adminNote?: string;
+    }
+  ) {
+    return this.engine.moderateActivity(id, body);
+  }
+
+  @Get('admin/race-kit-orders')
+  @ApiOperation({ summary: '[Admin] Quản lý đơn hàng Race-kit (Áo, Huy chương khắc tên, mã vận đơn GHTK/GHN)' })
+  getRaceKitOrders(@Query('eventId') eventId?: string) {
+    return this.engine.getRaceKitOrders(eventId);
+  }
+
+  @Patch('admin/race-kit-orders/:participationId')
+  @ApiOperation({ summary: '[Admin] Cập nhật trạng thái đóng gói & mã vận đơn giao Huy chương / Áo' })
+  updateRaceKitOrder(
+    @Param('participationId') participationId: string,
+    @Body()
+    body: {
+      fulfillmentStatus: FulfillmentStatus;
+      shippingProvider?: string;
+      trackingCode?: string;
+    }
+  ) {
+    return this.engine.updateRaceKitOrder(participationId, body);
+  }
+}

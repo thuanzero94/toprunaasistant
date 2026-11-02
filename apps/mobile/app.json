@@ -1,0 +1,30 @@
+{
+  "expo": {
+    "name": "TOPRunAssistant",
+    "slug": "top-run-assistant",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "toprun",
+    "userInterfaceStyle": "dark",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.toprun.assistant"
+    },
+    "android": {
+      "package": "com.toprun.assistant",
+      "adaptiveIcon": {
+        "backgroundColor": "#090D16"
+      }
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-notifications",
+        {
+          "color": "#f97316"
+        }
+      ]
+    ]
+  }
+}
+
