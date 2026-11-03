@@ -22,8 +22,13 @@ while [[ $# -gt 0 ]]; do
       shift
       ;;
     --dev)
+      COMPOSE_FILE="docker-compose.dev.yml"
+      ENV_MODE="Development/Hot-Reload"
+      shift
+      ;;
+    --local)
       COMPOSE_FILE="docker-compose.yml"
-      ENV_MODE="Development/Local"
+      ENV_MODE="Local/Standard"
       shift
       ;;
     --prod)

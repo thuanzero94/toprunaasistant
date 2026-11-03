@@ -1,162 +1,173 @@
-# 🚀 Hướng Dẫn Triển Khai, Cấu Hình Strava API & Vận Hành Hệ Thống TOPRunAssistant
+# 🚀 Hướng Dẫn Triển Khai Chi Tiết: Máy Dev (Hot-Reload) & Máy Prod (VPS 24/7)
 
-Tài liệu hướng dẫn kỹ thuật toàn diện cho nền tảng **TOPRunAssistant** (Giải chạy ảo Virtual Race & Đồng bộ Strava Tracklog tự động) với tên miền chính thức **`toprunassistant.io.vn`** và hòm thư hệ thống **`toprunassistant@gmail.com`**.
-
----
-
-## 1. Thông Tin Cấu Hình Hệ Thống Chính Thức
-
-| Hạng mục | Giá trị cấu hình | Ghi chú |
-| :--- | :--- | :--- |
-| **Tên miền Web Runner** | `https://toprunassistant.io.vn` | Frontend Next.js (Port `3005:3000`) |
-| **Tên miền Backend API & Webhook** | `https://api.toprunassistant.io.vn` | NestJS API Engine (Port `4000:4000`) |
-| **Hòm thư hệ thống (SMTP)** | `toprunassistant@gmail.com` | Gửi link kích hoạt & mã OTP 6 số |
-| **Mật khẩu ứng dụng Gmail (App Password)** | `ocyh hckx fwrn mdak` | Đã cấu hình trong `.env` |
-| **Cơ sở dữ liệu (PostgreSQL)** | Port `5433` (Container `toprun-postgres`) | Tránh trùng cổng 5432 mặc định |
-| **Bộ nhớ đệm (Redis)** | Port `6380` (Container `toprun-redis`) | Tránh trùng cổng 6379 mặc định |
-| **Mã ứng dụng Strava API (Client ID)** | `292007` | Ứng dụng chính thức TOPRun Assistant |
-| **Strava Webhook Verification Token** | `TOPRUN_STRAVA_VERIFY_TOKEN_2026` | Dùng đăng ký push notification |
-
-### Tài Khoản Quản Trị Viên (Admin) Khởi Tạo Mặc Định:
-- **Tài khoản (Email)**: `admin@toprun.vn`
-- **Mật khẩu mặc định**: `TopRun@2026`
-- **Họ và tên**: Alan Hoàng (System Admin)
-- **Vai trò (Role)**: `ADMIN` (Toàn quyền quản trị hệ thống, tạo giải đấu, duyệt thành viên, cấu hình quy chế và kiểm duyệt tracklog)
+Tài liệu quy trình kỹ thuật chuẩn hóa cho nền tảng **TOPRunAssistant** (Giải chạy ảo Virtual Race & Đồng bộ Strava Tracklog tự động) dành cho cả 2 môi trường:
+1. **Môi trường DEV (Máy phát triển hiện tại)**: Hot-Reload < 1s, sửa code ăn ngay, không cần rebuild image, lưu dữ liệu bền vững trên ổ cứng vật lý.
+2. **Môi trường PROD (Máy chủ VPS / Cloud Production)**: Vận hành 24/7 với tên miền `toprunassistant.io.vn` và `api.toprunassistant.io.vn`, Nginx Reverse Proxy, SSL Cloudflare, PostgreSQL và Redis độc lập.
 
 ---
 
-## 2. Kiến Trúc Triển Khai Docker Toàn Diện (4 Containers)
+## 1. Bản Đồ File & Cấu Hình Cần Thiết
 
-Toàn bộ hệ sinh thái TOPRunAssistant được đóng gói chuẩn hóa bằng **Docker Compose**:
-
-```mermaid
-flowchart TD
-    Runner["📱 Vận Động Viên (Internet)"] -->|HTTPS toprunassistant.io.vn| Tunnel["⚡ Cloudflare Tunnel / Reverse Proxy"]
-    Strava["🟠 Strava Webhook"] -->|HTTPS api.toprunassistant.io.vn| Tunnel
-
-    subgraph DockerHost["🐳 Docker Compose Ecosystem"]
-        Tunnel -->|Port 3005| Web["⚡ toprun-web (Next.js 15 Standalone)"]
-        Tunnel -->|Port 4000| API["🦁 toprun-api (NestJS API Engine)"]
-
-        API -->|Port 5432 nội bộ| DB[("🐘 toprun-postgres (PostgreSQL 15 - Port 5433)")]
-        API -->|Port 6379 nội bộ| Cache[("🔴 toprun-redis (Redis 7 - Port 6380)")]
-        API -->|SMTP TLS| Mail["📧 Gmail SMTP (toprunassistant@gmail.com)"]
-    end
+```
+TOPRunAssistant/
+├── .env.development           <-- Template mẫu cho máy DEV (Port 3005, 4000, 5433, 6380)
+├── .env.production            <-- Cấu hình chính thức triển khai PROD (Tên miền, DB bảo mật)
+├── .env                       <-- File môi trường đang active tại thư mục gốc
+├── docker-compose.dev.yml     <-- Docker Dev: Volume mount host code + Fast Refresh / TSX Watch
+├── docker-compose.prod.yml    <-- Docker Prod: Nginx + Web Standalone + API + Postgres + Redis
+├── docker-compose.yml         <-- Docker Local: Chế độ Production-like trên máy cá nhân
+├── Dockerfile.dev             <-- Image Node 20 Dev môi trường đồng nhất
+├── manage.sh                  <-- Script quản trị trên Linux / VPS Ubuntu
+├── manage.ps1                 <-- Script quản trị trên Windows PowerShell
+├── data/
+│   └── toprun-engine-state.json <-- File lưu trữ bền vững (Tự động tạo & nạp lại sau restart)
+└── docker/
+    └── nginx/conf.d/default.conf <-- Cấu hình Reverse Proxy chuyển tiếp Web & API
 ```
 
-### Các Script Quản Trị & Vận Hành Nhanh (Build / Start / Stop / Reload / Restart):
+---
 
-Hệ thống hỗ trợ script điều phối đa nền tảng (`manage.sh` trên Linux/VPS, `manage.ps1` trên Windows, và npm scripts):
+## 2. QUY TRÌNH DÀNH CHO MÁY DEV (LẬP TRÌNH NHANH - HOT RELOAD)
 
-| Thao tác | Mục đích | Lệnh Linux (VPS) | Lệnh Windows (PowerShell) | Lệnh npm |
-| :--- | :--- | :--- | :--- | :--- |
-| **Build** | Build mới images `api` và `web` | `./manage.sh build` | `.\manage.ps1 build` | `npm run prod:build` |
-| **Start** | Khởi động hệ thống ngầm | `./manage.sh start` | `.\manage.ps1 start` | `npm run prod:start` |
-| **Stop** | Dừng an toàn (bảo toàn data DB) | `./manage.sh stop` | `.\manage.ps1 stop` | `npm run prod:stop` |
-| **Reload** | **Chạy lại giao diện mới (Zero-Downtime)** | `./manage.sh reload` | `.\manage.ps1 reload` | `npm run prod:reload` |
-| **Restart** | **Chạy lại với thay đổi lớn (Rebuild + Sync DB + Prune)** | `./manage.sh restart` | `.\manage.ps1 restart` | `npm run prod:restart` |
-| **Status** | Kiểm tra danh sách container | `./manage.sh status` | `.\manage.ps1 status` | `npm run prod:status` |
-| **Logs** | Xem logs thời gian thực | `./manage.sh logs` | `.\manage.ps1 logs` | `npm run prod:logs` |
-
-> 💡 **Mẹo:**
-> - Thêm cờ `--pull` (Linux) hoặc `-Pull` (Windows) để tự động kéo code mới nhất từ Git trước khi reload/restart (Ví dụ: `./manage.sh reload --pull`).
-> - Thêm cờ `--dev` (Linux) hoặc `-Dev` (Windows) nếu muốn thao tác trên file local `docker-compose.yml`.
-
-### Các Lệnh Docker Compose Thủ Công Chuẩn:
-
+### Bước 2.1: Chuẩn bị file `.env`
+Sao chép hoặc sử dụng nội dung file `.env.development` vào `.env`:
 ```powershell
-# 1. Khởi chạy toàn bộ dịch vụ ngầm (Background)
-docker compose -f docker-compose.prod.yml up -d
-
-# 2. Xem log theo thời gian thực của toàn bộ hệ thống
-docker compose -f docker-compose.prod.yml logs -f
-
-# 3. Xem log riêng của Backend API hoặc Web Frontend
-docker compose -f docker-compose.prod.yml logs -f api
-docker compose -f docker-compose.prod.yml logs -f web
-
-# 4. Kiểm tra trạng thái sức khỏe (Healthcheck) của các container
-docker compose -f docker-compose.prod.yml ps
-
-# 5. Dừng hệ thống khi không sử dụng
-docker compose -f docker-compose.prod.yml stop
+# Trên Windows PowerShell
+Copy-Item .env.development .env -Force
 ```
+*Các giá trị mặc định đã được cấu hình tối ưu:*
+* `DATABASE_URL`: `postgresql://toprun:toprun_secret_2026@localhost:5433/toprun_db?schema=public`
+* `FRONTEND_URL`: `http://localhost:3005`
+* `API_BASE_URL`: `http://localhost:4000/api/v1`
+* `DATA_DIR`: `./data` (Tự động lưu giải đấu & kết quả vào ổ đĩa vật lý của máy)
+
+### Bước 2.2: Khởi động Docker Dev Mode (Hot-Reload)
+Chạy lệnh một chạm:
+```powershell
+npm run docker:dev
+# hoặc qua PowerShell script:
+.\manage.ps1 -Dev start
+```
+> Nếu là lần đầu chạy hoặc vừa thay đổi dependencies trong `package.json`, dùng lệnh build:
+> ```powershell
+> npm run docker:dev:build
+> ```
+
+### Bước 2.3: Trải nghiệm lập trình tốc độ cao
+* Mở trình duyệt tại: **`http://localhost:3005`**
+* Mở Swagger API tại: **`http://localhost:4000/api/docs`**
+* **Cơ chế Hot-Reload**: Bạn mở VS Code, chỉnh sửa bất kỳ file nào trong `apps/web` hoặc `apps/api`, nhấn `Ctrl + S`. Trình duyệt tự Fast Refresh trong **dưới 1 giây** mà **KHÔNG CẦN CHẠY BẤT KỲ LỆNH BUILD HAY RELOAD NÀO**!
+
+### Bước 2.4: Dừng container Dev an toàn
+```powershell
+npm run docker:dev:down
+# hoặc
+.\manage.ps1 -Dev stop
+```
+> ⚠️ **Lưu ý**: Không bao giờ dùng cờ `-v` (`docker compose down -v`) vì cờ này sẽ xóa volume của database PostgreSQL!
 
 ---
 
-## 3. Chiến Lược Triển Khai 2 Giai Đoạn
+## 3. QUY TRÌNH DÀNH CHO MÁY PROD (TRIỂN KHAI VPS CHÍNH THỨC)
 
-| Tiêu chí | Giai Đoạn 1: Cloudflare Tunnel (Thử nghiệm 0đ) | Giai Đoạn 2: VPS Linux Production (Khởi tranh giải) |
+### Thông số triển khai chính thức:
+| Hạng mục | Giá trị Prod | Ghi chú |
 | :--- | :--- | :--- |
-| **Mục đích** | Thử nghiệm nội bộ (< 100 VĐV), test luồng Strava thật | Vận hành giải chạy chính thức, 24/7 không gián đoạn |
-| **Hạ tầng** | Máy tính cá nhân hiện tại (Windows) | Máy chủ VPS Linux (Ubuntu 22.04 LTS) |
-| **Chi phí máy chủ** | **0 đồng / tháng ($0)** | **~90.000đ – 150.000đ / tháng** |
-| **Tên miền & SSL** | `toprunassistant.io.vn` (HTTPS tự động qua Cloudflare) | `toprunassistant.io.vn` (HTTPS tự động qua Cloudflare) |
-| **Công cụ điều phối**| `cloudflared.exe` (Windows Service ngầm) | Docker Compose (`docker-compose.yml`) + `deploy.sh` |
-| **Thời gian duy trì** | Khi máy tính của bạn bật | Hoạt động 24/7/365 trên Data Center |
+| **Domain Web Runner** | `https://toprunassistant.io.vn` | Reverse Proxy Nginx qua Cloudflare |
+| **Domain API & Webhook** | `https://api.toprunassistant.io.vn` | Xử lý Strava Webhook tự động |
+| **Email SMTP** | `toprunassistant@gmail.com` | Gửi link kích hoạt & mã OTP xác thực |
+| **Database** | PostgreSQL 15 (Container `toprun-prod-postgres`) | Lưu trữ trong volume `toprun_pgdata_prod` |
+| **Cache & Queue** | Redis 7 (Container `toprun-prod-redis`) | Lưu trữ trong volume `toprun_redisdata_prod` |
+| **Engine State** | Mount host `./data:/app/data` | Lưu trữ file `toprun-engine-state.json` |
 
 ---
 
-## 4. GIAI ĐOẠN 1: Kích Hoạt Cloudflare Tunnel Trên Máy Local (0đ Chi Phí)
+### Bước 3.1: Chuẩn bị máy chủ VPS (Ubuntu 22.04 LTS)
+Đăng nhập SSH vào VPS và cài đặt Docker + Git:
+```bash
+# 1. Cập nhật hệ thống & cài Docker Engine
+sudo apt update && sudo apt upgrade -y
+curl -fsSL https://get.docker.com -o get-docker.sh && sudo sh get-docker.sh
+sudo usermod -aG docker $USER
 
-Máy tính Windows của bạn **đã có sẵn công cụ `cloudflared.exe`** tại `C:\Program Files (x86)\cloudflared\cloudflared.exe`.
-
-### Bước 1: Tạo Đường Hầm Trên Cloudflare Zero Trust
-1. Đăng nhập trang: **[https://one.dash.cloudflare.com/](https://one.dash.cloudflare.com/)**
-2. Vào **Networks** ➔ chọn **Tunnels** ➔ nhấn **Add a tunnel**.
-3. Chọn **Cloudflared** ➔ Đặt tên: `toprun-tunnel` ➔ nhấn **Save tunnel**.
-
-### Bước 2: Cài Đặt Token Lên Máy Tính
-1. Tại tab **Windows**, sao chép dòng lệnh cài đặt do Cloudflare cấp:
-   ```powershell
-   cloudflared.exe service install <TOKEN_DO_CLOUDFLARE_CAP>
-   ```
-2. Mở **PowerShell (Run as Administrator)** trên máy tính của bạn, dán lệnh vào và nhấn **Enter**.
-3. Trạng thái trên Cloudflare sẽ chuyển sang **Connected (Xanh lá)** ➔ nhấn **Next**.
-
-### Bước 3: Định Tuyến 2 Tên Miền Con (Public Hostnames)
-- **Hostname 1 (Web Runner)**:
-  - Subdomain: *(để trống hoặc nhập @)*
-  - Domain: `toprunassistant.io.vn`
-  - Type: `HTTP`
-  - URL: `localhost:3005`
-- **Hostname 2 (API & Strava Webhook)**:
-  - Subdomain: `api`
-  - Domain: `toprunassistant.io.vn`
-  - Type: `HTTP`
-  - URL: `localhost:4000`
-
----
-
-## 5. Cấu Hình Email SMTP (Gmail Kích Hoạt Kép: Link + OTP)
-
-Hệ thống đã được tích hợp luồng kích hoạt tài khoản kép:
-1. **Liên kết kích hoạt trực tiếp**: Người dùng bấm nút "Kích Hoạt Tài Khoản Ngay" trong email để tự động xác thực và đăng nhập.
-2. **Mã OTP 6 chữ số**: Dành cho người dùng mở email trên thiết bị khác, có thể nhập trực tiếp mã OTP vào giao diện để kích hoạt ngay mà không cần chuyển trình duyệt.
-
-Thông số cấu hình chuẩn trong file [`.env`](file:///c:/Users/thuang/OneDrive%20-%20ASSA%20ABLOY%20Group/alan/TOPRunAssistant/.env):
-```env
-SMTP_HOST="smtp.gmail.com"
-SMTP_PORT=587
-SMTP_SECURE=false
-SMTP_USER="toprunassistant@gmail.com"
-SMTP_PASS="ocyhhckxfwrnmdak"
-SMTP_FROM='"TOPRun Assistant" <toprunassistant@gmail.com>'
+# 2. Cài đặt Git & cấu hình Firewall UFW
+sudo apt install -y git curl ufw
+sudo ufw allow OpenSSH
+sudo ufw allow 80/tcp
+sudo ufw allow 443/tcp
+sudo ufw --force enable
 ```
 
+### Bước 3.2: Kéo mã nguồn & Cấu hình môi trường Production
+```bash
+# 1. Clone repository về VPS (hoặc rsync/scp thư mục dự án)
+git clone <URL_REPO_CUA_BAN> /var/www/TOPRunAssistant
+cd /var/www/TOPRunAssistant
+
+# 2. Tạo file .env từ template production
+cp .env.production .env
+
+# 3. Tạo thư mục data và cấp quyền
+mkdir -p data
+chmod -R 775 data
+
+# 4. Kiểm tra hoặc điều chỉnh mật khẩu bảo mật trong .env nếu muốn
+nano .env
+```
+
+### Bước 3.3: Khởi động hệ thống Production
+Sử dụng script `manage.sh` đã được tích hợp sẵn:
+```bash
+# Cấp quyền thực thi cho script
+chmod +x manage.sh
+
+# Build & khởi chạy toàn bộ 5 containers ngầm (Nginx, Web, API, Postgres, Redis)
+./manage.sh build
+./manage.sh start
+
+# Đẩy schema Prisma vào cơ sở dữ liệu Postgres
+docker compose -f docker-compose.prod.yml exec -T api npx prisma db push --schema=packages/database/prisma/schema.prisma
+```
+
+### Bước 3.4: Kiểm tra trạng thái hệ thống
+```bash
+# Xem trạng thái các container
+./manage.sh status
+# Hoặc xem logs thời gian thực
+./manage.sh logs
+```
+Tất cả 5 containers (`toprun-prod-nginx`, `toprun-prod-web`, `toprun-prod-api`, `toprun-prod-postgres`, `toprun-prod-redis`) phải hiển thị trạng thái `Up`.
+
 ---
 
-## 6. Cấu Hình Strava Developers Production & Webhook Tự Động
+## 4. CẤU HÌNH CLOUDFLARE DNS & SSL CHO MÁY PROD
 
-### Bước 1: Cập Nhật Callback Domain
+1. Đăng nhập trang quản trị **[Cloudflare Dashboard](https://dash.cloudflare.com/)**.
+2. Chọn tên miền **`toprunassistant.io.vn`** ➔ vào mục **DNS** ➔ **Records**:
+   - Thêm bản ghi **A**:
+     - Name: `@`
+     - IPv4 address: `<IP_CUA_VPS>`
+     - Proxy status: **Proxied (Đám mây màu cam)**
+   - Thêm bản ghi **A**:
+     - Name: `api`
+     - IPv4 address: `<IP_CUA_VPS>`
+     - Proxy status: **Proxied (Đám mây màu cam)**
+3. Vào mục **SSL/TLS**:
+   - Chọn chế độ mã hóa: **Full** hoặc **Full (strict)**.
+   - Bật tính năng **Always Use HTTPS** và **Automatic HTTPS Rewrites**.
+
+---
+
+## 5. CẤU HÌNH STRAVA DEVELOPERS CHO DOMAIN PROD
+
+### Bước 5.1: Cập nhật Callback Domain trên Strava
 1. Đăng nhập: **[https://www.strava.com/settings/api](https://www.strava.com/settings/api)**
-2. Nhấn nút **Edit** và điền:
+2. Nhấn nút **Edit**:
    - **Authorization Callback Domain**: `api.toprunassistant.io.vn`
 3. Nhấn **Save**.
 
-### Bước 2: Đăng Ký Webhook Subscription Với Strava
-Khi tên miền `https://api.toprunassistant.io.vn` đã online, chạy lệnh curl sau để Strava tự động bắn bài chạy về hệ thống mỗi khi VĐV hoàn thành buổi chạy:
-
+### Bước 5.2: Kích hoạt Webhook Subscription tự động
+Khi tên miền `https://api.toprunassistant.io.vn` đã online, chạy lệnh curl sau trên Terminal máy tính hoặc VPS:
 ```bash
 curl -X POST https://www.strava.com/api/v3/push_subscriptions \
   -F client_id=292007 \
@@ -164,45 +175,32 @@ curl -X POST https://www.strava.com/api/v3/push_subscriptions \
   -F callback_url=https://api.toprunassistant.io.vn/api/v1/webhooks/strava \
   -F verify_token=TOPRUN_STRAVA_VERIFY_TOKEN_2026
 ```
+Strava sẽ gửi xác thực đến endpoint `GET /api/v1/webhooks/strava` và trả về `id` của subscription. Kể từ lúc này, mọi VĐV kết nối Strava khi chạy xong sẽ tự động có tracklog được đồng bộ và chấm điểm ngay lập tức!
 
 ---
 
-## 7. GIAI ĐOẠN 2: Triển Khai Lên VPS Linux Production (Khi Giải Khởi Tranh)
+## 6. QUY TRÌNH UPDATE CODE TRÊN MÁY PROD (ZERO-DOWNTIME)
 
-Khi cần đưa hệ thống chạy 24/7 độc lập trên máy chủ ảo:
-1. Thuê VPS Ubuntu 22.04 LTS (2 CPU, 2-4GB RAM, ~100k/tháng tại Vietnix/CloudFly/Linode).
-2. Trỏ 2 bản ghi `A` (`@` và `api`) trên Cloudflare về IP của VPS.
-3. Chạy các lệnh cài đặt trên VPS:
-   ```bash
-   # Cài Docker & Công cụ mạng
-   curl -fsSL https://get.docker.com -o get-docker.sh && sh get-docker.sh
-   apt install -y git curl ufw
-   ufw allow OpenSSH && ufw allow 80/tcp && ufw allow 443/tcp && ufw --force enable
+Khi bạn phát triển xong tính năng mới trên máy Dev và đẩy lên Git:
 
-   # Kéo mã nguồn & Khởi động toàn bộ dịch vụ
-   git clone <URL_REPO_GITHUB> /var/www/TOPRunAssistant
-   cd /var/www/TOPRunAssistant
-   cp .env.example .env
-   docker compose up -d
-   ```
+### Cách 1: Chỉ cập nhật Giao diện (Web Frontend) không gây gián đoạn API:
+```bash
+./manage.sh reload --pull
+```
+*Script sẽ tự động kéo code mới từ Git, build image Web mới và hoán đổi container trong vài giây.*
+
+### Cách 2: Cập nhật lớn (Cả API, Web & Database Schema):
+```bash
+./manage.sh restart --pull
+```
+*Script sẽ tự động: git pull -> build lại image -> khởi động lại -> chạy `prisma db push` -> dọn dẹp docker cache cũ an toàn.*
 
 ---
 
-## 8. Hướng Dẫn Vận Hành Tính Năng Dành Cho Runner & Admin
+## 7. BẢO TOÀN DỮ LIỆU KHI REBOOT MÁY CHỦ HOẶC CONTAINER RESET
 
-### 8.1. Dành Cho Vận Động Viên (Runner)
-- **Đăng ký tài khoản**: Truy cập `https://toprunassistant.io.vn/register`, nhập họ tên, email, mật khẩu.
-- **Kích hoạt tài khoản kép**:
-  - Cách 1: Bấm nút xác thực trong email từ `toprunassistant@gmail.com`.
-  - Cách 2: Nhập mã OTP 6 số hiển thị trong email vào trang xác thực.
-- **Đăng nhập nhanh**: Hỗ trợ đăng nhập bằng Google Auth (tự động kích hoạt tài khoản không cần chờ email).
-- **Cách ly dữ liệu Tracklog cá nhân**: VĐV chỉ thấy bài chạy của chính mình, đảm bảo tính riêng tư tuyệt đối.
-- **Đồng bộ Strava**: Vào tab **"Hồ sơ & Kết nối Strava"** ➔ Nhấn **"Kết Nối Strava Ngay"** để uỷ quyền OAuth2.
-- **Xem Tracklog & Phân tích Splits**: Tab **"Nhật ký & Tracklog"** hiển thị chi tiết pace từng km, bản đồ GPS, nhịp tim và cự ly hợp lệ.
+Toàn bộ hệ thống áp dụng cơ chế bảo toàn dữ liệu 2 lớp:
+1. **Lớp Relational Data (Tài khoản, Xác thực, Quan hệ)**: Nằm trong PostgreSQL volume `toprun_pgdata_prod` với chính sách `restart: always`.
+2. **Lớp Engine Data (Giải đấu mới tạo, BXH, Cấu hình Thử thách, Tracklogs Strava)**: Nằm trong file vật lý `./data/toprun-engine-state.json` trên ổ cứng của VPS.
 
-### 8.2. Dành Cho Ban Tổ Chức & Admin
-- **Quản lý Đa Giải Đấu (Multi-Event)**: Tạo và quản trị nhiều giải đấu độc lập cùng lúc. Tùy chỉnh ngày bắt đầu/kết thúc, Pace min/max, nhân hệ số cuối tuần cho từng giải.
-- **Tự Động Tính Điểm Khớp Khung Giờ**: Bài chạy chỉ được tự động tính vào giải nếu diễn ra trong khoảng thời gian diễn ra giải đấu mà VĐV đã đăng ký.
-- **Quản trị & Phân quyền VĐV**: Tab **"Quản trị & Kiểm duyệt"** ➔ Phân vai trò `RUNNER`, `ORGANIZER`, `ADMIN`.
-- **Kiểm duyệt Chống Gian Lận (Anti-Cheat)**: Tự động phát hiện và cắt bỏ các km có tốc độ bất thường (quên tắt đồng hồ đi xe máy, gian lận cự ly).
-- **Xuất đơn hàng Race-Kit**: Tải file CSV giao hàng (Áo Finisher, Huy chương khắc tên) để chuyển tiếp đơn vị vận chuyển (GHTK/GHN).
+> 🛡️ **Bảo đảm an toàn**: Kể cả khi bạn khởi động lại VPS (`sudo reboot`), nâng cấp Docker Engine hoặc tắt container bằng `./manage.sh stop`, toàn bộ dữ liệu giải đấu, thành tích chạy và tài khoản người dùng được tự động nạp lại 100% nguyên vẹn ngay khi hệ thống bật lên.

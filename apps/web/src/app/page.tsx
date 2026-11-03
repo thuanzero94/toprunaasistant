@@ -4,9 +4,11 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Activity,
+  ArrowLeft,
   Award,
   CheckCircle2,
   ChevronRight,
+  Compass,
   Download,
   FileUp,
   Flame,
@@ -36,8 +38,11 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import AccountAndStravaPanel from '../components/AccountAndStravaPanel';
-import AdminManagementPortal from '../components/AdminManagementPortal';
+import AdminManagementPortal, { AdminEventFormState } from '../components/AdminManagementPortal';
 import RunnerEventModals from '../components/RunnerEventModals';
+import RunnerMyEvents, { MyEventItem } from '../components/RunnerMyEvents';
+import RunnerExploreEvents, { ExploreEventItem } from '../components/RunnerExploreEvents';
+import TournamentParticipantModal, { ParticipantDetailData } from '../components/TournamentParticipantModal';
 import UserTracklogExplorer, { TracklogActivityItem } from '../components/UserTracklogExplorer';
 import {
   AntiCheatStatus,
@@ -228,17 +233,56 @@ export default function TopRunWebApp() {
   const [adminEventData, setAdminEventData] = useState<any>(null);
   const [isAdminEventLoading, setIsAdminEventLoading] = useState(false);
   const [adminEventSaveMsg, setAdminEventSaveMsg] = useState<string | null>(null);
-  const [eventForm, setEventForm] = useState({
+  const [eventForm, setEventForm] = useState<AdminEventFormState>({
     title: '',
     subtitle: '',
     status: 'ACTIVE',
+    description: '',
     startDateIso: '',
     endDateIso: '',
     minPaceFormatted: '03:00',
     maxPaceFormatted: '15:00',
     minActivityDistanceKm: 1.0,
     weekendMultiplier: 1.0,
+    allowSplitFiltering: true,
+    categories: [],
+    challengeTiers: [],
   });
+
+  // Runner Tournament Sub-tab & Participant Inspection State
+  const [runnerEventSubTab, setRunnerEventSubTab] = useState<'my-events' | 'explore' | 'detail'>('my-events');
+  const [selectedParticipantDetail, setSelectedParticipantDetail] = useState<ParticipantDetailData | null>(null);
+
+  const handleDeleteEvent = useCallback(
+    async (eventId: string, title: string) => {
+      try {
+        const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1';
+        const token = typeof window !== 'undefined' ? localStorage.getItem('toprun_auth_token') : null;
+        const res = await fetch(`${apiBase}/events/${eventId}`, {
+          method: 'DELETE',
+          headers: {
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          alert(data.message || 'Không thể xoá giải đấu.');
+          return;
+        }
+        setEventsList((prev) => prev.filter((e) => e.id !== eventId));
+        if (selectedEventId === eventId) {
+          const remaining = eventsList.filter((e) => e.id !== eventId);
+          if (remaining.length > 0) {
+            setSelectedEventId(remaining[0].id);
+          }
+        }
+        setAdminEventSaveMsg(`Đã xoá giải đấu "${title}" thành công.`);
+      } catch (err: any) {
+        alert(err.message || 'Lỗi khi gọi API xoá giải.');
+      }
+    },
+    [selectedEventId, eventsList]
+  );
 
   // Guard Admin tab: Redirect to events if user is not ADMIN
   useEffect(() => {
@@ -353,12 +397,20 @@ export default function TopRunWebApp() {
           title: ev.title || '',
           subtitle: ev.subtitle || '',
           status: ev.status || 'ACTIVE',
+          description: ev.description || '',
           startDateIso: ev.startDateIso ? ev.startDateIso.slice(0, 10) : '2026-10-01',
           endDateIso: ev.endDateIso ? ev.endDateIso.slice(0, 10) : '2026-11-30',
           minPaceFormatted: formatPace(minPaceSec, false),
           maxPaceFormatted: formatPace(maxPaceSec, false),
           minActivityDistanceKm: ev.ruleConfig?.minActivityDistanceKm ?? 1.0,
           weekendMultiplier: ev.ruleConfig?.weekendMultiplier ?? 1.0,
+          allowSplitFiltering: ev.ruleConfig?.allowSplitFiltering ?? true,
+          categories: ev.categories || [
+            { name: 'Mốc Target 21KM (Starter)', targetDistanceKm: 21, bibPrefix: 'VR21-' },
+            { name: 'Mốc Target 42KM (Marathoner)', targetDistanceKm: 42, bibPrefix: 'VR42-' },
+            { name: 'Mốc Target 50KM (Ultra)', targetDistanceKm: 50, bibPrefix: 'VR50-' },
+          ],
+          challengeTiers: ev.challengeTiers || INITIAL_CHALLENGE_TIERS,
         });
       }
     } catch (err) {
@@ -387,6 +439,7 @@ export default function TopRunWebApp() {
       const payload = {
         title: eventForm.title,
         subtitle: eventForm.subtitle,
+        description: eventForm.description,
         status: eventForm.status,
         startDateIso: new Date(eventForm.startDateIso).toISOString(),
         endDateIso: new Date(eventForm.endDateIso).toISOString(),
@@ -395,7 +448,10 @@ export default function TopRunWebApp() {
           maxPaceSecPerKm: parsePaceToSeconds(eventForm.maxPaceFormatted) || 900,
           minActivityDistanceKm: Number(eventForm.minActivityDistanceKm) || 1.0,
           weekendMultiplier: Number(eventForm.weekendMultiplier) || 1.0,
+          allowSplitFiltering: Boolean(eventForm.allowSplitFiltering),
         },
+        categories: eventForm.categories,
+        challengeTiers: eventForm.challengeTiers,
       };
 
       const res = await fetch(`${apiBase}/events/${encodeURIComponent(selectedEventId)}`, {
@@ -476,6 +532,48 @@ export default function TopRunWebApp() {
       setSyncBannerMessage(err.message || 'Lỗi kết nối khi tạo giải đấu');
     }
   };
+
+  const handleConfirmRegisterEvent = useCallback(
+    async (eventId: string, regData: any) => {
+      try {
+        const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1';
+        const token = typeof window !== 'undefined' ? localStorage.getItem('toprun_auth_token') : null;
+        const res = await fetch(`${apiBase}/events/${encodeURIComponent(eventId)}/register`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({
+            userId: user?.id,
+            categoryId: regData.categoryId,
+            teamId: regData.teamId,
+            shirtSize: regData.shirtSize,
+            medalEngravingName: regData.medalEngravingName,
+            recipientName: regData.recipientName,
+            phone: regData.phone,
+            shippingAddress: regData.shippingAddress,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data.message || 'Đăng ký không thành công.');
+        }
+
+        if (eventId === selectedEventId) {
+          setMyBibNumber(data.bibNumber);
+          setMyTargetKm(data.targetDistanceKm);
+          setMyShirtSize(regData.shirtSize);
+        }
+
+        await Promise.all([fetchEventsList(), fetchEventDetails(eventId)]);
+        setSyncBannerMessage(`🎉 Đăng ký thành công! Bạn đã được cấp số E-BIB: ${data.bibNumber}`);
+      } catch (err: any) {
+        alert(err.message || 'Lỗi khi gọi API đăng ký.');
+      }
+    },
+    [user?.id, selectedEventId, fetchEventsList, fetchEventDetails]
+  );
 
   useEffect(() => {
     if (activeTab === 'admin' && user?.role === 'ADMIN') {
@@ -642,6 +740,39 @@ export default function TopRunWebApp() {
     activityLogs: myActivityLogs,
     previouslyCompletedTargetAtIso: '2026-10-25T07:15:00Z',
   });
+
+  const myEventsList: MyEventItem[] = useMemo(() => {
+    return eventsList
+      .map((ev) => {
+        const part = ev.participants?.find((p: any) => p.userId === user?.id);
+        const isCurrent = ev.id === selectedEventId;
+        const myBib = part?.bibNumber || (isCurrent ? myBibNumber : undefined);
+        const myTarget = part?.targetDistanceKm || (isCurrent ? myTargetKm : 50);
+        const myValidKm = part?.totalValidKm ?? (isCurrent ? dualGoalProgress.target.currentMultipliedDistanceKm : 0);
+        return {
+          id: ev.id,
+          title: ev.title,
+          status: ev.status,
+          startDateIso: ev.startDateIso,
+          endDateIso: ev.endDateIso,
+          myBibNumber: myBib,
+          myTargetKm: myTarget,
+          myTotalValidKm: myValidKm,
+          myProgressPercent: Math.round((myValidKm / (myTarget || 1)) * 100),
+          myRank: part?.rank,
+          myChallengeTier:
+            part?.challengeTier ||
+            (isCurrent ? dualGoalProgress.challenges.find((c) => c.isUnlocked)?.tierName : undefined),
+          ruleConfig: ev.ruleConfig,
+          totalParticipants: ev.participantsCount || (ev.participants ? ev.participants.length : 0),
+        };
+      })
+      .filter((ev) => Boolean(ev.myBibNumber));
+  }, [eventsList, user?.id, selectedEventId, myBibNumber, myTargetKm, dualGoalProgress]);
+
+  const joinedEventIds = useMemo(() => {
+    return new Set(myEventsList.map((e) => e.id));
+  }, [myEventsList]);
 
   const handleToggleHideActivity = async (activityId: string) => {
     const target = activities.find((a) => a.id === activityId);
@@ -1370,7 +1501,73 @@ export default function TopRunWebApp() {
              ================================================================= */}
           {activeTab === 'events' && (
             <div className="space-y-6">
-              {/* Clean Event Header Card */}
+              {/* Runner Event Hub Navigation Pills */}
+              <div className="flex flex-wrap items-center justify-between gap-3 p-1.5 rounded-2xl bg-white dark:bg-[#0F1420] border border-slate-200/80 dark:border-slate-800/80 shadow-xs">
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setRunnerEventSubTab('my-events')}
+                    className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 cursor-pointer ${
+                      runnerEventSubTab === 'my-events'
+                        ? 'bg-[#FC4C02] text-white shadow-xs'
+                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                    }`}
+                  >
+                    <Trophy className="w-4 h-4" />
+                    <span>Giải của tôi ({myEventsList.length})</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setRunnerEventSubTab('explore')}
+                    className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 cursor-pointer ${
+                      runnerEventSubTab === 'explore'
+                        ? 'bg-[#FC4C02] text-white shadow-xs'
+                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                    }`}
+                  >
+                    <Compass className="w-4 h-4" />
+                    <span>Khám phá giải mới ({eventsList.length})</span>
+                  </button>
+                </div>
+
+                {runnerEventSubTab === 'detail' && (
+                  <button
+                    type="button"
+                    onClick={() => setRunnerEventSubTab('my-events')}
+                    className="px-3.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5 transition cursor-pointer"
+                  >
+                    <ArrowLeft className="w-3.5 h-3.5" />
+                    <span>Quay lại danh sách giải</span>
+                  </button>
+                )}
+              </div>
+
+              {runnerEventSubTab === 'my-events' ? (
+                <RunnerMyEvents
+                  myEvents={myEventsList}
+                  onSelectEvent={(eventId) => {
+                    setSelectedEventId(eventId);
+                    setRunnerEventSubTab('detail');
+                  }}
+                  onGoToExplore={() => setRunnerEventSubTab('explore')}
+                />
+              ) : runnerEventSubTab === 'explore' ? (
+                <RunnerExploreEvents
+                  eventsList={eventsList}
+                  joinedEventIds={joinedEventIds}
+                  onSelectEvent={(eventId) => {
+                    setSelectedEventId(eventId);
+                    setRunnerEventSubTab('detail');
+                  }}
+                  onOpenRegister={(event) => {
+                    setSelectedEventId(event.id);
+                    setShowRegisterModal(true);
+                  }}
+                />
+              ) : (
+                <>
+                  {/* Clean Event Header Card */}
               <div className="rounded-2xl bg-white dark:bg-[#0F1420] border border-slate-200/80 dark:border-slate-800/80 p-6 sm:p-7 shadow-sm">
                 <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
                   <div className="space-y-3 max-w-2xl">
@@ -1672,6 +1869,7 @@ export default function TopRunWebApp() {
                       <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 text-sm">
                         {(currentEventData?.individualLeaderboard?.length > 0
                           ? currentEventData.individualLeaderboard.map((p: any) => ({
+                              userId: p.userId,
                               name: p.userName,
                               dept: p.department || 'VĐV Tự do',
                               bib: p.bibNumber,
@@ -1680,9 +1878,12 @@ export default function TopRunWebApp() {
                               multipliedKm: p.multipliedDistanceKm,
                               isFinisher: p.isTargetCompleted,
                               isMe: user?.id ? p.userId === user.id : false,
+                              avatarUrl: p.avatarUrl,
+                              gender: p.gender,
                             }))
                           : [
                               {
+                                userId: 'usr_tuan_minh',
                                 name: 'Nguyễn Tuấn Minh',
                                 dept: 'Khối Công Nghệ & R&D',
                                 bib: 'TOP100-0005',
@@ -1690,8 +1891,11 @@ export default function TopRunWebApp() {
                                 rawKm: 93.5,
                                 multipliedKm: 93.5,
                                 isFinisher: false,
+                                avatarUrl: '',
+                                gender: 'M',
                               },
                               {
+                                userId: user?.id || 'usr_alan',
                                 name: 'Nguyễn Hữu Thuận (Alan Hoàng)',
                                 dept: 'ASSA ABLOY Engineering',
                                 bib: myBibNumber,
@@ -1700,6 +1904,8 @@ export default function TopRunWebApp() {
                                 multipliedKm: dualGoalProgress.target.currentMultipliedDistanceKm,
                                 isFinisher: dualGoalProgress.target.isCompleted,
                                 isMe: true,
+                                avatarUrl: '',
+                                gender: 'M',
                               },
                             ]
                         )
@@ -1707,9 +1913,26 @@ export default function TopRunWebApp() {
                           .map((row: any, index: number) => (
                             <tr
                               key={row.bib}
-                              className={`transition ${
+                              onClick={() => {
+                                setSelectedParticipantDetail({
+                                  userId: row.userId || '',
+                                  name: row.name,
+                                  avatarUrl: row.avatarUrl,
+                                  clubName: row.dept,
+                                  bibNumber: row.bib,
+                                  targetDistanceKm: parseInt(row.targetName, 10) || 50,
+                                  totalValidKm: row.multipliedKm,
+                                  progressPercent: Math.round((row.multipliedKm / (parseInt(row.targetName, 10) || 1)) * 100),
+                                  rank: index + 1,
+                                  gender: row.gender,
+                                  activities: activities.filter(
+                                    (a) => a.userId === row.userId && !a.isHidden && a.validDistanceKm > 0
+                                  ),
+                                });
+                              }}
+                              className={`transition cursor-pointer ${
                                 (row as any).isMe
-                                  ? 'bg-[#FC4C02]/5 dark:bg-[#FC4C02]/10'
+                                  ? 'bg-[#FC4C02]/5 dark:bg-[#FC4C02]/10 hover:bg-[#FC4C02]/15'
                                   : 'hover:bg-slate-50 dark:hover:bg-slate-800/40'
                               }`}
                             >
@@ -1811,8 +2034,10 @@ export default function TopRunWebApp() {
                   </div>
                 )}
               </div>
-            </div>
+            </>
           )}
+        </div>
+      )}
 
           {/* =================================================================
               VIEW 2: NHẬT KÝ HOẠT ĐỘNG, BẢN ĐỒ TƯƠNG TÁC & BỘ 4 BIỂU ĐỒ CHI TIẾT
@@ -2000,6 +2225,12 @@ export default function TopRunWebApp() {
               }}
               raceKitOrders={raceKitOrders}
               onExportRaceKitCsv={handleExportRaceKitCsv}
+              onDeleteEvent={handleDeleteEvent}
+              onViewRunnerDetail={(id) => {
+                setSelectedEventId(id);
+                setActiveTab('events');
+                setRunnerEventSubTab('detail');
+              }}
             />
           )}
         </main>
@@ -2025,6 +2256,19 @@ export default function TopRunWebApp() {
         newEventForm={newEventForm}
         onChangeNewEventForm={setNewEventForm}
         onSubmitCreateNewEvent={handleCreateNewEvent}
+        currentEvent={eventsList.find((e) => e.id === selectedEventId) || currentEventData}
+        clubsList={currentEventData?.teams || []}
+        currentUserName={user?.fullName || ''}
+        onConfirmRegister={handleConfirmRegisterEvent}
+      />
+
+      <TournamentParticipantModal
+        participant={selectedParticipantDetail}
+        onClose={() => setSelectedParticipantDetail(null)}
+        onSelectActivity={(actId) => {
+          setSelectedActivityId(actId);
+          setActiveTab('tracklogs');
+        }}
       />
     </div>
   );

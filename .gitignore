@@ -31,4 +31,10 @@ Thumbs.db
 *.swp
 *.swo
 
+# Local Data & Cache
+data/*.json
+!data/.gitkeep
+.strava-activities-cache.json
+apps/api/.strava-activities-cache.json
+
 *.code-workspace

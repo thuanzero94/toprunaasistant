@@ -20,6 +20,7 @@ param(
   [string]$Service = "",
 
   [switch]$Dev,
+  [switch]$Local,
   [switch]$Prod,
   [switch]$Pull
 )
@@ -31,8 +32,11 @@ $ComposeFile = "docker-compose.prod.yml"
 $EnvMode = "Production"
 
 if ($Dev) {
+  $ComposeFile = "docker-compose.dev.yml"
+  $EnvMode = "Development/Hot-Reload"
+} elseif ($Local) {
   $ComposeFile = "docker-compose.yml"
-  $EnvMode = "Development/Local"
+  $EnvMode = "Local/Standard"
 }
 
 function Show-HelpMessage {

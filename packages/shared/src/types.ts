@@ -63,6 +63,7 @@ export enum ChallengeConditionType {
   SINGLE_LONG_RUN = 'SINGLE_LONG_RUN',           // Có ít nhất 1 buổi chạy dài >= X km
   ELEVATION_GAIN = 'ELEVATION_GAIN',             // Tích lũy độ cao leo núi (gain >= X mét)
   TOP_RANK = 'TOP_RANK',                         // Đạt Top N Bảng xếp hạng chung cuộc
+  SPEED_TARGET_TIME = 'SPEED_TARGET_TIME',       // Giải tốc độ: đạt được khớp số KM với thời gian quy định (VD: 5KM <= 25 phút)
 }
 
 export enum FulfillmentStatus {
@@ -171,10 +172,11 @@ export interface TargetCategoryInfo {
 
 export interface ChallengeTierInfo {
   id: string;
-  tierName: string;           // VD: "Chiến Binh Bạc (100KM)", "Thợ Săn Bình Minh (Streak 7 Ngày)"
+  tierName: string;           // VD: "Chiến Binh Bạc (100KM)", "Thợ Săn Bình Minh (Streak 7 Ngày)", "Tia Chớp 5K"
   tierLevel: 'BRONZE' | 'SILVER' | 'GOLD' | 'DIAMOND' | 'SPECIAL';
   conditionType: ChallengeConditionType;
-  thresholdValue: number;     // VD: 100 (km), 7 (ngày liên tiếp), 15 (km single run)
+  thresholdValue: number;     // VD: 100 (km), 7 (ngày liên tiếp), 25 (phút)
+  targetSpeedDistanceKm?: number; // Dùng cho SPEED_TARGET_TIME (VD: 5km, 10km, 21km)
   minDailyDistanceKm?: number;// Dùng cho STREAK_DAYS (VD: mỗi ngày >= 2km)
   awardBadgeUrl: string;
   rewardDescription: string;

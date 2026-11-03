@@ -1,7 +1,7 @@
 'use client';
 
-import React from 'react';
-import { Share2, Trophy, X } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Share2, Trophy, X, CheckCircle2, ShieldCheck, Truck } from 'lucide-react';
 import { formatPace } from '@toprun/shared';
 import type { TracklogActivityItem } from './UserTracklogExplorer';
 
@@ -22,6 +22,10 @@ interface RunnerEventModalsProps {
   newEventForm: any;
   onChangeNewEventForm: (form: any) => void;
   onSubmitCreateNewEvent: (e: React.FormEvent) => void;
+  currentEvent?: any;
+  clubsList?: any[];
+  currentUserName?: string;
+  onConfirmRegister?: (eventId: string, regData: any) => Promise<void>;
 }
 
 export default function RunnerEventModals({
@@ -41,7 +45,53 @@ export default function RunnerEventModals({
   newEventForm,
   onChangeNewEventForm,
   onSubmitCreateNewEvent,
+  currentEvent,
+  clubsList = [],
+  currentUserName = '',
+  onConfirmRegister,
 }: RunnerEventModalsProps) {
+  const [regCategoryId, setRegCategoryId] = useState<string>('');
+  const [regTeamId, setRegTeamId] = useState<string>('');
+  const [regShirtSize, setRegShirtSize] = useState<string>(myShirtSize || 'L');
+  const [regEngraving, setRegEngraving] = useState<string>(currentUserName || '');
+  const [regRecipient, setRegRecipient] = useState<string>(currentUserName || '');
+  const [regPhone, setRegPhone] = useState<string>('0909123456');
+  const [regAddress, setRegAddress] = useState<string>('Văn phòng Công ty ASSA ABLOY');
+  const [isSubmittingReg, setIsSubmittingReg] = useState(false);
+
+  useEffect(() => {
+    if (currentEvent?.categories && currentEvent.categories.length > 0) {
+      setRegCategoryId(currentEvent.categories[0].id || currentEvent.categories[0].name);
+    }
+    if (currentUserName) {
+      setRegEngraving(currentUserName);
+      setRegRecipient(currentUserName);
+    }
+  }, [currentEvent, currentUserName]);
+
+  const handleRegisterSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!currentEvent) return;
+    setIsSubmittingReg(true);
+    try {
+      if (onConfirmRegister) {
+        await onConfirmRegister(currentEvent.id, {
+          categoryId: regCategoryId,
+          teamId: regTeamId || undefined,
+          shirtSize: regShirtSize,
+          medalEngravingName: regEngraving || currentUserName,
+          recipientName: regRecipient || currentUserName,
+          phone: regPhone,
+          shippingAddress: regAddress,
+        });
+      }
+      onCloseRegisterModal();
+    } catch (err: any) {
+      alert(err.message || 'Lỗi khi đăng ký giải đấu.');
+    } finally {
+      setIsSubmittingReg(false);
+    }
+  };
   return (
     <>
       {/* MODAL 1: SHARE CARD */}
@@ -127,14 +177,25 @@ export default function RunnerEventModals({
         </div>
       )}
 
-      {/* MODAL 2: ĐỔI HẠNG MỤC MỤC TIÊU & SIZE ÁO */}
+      {/* MODAL 2: ĐĂNG KÝ THAM GIA GIẢI ĐẤU & NHẬN SỐ E-BIB */}
       {showRegisterModal && (
-        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="max-w-md w-full rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0F1420] p-6 space-y-5 shadow-2xl">
-            <div className="flex items-center justify-between">
-              <h3 className="text-base font-bold text-slate-900 dark:text-white">
-                Đổi cự ly mục tiêu &amp; Size áo Finisher
-              </h3>
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+          <div className="max-w-lg w-full my-8 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0F1420] p-6 space-y-5 shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-[#FC4C02]/10 text-[#FC4C02] flex items-center justify-center">
+                  <Trophy className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                    Đăng Ký Tham Gia Giải Đấu
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 font-medium line-clamp-1">
+                    {currentEvent?.title || 'TOPRun Virtual Race'}
+                  </p>
+                </div>
+              </div>
+
               <button
                 type="button"
                 onClick={onCloseRegisterModal}
@@ -144,49 +205,164 @@ export default function RunnerEventModals({
               </button>
             </div>
 
-            <div className="space-y-4 text-sm">
-              <div>
-                <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1.5">
-                  Chọn cự ly mục tiêu (Target Finisher):
+            <form onSubmit={handleRegisterSubmit} className="space-y-4 text-xs">
+              {/* Target distance choice */}
+              <div className="space-y-1.5">
+                <label className="block font-semibold text-slate-700 dark:text-slate-300">
+                  Chọn cự ly mục tiêu (Target Finisher) *
                 </label>
-                <select
-                  value={myTargetKm}
-                  onChange={(e) => onChangeTargetKm(Number(e.target.value))}
-                  className="w-full rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 px-3.5 py-2.5 text-slate-900 dark:text-white font-semibold"
-                >
-                  <option value={30}>Cự ly 30KM (Starter)</option>
-                  <option value={50}>Cự ly 50KM (Finisher)</option>
-                  <option value={100}>Cự ly 100KM (Pro Runner)</option>
-                </select>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  {(
+                    currentEvent?.categories && currentEvent.categories.length > 0
+                      ? currentEvent.categories
+                      : [
+                          { id: 'cat_21', name: 'Mục tiêu 21KM', targetDistanceKm: 21 },
+                          { id: 'cat_42', name: 'Mục tiêu 42KM', targetDistanceKm: 42 },
+                          { id: 'cat_50', name: 'Mục tiêu 50KM', targetDistanceKm: 50 },
+                        ]
+                  ).map((cat: any) => {
+                    const isSelected = regCategoryId === (cat.id || cat.name);
+
+                    return (
+                      <div
+                        key={cat.id || cat.name}
+                        onClick={() => {
+                          setRegCategoryId(cat.id || cat.name);
+                          onChangeTargetKm(cat.targetDistanceKm);
+                        }}
+                        className={`p-3 rounded-xl border text-center transition cursor-pointer ${
+                          isSelected
+                            ? 'border-[#FC4C02] bg-[#FC4C02]/10 text-[#FC4C02] font-bold shadow-xs'
+                            : 'border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:border-slate-300'
+                        }`}
+                      >
+                        <div className="text-sm font-black font-mono">{cat.targetDistanceKm} KM</div>
+                        <div className="text-[10px] mt-0.5 truncate">{cat.name}</div>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-slate-600 dark:text-slate-400 mb-1.5">
-                  Chọn Size áo Finisher:
+              {/* Club / Department */}
+              <div className="space-y-1">
+                <label className="block font-semibold text-slate-700 dark:text-slate-300">
+                  Đại diện Câu lạc bộ / Đội nhóm
                 </label>
                 <select
-                  value={myShirtSize}
-                  onChange={(e) => onChangeShirtSize(e.target.value)}
-                  className="w-full rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 px-3.5 py-2.5 text-slate-900 dark:text-white font-semibold"
+                  value={regTeamId}
+                  onChange={(e) => setRegTeamId(e.target.value)}
+                  className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 font-semibold focus:outline-none focus:ring-1 focus:ring-[#FC4C02]"
                 >
-                  {['XS', 'S', 'M', 'L', 'XL', 'XXL'].map((s) => (
-                    <option key={s} value={s}>
-                      Size {s}
+                  <option value="">VĐV Tự Do (Không thuộc CLB)</option>
+                  {clubsList.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
                     </option>
                   ))}
+                  <option value="club_assa">ASSA ABLOY Vietnam Runners</option>
+                  <option value="club_rnd">Khối Công Nghệ &amp; R&amp;D</option>
                 </select>
               </div>
-            </div>
 
-            <div className="flex justify-end gap-2 pt-2">
-              <button
-                type="button"
-                onClick={onCloseRegisterModal}
-                className="px-4 py-2 rounded-xl bg-[#FC4C02] hover:bg-[#E34402] text-white text-xs font-semibold cursor-pointer"
-              >
-                Lưu thay đổi
-              </button>
-            </div>
+              {/* Shirt size & Engraving */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300">
+                    Size áo Finisher
+                  </label>
+                  <select
+                    value={regShirtSize}
+                    onChange={(e) => {
+                      setRegShirtSize(e.target.value);
+                      onChangeShirtSize(e.target.value);
+                    }}
+                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 font-semibold focus:outline-none focus:ring-1 focus:ring-[#FC4C02]"
+                  >
+                    {['XS', 'S', 'M', 'L', 'XL', 'XXL'].map((s) => (
+                      <option key={s} value={s}>
+                        Size {s}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300">
+                    Tên khắc lên Huy chương
+                  </label>
+                  <input
+                    type="text"
+                    value={regEngraving}
+                    onChange={(e) => setRegEngraving(e.target.value)}
+                    placeholder="VD: NGUYEN VAN A"
+                    className="w-full px-3 py-2 text-xs uppercase font-mono font-bold rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-[#FC4C02]"
+                  />
+                </div>
+              </div>
+
+              {/* Shipping info */}
+              <div className="p-3.5 rounded-xl border border-slate-100 dark:border-slate-800/80 bg-slate-50/70 dark:bg-slate-900/50 space-y-2.5">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1">
+                  <Truck className="w-3.5 h-3.5 text-[#FC4C02]" />
+                  <span>Địa chỉ giao nhận Race-Kit &amp; Huy chương</span>
+                </span>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <div>
+                    <label className="text-[10px] text-slate-500 font-semibold">Người nhận</label>
+                    <input
+                      type="text"
+                      value={regRecipient}
+                      onChange={(e) => setRegRecipient(e.target.value)}
+                      required
+                      className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 font-medium"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-slate-500 font-semibold">Số điện thoại</label>
+                    <input
+                      type="tel"
+                      value={regPhone}
+                      onChange={(e) => setRegPhone(e.target.value)}
+                      required
+                      className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 font-medium"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-[10px] text-slate-500 font-semibold">Địa chỉ giao hàng</label>
+                  <input
+                    type="text"
+                    value={regAddress}
+                    onChange={(e) => setRegAddress(e.target.value)}
+                    required
+                    placeholder="Số nhà, đường, phường, quận, tỉnh/TP"
+                    className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 font-medium"
+                  />
+                </div>
+              </div>
+
+              <div className="pt-2 flex items-center justify-between border-t border-slate-100 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={onCloseRegisterModal}
+                  className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
+                >
+                  Hủy bỏ
+                </button>
+
+                <button
+                  type="submit"
+                  disabled={isSubmittingReg}
+                  className="px-5 py-2.5 rounded-xl bg-[#FC4C02] hover:bg-[#E34402] text-white text-xs font-bold flex items-center gap-1.5 shadow-sm transition cursor-pointer disabled:opacity-50"
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>{isSubmittingReg ? 'Đang cấp E-BIB...' : 'Xác nhận đăng ký & Nhận E-BIB'}</span>
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

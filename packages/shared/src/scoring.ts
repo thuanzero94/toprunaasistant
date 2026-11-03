@@ -264,6 +264,8 @@ export interface ActivityLogForProgress {
   validRawDistanceKm: number;
   finalMultipliedDistanceKm: number;
   elevationGainMeters: number;
+  movingTimeSec?: number;
+  validAvgPaceSecPerKm?: number;
 }
 
 export function calculateDualGoalProgress(params: {
@@ -389,10 +391,22 @@ export function calculateDualGoalProgress(params: {
         currentValue = currentRank ?? 0;
         isUnlocked = currentRank !== null && currentRank !== undefined && currentRank > 0 && currentRank <= tier.thresholdValue;
         break;
+
+      case ChallengeConditionType.SPEED_TARGET_TIME: {
+        const requiredKm = tier.targetSpeedDistanceKm || 5.0;
+        const maxTimeSec = tier.thresholdValue * 60;
+        const matchingRun = activityLogs.find(
+          (log) => log.validRawDistanceKm >= requiredKm && (log.movingTimeSec || 0) <= maxTimeSec && (log.movingTimeSec || 0) > 0
+        );
+        isUnlocked = Boolean(matchingRun);
+        currentValue = isUnlocked ? Math.round((matchingRun!.movingTimeSec || 0) / 60) : 0;
+        break;
+      }
     }
 
     const progressPercentage =
-      tier.conditionType === ChallengeConditionType.TOP_RANK
+      tier.conditionType === ChallengeConditionType.TOP_RANK ||
+      tier.conditionType === ChallengeConditionType.SPEED_TARGET_TIME
         ? isUnlocked
           ? 100
           : 0

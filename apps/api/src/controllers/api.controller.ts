@@ -493,6 +493,21 @@ export class ApiController {
     return this.engine.updateEvent(id, body);
   }
 
+  @Delete('events/:id')
+  @ApiOperation({ summary: 'Xoá Giải chạy ảo (chỉ áp dụng khi chưa có VĐV đăng ký)' })
+  deleteEvent(
+    @Param('id') id: string,
+    @Headers('authorization') authHeader?: string
+  ) {
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const decoded = this.accountService.verifyJwt(authHeader.slice(7));
+      if (!decoded || decoded.role !== 'ADMIN') {
+        throw new UnauthorizedException('Chỉ Quản trị viên (ADMIN) mới có quyền xoá giải đấu.');
+      }
+    }
+    return this.engine.deleteEvent(id);
+  }
+
   @Post('events')
   @ApiOperation({ summary: 'Tạo mới Giải chạy Ảo (Admin/Organizer) hoặc Mini Challenge (User)' })
   createEvent(

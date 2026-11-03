@@ -47,12 +47,21 @@ services:
     environment:
       NODE_ENV: production
       PORT: 4000
+      DATA_DIR: /app/data
       DATABASE_URL: postgresql://${POSTGRES_USER:-toprun}:${POSTGRES_PASSWORD:-toprun_secure_prod_2026}@postgres:5432/${POSTGRES_DB:-toprun_db}?schema=public
       REDIS_HOST: redis
       REDIS_PORT: 6379
-      FRONTEND_URL: https://toprunassistant.io.vn
-      API_BASE_URL: https://api.toprunassistant.io.vn
-      STRAVA_REDIRECT_URI: https://api.toprunassistant.io.vn/api/v1/strava/callback
+      FRONTEND_URL: ${FRONTEND_URL:-https://toprunassistant.io.vn}
+      API_BASE_URL: ${API_BASE_URL:-https://api.toprunassistant.io.vn}
+      STRAVA_REDIRECT_URI: ${STRAVA_REDIRECT_URI:-https://api.toprunassistant.io.vn/api/v1/strava/callback}
+      JWT_SECRET: ${JWT_SECRET:-toprun_prod_jwt_super_secret_production_key_2026}
+      SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-toprunassistant@gmail.com}
+      SMTP_PASS: ${SMTP_PASS:-ocyhhckxfwrnmdak}
+      SMTP_FROM: ${SMTP_FROM:-"TOPRun Assistant" <toprunassistant@gmail.com>}
+    volumes:
+      - ./data:/app/data
     networks:
       - toprun-network
 

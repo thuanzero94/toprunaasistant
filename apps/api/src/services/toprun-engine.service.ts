@@ -225,6 +225,34 @@ export class TopRunEngineService {
 
   private deletedExternalIds = new Set<string>();
 
+  private getDataFilePath(): string {
+    if (process.env.DATA_DIR) {
+      try {
+        if (!fs.existsSync(process.env.DATA_DIR)) {
+          fs.mkdirSync(process.env.DATA_DIR, { recursive: true });
+        }
+      } catch {}
+      return path.resolve(process.env.DATA_DIR, 'toprun-engine-state.json');
+    }
+    const candidates = [
+      path.resolve(process.cwd(), 'data'),
+      path.resolve(process.cwd(), '../../data'),
+      path.resolve(process.cwd(), '../data'),
+    ];
+    for (const dir of candidates) {
+      if (fs.existsSync(dir)) {
+        return path.resolve(dir, 'toprun-engine-state.json');
+      }
+    }
+    const fallbackDir = path.resolve(process.cwd(), 'data');
+    try {
+      if (!fs.existsSync(fallbackDir)) {
+        fs.mkdirSync(fallbackDir, { recursive: true });
+      }
+    } catch {}
+    return path.resolve(fallbackDir, 'toprun-engine-state.json');
+  }
+
   private getCacheFilePath(): string {
     const p1 = path.resolve(process.cwd(), '.strava-activities-cache.json');
     if (fs.existsSync(p1)) return p1;
@@ -242,9 +270,70 @@ export class TopRunEngineService {
     }
   }
 
+  public saveEngineState() {
+    try {
+      const filePath = this.getDataFilePath();
+      const dir = path.dirname(filePath);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+      const data = {
+        version: 1,
+        lastSavedAt: new Date().toISOString(),
+        events: this.events,
+        participations: this.participations,
+        activities: this.activities,
+        deletedExternalIds: Array.from(this.deletedExternalIds),
+        users: this.users,
+        clubs: this.clubs,
+      };
+      fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf8');
+      this.saveActivitiesCache();
+    } catch (err) {
+      console.error('[TopRunEngine] Error saving persistent state:', err);
+    }
+  }
+
+  private loadPersistentState() {
+    try {
+      const filePath = this.getDataFilePath();
+      if (fs.existsSync(filePath)) {
+        const raw = fs.readFileSync(filePath, 'utf8');
+        const state = JSON.parse(raw);
+        if (Array.isArray(state.events) && state.events.length > 0) {
+          this.events = state.events;
+        }
+        if (Array.isArray(state.participations) && state.participations.length > 0) {
+          this.participations = state.participations;
+        }
+        if (Array.isArray(state.activities) && state.activities.length > 0) {
+          this.activities = state.activities;
+        }
+        if (Array.isArray(state.deletedExternalIds)) {
+          this.deletedExternalIds = new Set(state.deletedExternalIds);
+        }
+        if (Array.isArray(state.users) && state.users.length > 0) {
+          this.users = state.users;
+        }
+        if (Array.isArray(state.clubs) && state.clubs.length > 0) {
+          this.clubs = state.clubs;
+        }
+        console.log(
+          `[TopRunEngine] Đã nạp dữ liệu bền vững từ: ${filePath} (${this.events.length} giải đấu, ${this.participations.length} lượt tham gia, ${this.activities.length} tracklogs).`
+        );
+      } else {
+        // Lần chạy đầu tiên: Lưu dữ liệu seed mẫu ra đĩa để vĩnh viễn không bị mất dữ liệu
+        this.saveEngineState();
+      }
+    } catch (err) {
+      console.error('[TopRunEngine] Lỗi nạp dữ liệu persistent state:', err);
+    }
+  }
+
   constructor() {
     this.seedInitialData();
     this.loadCachedStravaActivities();
+    this.loadPersistentState();
   }
 
   private loadCachedStravaActivities() {
@@ -1260,7 +1349,21 @@ export class TopRunEngineService {
   // --------------------------------------------------------------------------
 
   getEvents() {
-    return this.events;
+    return this.events.map((e) => {
+      const parts = this.participations.filter((p) => p.eventId === e.id);
+      return {
+        ...e,
+        participantsCount: parts.length,
+        participants: parts.map((p) => ({
+          userId: p.userId,
+          bibNumber: p.bibNumber,
+          targetDistanceKm: p.targetDistanceKm,
+          totalValidKm: p.dualGoalProgress?.target?.currentMultipliedDistanceKm || 0,
+          rank: 0,
+          challengeTier: p.dualGoalProgress?.challenges?.find((c) => c.isUnlocked)?.tierName,
+        })),
+      };
+    });
   }
 
   getEventBySlugOrId(idOrSlug: string) {
@@ -1381,6 +1484,7 @@ export class TopRunEngineService {
     };
 
     this.events.unshift(newEvent);
+    this.saveEngineState();
     return newEvent;
   }
 
@@ -1447,6 +1551,8 @@ export class TopRunEngineService {
 
     this.participations.push(newPart);
     event.participantCount += 1;
+    this.recalculateUserParticipation(user.id);
+    this.saveEngineState();
     return newPart;
   }
 
@@ -1465,10 +1571,31 @@ export class TopRunEngineService {
         ...payload.ruleConfig,
       };
     }
+    if (payload.categories !== undefined) {
+      event.categories = payload.categories;
+    }
     if (payload.challengeTiers !== undefined) {
       event.challengeTiers = payload.challengeTiers;
     }
+    this.saveEngineState();
     return event;
+  }
+
+  deleteEvent(eventId: string) {
+    const index = this.events.findIndex((e) => e.id === eventId || e.slug === eventId);
+    if (index === -1) {
+      throw new NotFoundException('Không tìm thấy giải đấu');
+    }
+    const event = this.events[index];
+    const participantCount = this.participations.filter((p) => p.eventId === event.id).length;
+    if (participantCount > 0) {
+      throw new BadRequestException(
+        `Không thể xoá giải đấu "${event.title}" vì đã có ${participantCount} VĐV đăng ký tham gia. Vui lòng chuyển trạng thái sang CANCELLED hoặc COMPLETED.`
+      );
+    }
+    this.events.splice(index, 1);
+    this.saveEngineState();
+    return { success: true, message: `Đã xoá giải đấu "${event.title}" thành công.` };
   }
 
   // --------------------------------------------------------------------------
@@ -1541,6 +1668,8 @@ export class TopRunEngineService {
             validRawDistanceKm: a.validDistanceKm,
             finalMultipliedDistanceKm: multipliedKm,
             elevationGainMeters: a.totalElevationGainMeters || 0,
+            movingTimeSec: a.movingTimeSec || 0,
+            validAvgPaceSecPerKm: a.avgPaceSecPerKm || 0,
           };
         });
 
@@ -1572,7 +1701,7 @@ export class TopRunEngineService {
     const act = this.getActivityById(activityId);
     act.isHidden = isHidden !== undefined ? Boolean(isHidden) : !act.isHidden;
     this.recalculateUserParticipation(act.userId);
-    this.saveActivitiesCache();
+    this.saveEngineState();
     return {
       activity: act,
       allActivities: this.activities,
@@ -1595,7 +1724,7 @@ export class TopRunEngineService {
       this.deletedExternalIds.add(removed.externalId);
     }
     this.recalculateUserParticipation(removed.userId);
-    this.saveActivitiesCache();
+    this.saveEngineState();
     return {
       removedId: activityId,
       removedName: removed.name,
@@ -1762,6 +1891,8 @@ export class TopRunEngineService {
       isRead: false,
     });
 
+    this.saveEngineState();
+
     return {
       activity: storedAct,
       evaluation,
@@ -1861,6 +1992,7 @@ export class TopRunEngineService {
       act.kudoedByUserIds.push(userId);
       act.kudosCount += 1;
     }
+    this.saveEngineState();
     return act;
   }
 
@@ -1875,6 +2007,7 @@ export class TopRunEngineService {
       createdAtIso: new Date().toISOString(),
     };
     act.comments.push(cmt);
+    this.saveEngineState();
     return cmt;
   }
 
@@ -1961,6 +2094,7 @@ export class TopRunEngineService {
     if (payload.trackingCode !== undefined) {
       part.raceKitOrder.trackingCode = payload.trackingCode;
     }
+    this.saveEngineState();
     return part.raceKitOrder;
   }
 }

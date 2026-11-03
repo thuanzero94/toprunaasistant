@@ -26,7 +26,7 @@ async function bootstrap() {
   SwaggerModule.setup('api/docs', app, document);
 
   const port = process.env.PORT || 4000;
-  await app.listen(port);
+  await app.listen(port, '0.0.0.0');
   console.log(`🚀 TOPRunAssistant API is running on: http://localhost:${port}/api/v1`);
   console.log(`📚 Interactive Swagger Docs available at: http://localhost:${port}/api/docs`);
 }

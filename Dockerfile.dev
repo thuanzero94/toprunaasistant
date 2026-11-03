@@ -1,0 +1,26 @@
+FROM node:20-alpine
+
+WORKDIR /app
+
+COPY package.json package-lock.json tsconfig.base.json ./
+COPY packages/shared/package.json ./packages/shared/
+COPY packages/database/package.json ./packages/database/
+COPY apps/api/package.json ./apps/api/
+COPY apps/web/package.json ./apps/web/
+
+RUN npm ci
+
+COPY packages/shared ./packages/shared
+COPY packages/database ./packages/database
+
+RUN npm run build --workspace=@toprun/shared
+RUN npm run db:generate
+
+# Symlink binaries to /usr/local/bin so they are globally accessible anywhere
+RUN ln -s /app/apps/web/node_modules/.bin/next /usr/local/bin/next 2>/dev/null || true
+RUN ln -s /app/node_modules/.bin/tsx /usr/local/bin/tsx 2>/dev/null || true
+RUN ln -s /app/apps/api/node_modules/.bin/tsx /usr/local/bin/tsx 2>/dev/null || true
+
+ENV PATH="/app/apps/web/node_modules/.bin:/app/apps/api/node_modules/.bin:/app/node_modules/.bin:${PATH}"
+
+EXPOSE 3005 4000

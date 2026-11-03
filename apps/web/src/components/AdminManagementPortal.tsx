@@ -2,9 +2,13 @@
 
 import React, { useState } from 'react';
 import {
+  AlertTriangle,
+  ArrowLeft,
   Award,
   CheckCircle2,
+  Compass,
   Download,
+  Plus,
   RefreshCw,
   Save,
   Search,
@@ -13,20 +17,45 @@ import {
   Trophy,
   Truck,
   Users,
+  X,
+  Zap,
 } from 'lucide-react';
 import { AntiCheatStatus } from '@toprun/shared';
 import type { TracklogActivityItem } from './UserTracklogExplorer';
+import AdminTournamentsTable from './AdminTournamentsTable';
+
+export interface AdminCategoryItem {
+  id?: string;
+  name: string;
+  targetDistanceKm: number;
+  bibPrefix: string;
+}
+
+export interface AdminChallengeTierItem {
+  id?: string;
+  tierCode?: string;
+  tierName: string;
+  tierLevel: string;
+  conditionType: string;
+  thresholdValue: number;
+  targetSpeedDistanceKm?: number;
+  rewardDescription: string;
+}
 
 export interface AdminEventFormState {
   title: string;
   subtitle: string;
   status: string;
+  description?: string;
   startDateIso: string;
   endDateIso: string;
   minPaceFormatted: string;
   maxPaceFormatted: string;
   minActivityDistanceKm: number;
   weekendMultiplier: number;
+  allowSplitFiltering?: boolean;
+  categories?: AdminCategoryItem[];
+  challengeTiers?: AdminChallengeTierItem[];
 }
 
 interface AdminManagementPortalProps {
@@ -54,6 +83,8 @@ interface AdminManagementPortalProps {
   onInspectFlaggedActivity: (activityId: string) => void;
   raceKitOrders: any[];
   onExportRaceKitCsv: () => void;
+  onDeleteEvent?: (eventId: string, title: string) => Promise<boolean | void> | void;
+  onViewRunnerDetail?: (eventId: string) => void;
 }
 
 export default function AdminManagementPortal({
@@ -81,8 +112,13 @@ export default function AdminManagementPortal({
   onInspectFlaggedActivity,
   raceKitOrders,
   onExportRaceKitCsv,
+  onDeleteEvent,
+  onViewRunnerDetail,
 }: AdminManagementPortalProps) {
   const [pendingDeleteUserId, setPendingDeleteUserId] = useState<string | null>(null);
+  const [raceViewMode, setRaceViewMode] = useState<'list' | 'edit'>('list');
+  const [deleteNoticeModal, setDeleteNoticeModal] = useState<{ title: string; count: number } | null>(null);
+  const [pendingDeleteEvent, setPendingDeleteEvent] = useState<{ id: string; title: string } | null>(null);
   const flaggedActivities = activities.filter((a) => a.antiCheatStatus !== AntiCheatStatus.VALID);
 
   return (
@@ -360,47 +396,68 @@ export default function AdminManagementPortal({
             </div>
           )}
 
-          <div className="rounded-2xl bg-white dark:bg-[#0F1420] border border-slate-200/80 dark:border-slate-800/80 p-6 space-y-6 shadow-sm">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <div>
-                <h2 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                  <Trophy className="w-4 h-4 text-[#FC4C02]" />
-                  <span>Cấu hình Quy chế Giải Chạy &amp; Thử thách ảo (Virtual Race)</span>
-                </h2>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                  Tùy chỉnh pace hợp lệ, cự ly tối thiểu, thời gian thi đấu và các mốc Challenge nhận huy hiệu
-                </p>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-2.5">
-                <div className="flex items-center gap-2 bg-slate-100 dark:bg-slate-800/80 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700">
-                  <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase">Giải:</span>
-                  <select
-                    value={selectedEventId}
-                    onChange={(e) => onSelectEventId(e.target.value)}
-                    className="bg-transparent text-xs font-bold text-slate-900 dark:text-white focus:outline-none cursor-pointer"
+          {raceViewMode === 'list' ? (
+            <AdminTournamentsTable
+              eventsList={eventsList}
+              selectedEventId={selectedEventId}
+              onSelectEvent={onSelectEventId}
+              onEditEvent={(eventId) => {
+                onSelectEventId(eventId);
+                setRaceViewMode('edit');
+              }}
+              onDeleteEvent={(eventId, title, count) => {
+                if (count > 0) {
+                  setDeleteNoticeModal({ title, count });
+                } else {
+                  setPendingDeleteEvent({ id: eventId, title });
+                }
+              }}
+              onOpenCreateModal={onOpenCreateEventModal}
+              onViewRunnerDetail={onViewRunnerDetail}
+            />
+          ) : (
+            <div className="rounded-2xl bg-white dark:bg-[#0F1420] border border-slate-200/80 dark:border-slate-800/80 p-6 space-y-6 shadow-sm">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100 dark:border-slate-800">
+                <div className="space-y-1">
+                  <button
+                    type="button"
+                    onClick={() => setRaceViewMode('list')}
+                    className="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5 transition cursor-pointer mb-2"
                   >
-                    {eventsList.map((ev) => (
-                      <option key={ev.id} value={ev.id} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
-                        {ev.title}
-                      </option>
-                    ))}
-                  </select>
+                    <ArrowLeft className="w-3.5 h-3.5" />
+                    <span>Quay lại Danh Sách Tất Cả Giải</span>
+                  </button>
+
+                  <h2 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                    <Trophy className="w-4 h-4 text-[#FC4C02]" />
+                    <span>Cấu hình Quy chế Giải Chạy &amp; Thử thách ảo (Virtual Race)</span>
+                  </h2>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Tùy chỉnh pace hợp lệ, cự ly tối thiểu, thời gian thi đấu và các mốc Challenge nhận huy hiệu
+                  </p>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={onOpenCreateEventModal}
-                  className="px-3.5 py-1.5 rounded-xl bg-[#FC4C02] hover:bg-[#E34402] text-white text-xs font-bold flex items-center gap-1.5 shadow-sm transition cursor-pointer"
-                >
-                  <span>+ Tạo Giải Mới</span>
-                </button>
+                <div className="flex flex-wrap items-center gap-2.5">
+                  <div className="flex items-center gap-2 bg-slate-100 dark:bg-slate-800/80 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700">
+                    <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase">Giải:</span>
+                    <select
+                      value={selectedEventId}
+                      onChange={(e) => onSelectEventId(e.target.value)}
+                      className="bg-transparent text-xs font-bold text-slate-900 dark:text-white focus:outline-none cursor-pointer"
+                    >
+                      {eventsList.map((ev) => (
+                        <option key={ev.id} value={ev.id} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
+                          {ev.title}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
 
-                <span className="px-2.5 py-1 rounded-lg text-xs font-mono font-bold bg-[#FC4C02]/10 text-[#FC4C02] border border-[#FC4C02]/20">
-                  {selectedEventId}
-                </span>
+                  <span className="px-2.5 py-1 rounded-lg text-xs font-mono font-bold bg-[#FC4C02]/10 text-[#FC4C02] border border-[#FC4C02]/20">
+                    {selectedEventId}
+                  </span>
+                </div>
               </div>
-            </div>
 
             <form onSubmit={onSaveEventRules} className="space-y-6">
               <div className="space-y-3">
@@ -539,37 +596,346 @@ export default function AdminManagementPortal({
                 </div>
               </div>
 
-              <div className="space-y-3">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center justify-between">
-                  <span>3. Các Mốc Thử Thách Mở Rộng (Challenge Tiers)</span>
-                  <span className="text-[11px] font-normal text-slate-500">
-                    {challengeTiers.length} mốc thử thách đang kích hoạt
-                  </span>
-                </h3>
+              {/* 3. CẤU HÌNH CÁC CỰ LY MỤC TIÊU TARGET */}
+              <div className="space-y-3 pt-3 border-t border-slate-100 dark:border-slate-800">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                      3. Cấu hình Các Tuỳ Chọn Cự Ly Mục Tiêu (Target Categories)
+                    </h3>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                      VĐV khi đăng ký tham gia sẽ được chọn 1 trong các mốc cự ly này để hoàn thành nhận E-BIB &amp; Finisher Medal
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const cats = eventForm.categories || [
+                        { name: 'Mốc Target 21KM', targetDistanceKm: 21, bibPrefix: 'VR21-' },
+                        { name: 'Mốc Target 42KM', targetDistanceKm: 42, bibPrefix: 'VR42-' },
+                      ];
+                      const nextKm = cats.length > 0 ? cats[cats.length - 1].targetDistanceKm + 10 : 21;
+                      onChangeEventForm({
+                        ...eventForm,
+                        categories: [
+                          ...cats,
+                          {
+                            name: `Mốc Target ${nextKm}KM`,
+                            targetDistanceKm: nextKm,
+                            bibPrefix: `VR${nextKm}-`,
+                          },
+                        ],
+                      });
+                    }}
+                    className="px-3 py-1.5 rounded-xl border border-dashed border-[#FC4C02] text-[#FC4C02] hover:bg-[#FC4C02]/10 text-xs font-bold flex items-center gap-1 transition cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>+ Thêm cự ly Target</span>
+                  </button>
+                </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {challengeTiers.map((tier: any) => (
+                <div className="space-y-2">
+                  {(
+                    eventForm.categories || [
+                      { name: 'Mốc Target 21KM (Starter)', targetDistanceKm: 21, bibPrefix: 'VR21-' },
+                      { name: 'Mốc Target 42KM (Marathoner)', targetDistanceKm: 42, bibPrefix: 'VR42-' },
+                      { name: 'Mốc Target 50KM (Ultra)', targetDistanceKm: 50, bibPrefix: 'VR50-' },
+                    ]
+                  ).map((cat, idx) => (
                     <div
-                      key={tier.id}
-                      className="p-3.5 rounded-xl border border-slate-200/80 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/60 flex items-start gap-3"
+                      key={idx}
+                      className="p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
                     >
-                      <div className="w-8 h-8 rounded-lg bg-[#FC4C02]/15 text-[#FC4C02] font-bold text-xs flex items-center justify-center shrink-0">
-                        <Award className="w-4 h-4" />
-                      </div>
-                      <div className="space-y-0.5 min-w-0">
-                        <div className="font-bold text-xs text-slate-900 dark:text-white truncate">{tier.tierName}</div>
-                        <div className="text-[11px] text-slate-500 dark:text-slate-400">{tier.rewardDescription}</div>
-                        <div className="text-[10px] font-mono tabular-nums text-emerald-600 dark:text-emerald-400 font-semibold pt-0.5">
-                          Điều kiện: {tier.conditionType} ({tier.thresholdValue}
-                          {tier.conditionType === 'STREAK_DAYS' ? ' ngày' : ' km'})
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 flex-1">
+                        <div>
+                          <label className="text-[10px] font-semibold text-slate-500 uppercase">Tên hạng mục</label>
+                          <input
+                            type="text"
+                            value={cat.name}
+                            onChange={(e) => {
+                              const cats = [...(eventForm.categories || [])];
+                              cats[idx] = { ...cats[idx], name: e.target.value };
+                              onChangeEventForm({ ...eventForm, categories: cats });
+                            }}
+                            className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 font-medium"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-semibold text-slate-500 uppercase">Cự ly Target (km)</label>
+                          <input
+                            type="number"
+                            step="0.1"
+                            value={cat.targetDistanceKm}
+                            onChange={(e) => {
+                              const cats = [...(eventForm.categories || [])];
+                              cats[idx] = { ...cats[idx], targetDistanceKm: parseFloat(e.target.value) || 0 };
+                              onChangeEventForm({ ...eventForm, categories: cats });
+                            }}
+                            className="w-full px-2.5 py-1.5 text-xs font-mono font-bold rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-semibold text-slate-500 uppercase">Tiền tố số BIB</label>
+                          <input
+                            type="text"
+                            value={cat.bibPrefix}
+                            onChange={(e) => {
+                              const cats = [...(eventForm.categories || [])];
+                              cats[idx] = { ...cats[idx], bibPrefix: e.target.value };
+                              onChangeEventForm({ ...eventForm, categories: cats });
+                            }}
+                            className="w-full px-2.5 py-1.5 text-xs font-mono font-bold rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100"
+                          />
                         </div>
                       </div>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const cats = (eventForm.categories || []).filter((_, i) => i !== idx);
+                          onChangeEventForm({ ...eventForm, categories: cats });
+                        }}
+                        title="Xoá cự ly"
+                        className="p-2 rounded-lg text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition cursor-pointer self-end sm:self-center"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
                     </div>
                   ))}
                 </div>
               </div>
 
-              <div className="pt-2 flex justify-end">
+              {/* 4. CẤU HÌNH CÁC MỐC THỬ THÁCH VÀ SPECIAL CHALLENGE */}
+              <div className="space-y-3 pt-3 border-t border-slate-100 dark:border-slate-800">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div>
+                    <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                      4. Cấu hình Thử Thách Mở Rộng &amp; Giải Tốc Độ (Challenge Tiers)
+                    </h3>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                      Tùy biến mốc vượt ngưỡng km, chuỗi ngày liên tục hoặc thử thách tốc độ khớp cự ly theo thời gian
+                    </p>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const tiers = eventForm.challengeTiers || challengeTiers;
+                        const newTier: AdminChallengeTierItem = {
+                          tierCode: `SPEED_${Date.now()}`,
+                          tierName: '⚡ Thử thách Tốc độ 5KM',
+                          tierLevel: 'SPECIAL',
+                          conditionType: 'SPEED_TARGET_TIME',
+                          targetSpeedDistanceKm: 5,
+                          thresholdValue: 25,
+                          rewardDescription: 'Khớp số 5KM trong thời gian <= 25 phút',
+                        };
+                        onChangeEventForm({ ...eventForm, challengeTiers: [...tiers, newTier] });
+                      }}
+                      className="px-3 py-1.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-300/60 dark:border-amber-700/60 text-xs font-bold flex items-center gap-1 transition cursor-pointer"
+                    >
+                      <Zap className="w-3.5 h-3.5" />
+                      <span>+ Thêm Giải Tốc Độ</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const tiers = eventForm.challengeTiers || challengeTiers;
+                        const newTier: AdminChallengeTierItem = {
+                          tierCode: `TIER_${Date.now()}`,
+                          tierName: 'Mốc Thử Thách Mới',
+                          tierLevel: 'SILVER',
+                          conditionType: 'DISTANCE_OVERACHIEVE',
+                          thresholdValue: 100,
+                          rewardDescription: 'Vượt mốc tích luỹ km',
+                        };
+                        onChangeEventForm({ ...eventForm, challengeTiers: [...tiers, newTier] });
+                      }}
+                      className="px-3 py-1.5 rounded-xl border border-dashed border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-bold flex items-center gap-1 transition cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>+ Thêm Thử Thách</span>
+                    </button>
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  {(eventForm.challengeTiers || challengeTiers).map((tier: any, idx: number) => {
+                    const isSpeed = tier.conditionType === 'SPEED_TARGET_TIME';
+
+                    return (
+                      <div
+                        key={idx}
+                        className={`p-4 rounded-xl border transition ${
+                          isSpeed
+                            ? 'border-amber-300 dark:border-amber-800/80 bg-amber-50/20 dark:bg-amber-950/20'
+                            : 'border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/40'
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-3 pb-2 border-b border-slate-200/60 dark:border-slate-800">
+                          <div className="flex items-center gap-2">
+                            <div className={`p-1.5 rounded-lg ${isSpeed ? 'bg-amber-500/20 text-amber-500' : 'bg-[#FC4C02]/10 text-[#FC4C02]'}`}>
+                              {isSpeed ? <Zap className="w-4 h-4" /> : <Award className="w-4 h-4" />}
+                            </div>
+                            <span className="font-bold text-xs text-slate-900 dark:text-white">
+                              {isSpeed ? '⚡ Giải Tốc Độ (Speed Challenge)' : `Thử thách #${idx + 1}`}
+                            </span>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const tiers = (eventForm.challengeTiers || challengeTiers).filter((_: any, i: number) => i !== idx);
+                              onChangeEventForm({ ...eventForm, challengeTiers: tiers });
+                            }}
+                            className="p-1 rounded text-slate-400 hover:text-rose-500 cursor-pointer"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 pt-3">
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-semibold text-slate-500 uppercase">Tên Huy Hiệu</label>
+                            <input
+                              type="text"
+                              value={tier.tierName}
+                              onChange={(e) => {
+                                const tiers = [...(eventForm.challengeTiers || challengeTiers)];
+                                tiers[idx] = { ...tiers[idx], tierName: e.target.value };
+                                onChangeEventForm({ ...eventForm, challengeTiers: tiers });
+                              }}
+                              className="w-full px-2.5 py-1.5 text-xs font-bold rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100"
+                            />
+                          </div>
+
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-semibold text-slate-500 uppercase">Loại điều kiện</label>
+                            <select
+                              value={tier.conditionType}
+                              onChange={(e) => {
+                                const tiers = [...(eventForm.challengeTiers || challengeTiers)];
+                                tiers[idx] = { ...tiers[idx], conditionType: e.target.value };
+                                onChangeEventForm({ ...eventForm, challengeTiers: tiers });
+                              }}
+                              className="w-full px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100"
+                            >
+                              <option value="DISTANCE_OVERACHIEVE">Vượt mốc km mở rộng</option>
+                              <option value="STREAK_DAYS">Chạy liên tục N ngày</option>
+                              <option value="SINGLE_LONG_RUN">1 buổi chạy dài</option>
+                              <option value="ELEVATION_GAIN">Độ cao leo núi (gain m)</option>
+                              <option value="TOP_RANK">Top N BXH</option>
+                              <option value="SPEED_TARGET_TIME">⚡ Giải Tốc Độ (Khớp km &amp; thời gian)</option>
+                            </select>
+                          </div>
+
+                          {isSpeed ? (
+                            <>
+                              <div className="space-y-1">
+                                <label className="text-[10px] font-semibold text-amber-600 dark:text-amber-400 uppercase">
+                                  Khớp cự ly (km)
+                                </label>
+                                <input
+                                  type="number"
+                                  step="0.5"
+                                  value={tier.targetSpeedDistanceKm || 5}
+                                  onChange={(e) => {
+                                    const tiers = [...(eventForm.challengeTiers || challengeTiers)];
+                                    tiers[idx] = { ...tiers[idx], targetSpeedDistanceKm: parseFloat(e.target.value) || 5 };
+                                    onChangeEventForm({ ...eventForm, challengeTiers: tiers });
+                                  }}
+                                  className="w-full px-2.5 py-1.5 text-xs font-mono font-bold rounded-lg border border-amber-300 dark:border-amber-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100"
+                                />
+                              </div>
+
+                              <div className="space-y-1">
+                                <label className="text-[10px] font-semibold text-amber-600 dark:text-amber-400 uppercase">
+                                  Thời gian tối đa (phút)
+                                </label>
+                                <input
+                                  type="number"
+                                  step="1"
+                                  value={tier.thresholdValue}
+                                  onChange={(e) => {
+                                    const tiers = [...(eventForm.challengeTiers || challengeTiers)];
+                                    tiers[idx] = { ...tiers[idx], thresholdValue: parseFloat(e.target.value) || 0 };
+                                    onChangeEventForm({ ...eventForm, challengeTiers: tiers });
+                                  }}
+                                  className="w-full px-2.5 py-1.5 text-xs font-mono font-bold rounded-lg border border-amber-300 dark:border-amber-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100"
+                                />
+                              </div>
+                            </>
+                          ) : (
+                            <>
+                              <div className="space-y-1">
+                                <label className="text-[10px] font-semibold text-slate-500 uppercase">
+                                  Giá trị ngưỡng ({tier.conditionType === 'STREAK_DAYS' ? 'ngày' : 'km'})
+                                </label>
+                                <input
+                                  type="number"
+                                  step="1"
+                                  value={tier.thresholdValue}
+                                  onChange={(e) => {
+                                    const tiers = [...(eventForm.challengeTiers || challengeTiers)];
+                                    tiers[idx] = { ...tiers[idx], thresholdValue: parseFloat(e.target.value) || 0 };
+                                    onChangeEventForm({ ...eventForm, challengeTiers: tiers });
+                                  }}
+                                  className="w-full px-2.5 py-1.5 text-xs font-mono font-bold rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100"
+                                />
+                              </div>
+
+                              <div className="space-y-1">
+                                <label className="text-[10px] font-semibold text-slate-500 uppercase">Cấp độ Tier</label>
+                                <select
+                                  value={tier.tierLevel || 'SILVER'}
+                                  onChange={(e) => {
+                                    const tiers = [...(eventForm.challengeTiers || challengeTiers)];
+                                    tiers[idx] = { ...tiers[idx], tierLevel: e.target.value };
+                                    onChangeEventForm({ ...eventForm, challengeTiers: tiers });
+                                  }}
+                                  className="w-full px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100"
+                                >
+                                  <option value="BRONZE">BRONZE (Đồng)</option>
+                                  <option value="SILVER">SILVER (Bạc)</option>
+                                  <option value="GOLD">GOLD (Vàng)</option>
+                                  <option value="DIAMOND">DIAMOND (Kim Cương)</option>
+                                  <option value="SPECIAL">SPECIAL (Đặc Biệt)</option>
+                                </select>
+                              </div>
+                            </>
+                          )}
+                        </div>
+
+                        <div className="pt-2">
+                          <label className="text-[10px] font-semibold text-slate-500 uppercase">Mô tả phần thưởng</label>
+                          <input
+                            type="text"
+                            value={tier.rewardDescription}
+                            onChange={(e) => {
+                              const tiers = [...(eventForm.challengeTiers || challengeTiers)];
+                              tiers[idx] = { ...tiers[idx], rewardDescription: e.target.value };
+                              onChangeEventForm({ ...eventForm, challengeTiers: tiers });
+                            }}
+                            className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 mt-1"
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="pt-4 flex items-center justify-between border-t border-slate-100 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setRaceViewMode('list')}
+                  className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-xs font-semibold text-slate-700 dark:text-slate-300 transition cursor-pointer"
+                >
+                  Hủy &amp; Quay lại danh sách
+                </button>
+
                 <button
                   type="submit"
                   className="px-5 py-2.5 rounded-xl bg-[#FC4C02] hover:bg-[#E34402] text-white text-xs font-bold flex items-center gap-2 shadow-sm transition cursor-pointer"
@@ -580,8 +946,80 @@ export default function AdminManagementPortal({
               </div>
             </form>
           </div>
-        </div>
-      )}
+        )}
+
+        {/* Dialog Cảnh báo: Chặn xoá giải đã có VĐV */}
+        {deleteNoticeModal && (
+          <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="max-w-md w-full rounded-2xl bg-white dark:bg-[#0F1420] border border-rose-200 dark:border-rose-900/60 p-6 space-y-4 shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+              <div className="w-12 h-12 rounded-2xl bg-rose-50 dark:bg-rose-950/50 text-rose-500 flex items-center justify-center">
+                <AlertTriangle className="w-6 h-6" />
+              </div>
+              <div className="space-y-2">
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                  Không thể xoá giải đấu!
+                </h3>
+                <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+                  Giải đấu <span className="font-bold text-slate-900 dark:text-white">"{deleteNoticeModal.title}"</span> hiện đã có <span className="font-bold text-rose-500">{deleteNoticeModal.count} VĐV</span> đăng ký tham gia và có thể đã phát sinh bài chạy tích luỹ.
+                </p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Để bảo toàn lịch sử thành tích thi đấu, hệ thống không cho phép xoá hoàn toàn. Bạn có thể bấm <span className="font-semibold text-slate-700 dark:text-slate-200">Sửa</span> và chuyển trạng thái giải sang <span className="font-bold text-rose-500">CANCELLED (Đã hủy)</span> hoặc <span className="font-bold text-blue-500">COMPLETED (Đã kết thúc)</span>.
+                </p>
+              </div>
+              <div className="pt-2 flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setDeleteNoticeModal(null)}
+                  className="px-4 py-2 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 text-xs font-bold transition cursor-pointer"
+                >
+                  Đã hiểu
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Dialog Xác nhận xoá giải 0 VĐV */}
+        {pendingDeleteEvent && (
+          <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="max-w-md w-full rounded-2xl bg-white dark:bg-[#0F1420] border border-slate-200 dark:border-slate-800 p-6 space-y-4 shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+              <div className="w-12 h-12 rounded-2xl bg-rose-50 dark:bg-rose-950/50 text-rose-500 flex items-center justify-center">
+                <Trash2 className="w-6 h-6" />
+              </div>
+              <div className="space-y-1.5">
+                <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                  Xác nhận xoá giải đấu vĩnh viễn?
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                  Bạn có chắc chắn muốn xoá giải <span className="font-bold text-slate-900 dark:text-white">"{pendingDeleteEvent.title}"</span>? Giải này chưa có VĐV nào đăng ký. Hành động này không thể hoàn tác.
+                </p>
+              </div>
+              <div className="pt-2 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setPendingDeleteEvent(null)}
+                  className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
+                >
+                  Hủy bỏ
+                </button>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (onDeleteEvent) {
+                      await onDeleteEvent(pendingDeleteEvent.id, pendingDeleteEvent.title);
+                    }
+                    setPendingDeleteEvent(null);
+                  }}
+                  className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition cursor-pointer"
+                >
+                  Xác nhận xoá
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    )}
 
       {/* SUB-VIEW 3: HÀNG ĐỢI KIỂM DUYỆT TỐC ĐỘ & GIAN LẬN GPS */}
       {adminSubTab === 'moderation' && (

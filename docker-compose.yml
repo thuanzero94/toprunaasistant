@@ -46,6 +46,7 @@ services:
     environment:
       NODE_ENV: production
       PORT: 4000
+      DATA_DIR: /app/data
       DATABASE_URL: postgresql://${POSTGRES_USER:-toprun}:${POSTGRES_PASSWORD:-toprun_secret_2026}@postgres:5432/${POSTGRES_DB:-toprun_db}?schema=public
       REDIS_HOST: redis
       REDIS_PORT: 6379
@@ -56,6 +57,8 @@ services:
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3005}
       API_BASE_URL: ${API_BASE_URL:-http://localhost:4000/api/v1}
       STRAVA_REDIRECT_URI: ${STRAVA_REDIRECT_URI:-http://localhost:4000/api/v1/strava/callback}
+    volumes:
+      - ./data:/app/data
 
   web:
     build:
