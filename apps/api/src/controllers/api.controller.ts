@@ -202,7 +202,15 @@ export class ApiController {
       prCertLink?: string;
     }
   ) {
-    return this.accountService.updateProfile(userId, body);
+    const res = await this.accountService.updateProfile(userId, body);
+    if (res?.user) {
+      this.engine.updateUserProfile(userId, {
+        fullName: res.user.fullName,
+        avatarUrl: res.user.avatarUrl,
+        departmentOrUnit: res.user.departmentOrUnit,
+      });
+    }
+    return res;
   }
 
   @Post('account/:userId/change-password')
@@ -549,6 +557,8 @@ export class ApiController {
       userId: string;
       categoryId: string;
       teamId?: string;
+      bibNumber?: string;
+      selectedChallengeTierIds?: string[];
       shirtSize: string;
       medalEngravingName?: string;
       recipientName: string;
@@ -557,6 +567,29 @@ export class ApiController {
     }
   ) {
     return this.engine.registerForEvent(eventId, body);
+  }
+
+  @Patch('events/:id/bib')
+  @ApiOperation({
+    summary: 'Cập nhật số BIB cá nhân trong giải (kiểm tra chống trùng lặp)',
+  })
+  updateEventBib(
+    @Param('id') eventId: string,
+    @Body() body: { userId: string; bibNumber: string }
+  ) {
+    return this.engine.updateParticipationBib(eventId, body.userId, body.bibNumber);
+  }
+
+  @Get('events/:id/check-bib')
+  @ApiOperation({
+    summary: 'Kiểm tra tính khả dụng của số BIB trong giải',
+  })
+  checkBib(
+    @Param('id') eventId: string,
+    @Query('bib') bib: string,
+    @Query('userId') userId?: string
+  ) {
+    return this.engine.checkBibAvailability(eventId, bib, userId);
   }
 
   // ==========================================================================

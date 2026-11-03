@@ -24,8 +24,15 @@ interface RunnerEventModalsProps {
   onSubmitCreateNewEvent: (e: React.FormEvent) => void;
   currentEvent?: any;
   clubsList?: any[];
+  currentUser?: any;
   currentUserName?: string;
   onConfirmRegister?: (eventId: string, regData: any) => Promise<void>;
+  showEditBibModal?: boolean;
+  onCloseEditBibModal?: () => void;
+  onSubmitEditBib?: (eventId: string, newBib: string) => Promise<void>;
+  editBibInitialValue?: string;
+  editBibEventId?: string;
+  editBibEventTitle?: string;
 }
 
 export default function RunnerEventModals({
@@ -47,27 +54,76 @@ export default function RunnerEventModals({
   onSubmitCreateNewEvent,
   currentEvent,
   clubsList = [],
+  currentUser,
   currentUserName = '',
   onConfirmRegister,
+  showEditBibModal = false,
+  onCloseEditBibModal,
+  onSubmitEditBib,
+  editBibInitialValue = '',
+  editBibEventId = '',
+  editBibEventTitle = '',
 }: RunnerEventModalsProps) {
   const [regCategoryId, setRegCategoryId] = useState<string>('');
+  const [regBibNumber, setRegBibNumber] = useState<string>('');
+  const [selectedChallengeIds, setSelectedChallengeIds] = useState<string[]>([]);
   const [regTeamId, setRegTeamId] = useState<string>('');
-  const [regShirtSize, setRegShirtSize] = useState<string>(myShirtSize || 'L');
-  const [regEngraving, setRegEngraving] = useState<string>(currentUserName || '');
-  const [regRecipient, setRegRecipient] = useState<string>(currentUserName || '');
-  const [regPhone, setRegPhone] = useState<string>('0909123456');
-  const [regAddress, setRegAddress] = useState<string>('Văn phòng Công ty ASSA ABLOY');
+  const [regShirtSize, setRegShirtSize] = useState<string>(currentUser?.defaultShirtSize || myShirtSize || 'L');
+  const [regEngraving, setRegEngraving] = useState<string>(currentUser?.fullName?.toUpperCase() || currentUserName?.toUpperCase() || '');
+  const [regRecipient, setRegRecipient] = useState<string>(currentUser?.fullName || currentUserName || '');
+  const [regPhone, setRegPhone] = useState<string>(currentUser?.phone || '0909123456');
+  const [regAddress, setRegAddress] = useState<string>(currentUser?.defaultShippingAddress || 'Văn phòng Công ty ASSA ABLOY');
   const [isSubmittingReg, setIsSubmittingReg] = useState(false);
+
+  // Edit BIB states
+  const [editBibInput, setEditBibInput] = useState<string>('');
+  const [isSubmittingBib, setIsSubmittingBib] = useState(false);
+  const [editBibError, setEditBibError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (editBibInitialValue) {
+      setEditBibInput(editBibInitialValue);
+      setEditBibError(null);
+    }
+  }, [editBibInitialValue, showEditBibModal]);
+
+  useEffect(() => {
+    if (currentUser) {
+      if (currentUser.fullName) {
+        setRegRecipient(currentUser.fullName);
+        setRegEngraving(currentUser.fullName.toUpperCase());
+      }
+      if (currentUser.phone) {
+        setRegPhone(currentUser.phone);
+      }
+      if (currentUser.defaultShippingAddress) {
+        setRegAddress(currentUser.defaultShippingAddress);
+      }
+      if (currentUser.defaultShirtSize) {
+        setRegShirtSize(currentUser.defaultShirtSize);
+      }
+    } else if (currentUserName) {
+      setRegEngraving(currentUserName.toUpperCase());
+      setRegRecipient(currentUserName);
+    }
+  }, [currentUser, currentUserName, showRegisterModal]);
 
   useEffect(() => {
     if (currentEvent?.categories && currentEvent.categories.length > 0) {
-      setRegCategoryId(currentEvent.categories[0].id || currentEvent.categories[0].name);
+      const firstCat = currentEvent.categories[0];
+      setRegCategoryId(firstCat.id || firstCat.name);
+      const prefix = firstCat.bibPrefix || 'TOP-';
+      const count = (currentEvent.participantsCount || (currentEvent.participants ? currentEvent.participants.length : 0)) + 101;
+      setRegBibNumber(`${prefix}${String(count).padStart(4, '0')}`);
     }
-    if (currentUserName) {
-      setRegEngraving(currentUserName);
-      setRegRecipient(currentUserName);
-    }
-  }, [currentEvent, currentUserName]);
+  }, [currentEvent]);
+
+  const handleGenerateRandomBib = () => {
+    const randomNum = Math.floor(1000 + Math.random() * 9000);
+    const cat = currentEvent?.categories?.find((c: any) => (c.id || c.name) === regCategoryId);
+    const prefix = cat?.bibPrefix || 'TOP-';
+    setRegBibNumber(`${prefix}${randomNum}`);
+  };
 
   const handleRegisterSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -77,6 +133,8 @@ export default function RunnerEventModals({
       if (onConfirmRegister) {
         await onConfirmRegister(currentEvent.id, {
           categoryId: regCategoryId,
+          bibNumber: regBibNumber.trim().toUpperCase() || undefined,
+          selectedChallengeTierIds: selectedChallengeIds,
           teamId: regTeamId || undefined,
           shirtSize: regShirtSize,
           medalEngravingName: regEngraving || currentUserName,
@@ -90,6 +148,29 @@ export default function RunnerEventModals({
       alert(err.message || 'Lỗi khi đăng ký giải đấu.');
     } finally {
       setIsSubmittingReg(false);
+    }
+  };
+
+  const handleEditBibSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const cleanBib = editBibInput.trim().toUpperCase();
+    if (!cleanBib || cleanBib.length < 2) {
+      setEditBibError('Vui lòng nhập số BIB hợp lệ (tối thiểu 2 ký tự).');
+      return;
+    }
+    setIsSubmittingBib(true);
+    setEditBibError(null);
+    try {
+      if (onSubmitEditBib && editBibEventId) {
+        await onSubmitEditBib(editBibEventId, cleanBib);
+      }
+      if (onCloseEditBibModal) {
+        onCloseEditBibModal();
+      }
+    } catch (err: any) {
+      setEditBibError(err.message || 'Lỗi khi cập nhật số BIB.');
+    } finally {
+      setIsSubmittingBib(false);
     }
   };
   return (
@@ -243,6 +324,84 @@ export default function RunnerEventModals({
                   })}
                 </div>
               </div>
+
+              {/* BIB Number Field */}
+              <div className="space-y-1.5 p-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+                <div className="flex items-center justify-between">
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300">
+                    Số BIB tham gia (Tự động / Tùy chọn) *
+                  </label>
+                  <button
+                    type="button"
+                    onClick={handleGenerateRandomBib}
+                    className="text-[11px] font-bold text-[#FC4C02] hover:underline cursor-pointer"
+                  >
+                    Gợi ý số khác
+                  </button>
+                </div>
+                <input
+                  type="text"
+                  value={regBibNumber}
+                  onChange={(e) => setRegBibNumber(e.target.value.toUpperCase())}
+                  placeholder="VD: TOP50-8888 hoặc 8888"
+                  className="w-full px-3 py-2 text-sm font-mono font-bold rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#0F1420] text-slate-900 dark:text-white uppercase focus:ring-1 focus:ring-[#FC4C02]"
+                  required
+                />
+                <p className="text-[10px] text-slate-500 dark:text-slate-400">
+                  Gợi ý tự động theo cự ly. Bạn có thể sửa thành số may mắn, ngày sinh... (hệ thống kiểm tra không trùng lặp).
+                </p>
+              </div>
+
+              {/* Special Challenges Opt-in */}
+              {currentEvent?.challengeTiers && currentEvent.challengeTiers.length > 0 && (
+                <div className="space-y-2 p-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+                  <div className="flex items-center justify-between">
+                    <label className="block font-semibold text-slate-700 dark:text-slate-300">
+                      Chọn Thử Thách Mở Rộng (Special Challenges)
+                    </label>
+                    <span className="text-[10px] text-amber-500 font-bold px-1.5 py-0.5 rounded bg-amber-500/10">Tùy chọn thêm</span>
+                  </div>
+                  <p className="text-[10px] text-slate-500 dark:text-slate-400">
+                    Chinh phục thêm các mốc huy hiệu danh giá, thử thách tốc độ (speed), streak hoặc single long run:
+                  </p>
+                  <div className="space-y-1.5 pt-0.5">
+                    {currentEvent.challengeTiers.map((tier: any) => {
+                      const isChecked = selectedChallengeIds.includes(tier.id);
+                      return (
+                        <div
+                          key={tier.id}
+                          onClick={() => {
+                            setSelectedChallengeIds((prev) =>
+                              prev.includes(tier.id) ? prev.filter((id) => id !== tier.id) : [...prev, tier.id]
+                            );
+                          }}
+                          className={`p-2.5 rounded-xl border flex items-center justify-between transition cursor-pointer select-none ${
+                            isChecked
+                              ? 'border-amber-500/80 bg-amber-500/10 text-slate-900 dark:text-white font-medium'
+                              : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 text-slate-700 dark:text-slate-300'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className="text-base">{tier.awardBadgeUrl || '🏆'}</span>
+                            <div>
+                              <div className="font-bold text-xs">{tier.tierName}</div>
+                              <div className="text-[10px] text-slate-500 dark:text-slate-400 line-clamp-1">
+                                {tier.rewardDescription}
+                              </div>
+                            </div>
+                          </div>
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            readOnly
+                            className="w-4 h-4 rounded accent-[#FC4C02] pointer-events-none"
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
               {/* Club / Department */}
               <div className="space-y-1">
@@ -488,6 +647,85 @@ export default function RunnerEventModals({
                   className="px-5 py-2 rounded-xl bg-[#FC4C02] hover:bg-[#E34402] text-white font-bold shadow-md shadow-[#FC4C02]/20 transition cursor-pointer"
                 >
                   Tạo Giải Ngay
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+      {/* MODAL 4: ĐỔI SỐ BIB CÁ NHÂN */}
+      {showEditBibModal && (
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="max-w-md w-full rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0F1420] p-6 space-y-5 shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-[#FC4C02]/10 text-[#FC4C02] flex items-center justify-center">
+                  <Trophy className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                    Đổi Số BIB Cá Nhân
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 font-medium line-clamp-1">
+                    {editBibEventTitle || 'Giải đấu đang tham gia'}
+                  </p>
+                </div>
+              </div>
+
+              {onCloseEditBibModal && (
+                <button
+                  type="button"
+                  onClick={onCloseEditBibModal}
+                  className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-white cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+
+            <form onSubmit={handleEditBibSubmit} className="space-y-4 text-xs">
+              <div className="space-y-1.5">
+                <label className="block font-semibold text-slate-700 dark:text-slate-300">
+                  Nhập số BIB mong muốn *
+                </label>
+                <input
+                  type="text"
+                  value={editBibInput}
+                  onChange={(e) => {
+                    setEditBibInput(e.target.value.toUpperCase());
+                    setEditBibError(null);
+                  }}
+                  placeholder="VD: 8888, ALAN99, TOP50-1234"
+                  className="w-full px-3 py-2.5 text-base font-mono font-black uppercase rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#0C101B] text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-[#FC4C02]"
+                  required
+                />
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                  Số BIB có thể bao gồm chữ và số. Hệ thống sẽ kiểm tra đảm bảo tính độc bản (không trùng với VĐV khác trong giải).
+                </p>
+              </div>
+
+              {editBibError && (
+                <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-rose-600 dark:text-rose-400 text-xs font-semibold">
+                  ⚠️ {editBibError}
+                </div>
+              )}
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                {onCloseEditBibModal && (
+                  <button
+                    type="button"
+                    onClick={onCloseEditBibModal}
+                    className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 font-semibold cursor-pointer"
+                  >
+                    Hủy
+                  </button>
+                )}
+                <button
+                  type="submit"
+                  disabled={isSubmittingBib}
+                  className="px-5 py-2 rounded-xl bg-[#FC4C02] hover:bg-[#E34402] text-white font-bold transition shadow-sm cursor-pointer disabled:opacity-50"
+                >
+                  {isSubmittingBib ? 'Đang kiểm tra & Lưu...' : 'Xác Nhận Đổi BIB'}
                 </button>
               </div>
             </form>

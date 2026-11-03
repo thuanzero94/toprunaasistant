@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, OnModuleInit } from '@nestjs/common';
 import * as fs from 'fs';
 import * as path from 'path';
 import {
@@ -7,6 +7,8 @@ import {
   AntiCheatStatus,
   ChallengeConditionType,
   DualGoalProgressSummary,
+  EBibConfig,
+  EBibTheme,
   EventRuleConfigSchema,
   EventStatus,
    EventType,
@@ -147,6 +149,7 @@ export interface StoredEvent {
     totalValidDistanceKm: number;
     totalMultipliedDistanceKm: number;
   }>;
+  ebibConfig?: EBibConfig;
 }
 
 export interface StoredParticipation {
@@ -162,6 +165,7 @@ export interface StoredParticipation {
   teamId: string | null;
   teamName: string | null;
   bibNumber: string;
+  selectedChallengeTierIds?: string[];
   joinedAtIso: string;
   dualGoalProgress: DualGoalProgressSummary;
   raceKitOrder: {
@@ -199,7 +203,7 @@ export interface StoredClub {
 // ============================================================================
 
 @Injectable()
-export class TopRunEngineService {
+export class TopRunEngineService implements OnModuleInit {
   private users: UserProfile[] = [];
   private activities: StoredActivity[] = [];
   private events: StoredEvent[] = [];
@@ -334,6 +338,638 @@ export class TopRunEngineService {
     this.seedInitialData();
     this.loadCachedStravaActivities();
     this.loadPersistentState();
+  }
+
+  async onModuleInit() {
+    await this.syncAndHydrateWithDatabase();
+  }
+
+  /**
+   * Đồng bộ hai chiều giữa In-Memory Cache và PostgreSQL (Prisma).
+   * Đảm bảo tính toàn vẹn dữ liệu, hỗ trợ đa session và không mất dữ liệu khi restart.
+   */
+  async syncAndHydrateWithDatabase() {
+    try {
+      console.log('🔄 [TopRunEngine] Đang đồng bộ và hydrate dữ liệu với PostgreSQL...');
+
+      // 1. Đồng bộ bảng Users
+      await this.syncUsersWithDatabase();
+
+      // 2. Đồng bộ bảng Events, Categories, ChallengeTiers, Teams
+      await this.syncEventsWithDatabase();
+
+      // 3. Đồng bộ bảng Participations & RaceKitOrders
+      await this.syncParticipationsWithDatabase();
+
+      // 4. Đồng bộ bảng Activities & Splits
+      await this.syncActivitiesWithDatabase();
+
+      // 5. Đồng bộ bảng Clubs
+      await this.syncClubsWithDatabase();
+
+      console.log(
+        `✅ [TopRunEngine] Đồng bộ PostgreSQL hoàn tất! (${this.events.length} giải đấu, ${this.participations.length} lượt tham gia, ${this.activities.length} tracklogs, ${this.users.length} vận động viên).`
+      );
+    } catch (err) {
+      console.error('❌ [TopRunEngine] Lỗi đồng bộ PostgreSQL:', err);
+    }
+  }
+
+  private async syncUsersWithDatabase() {
+    try {
+      for (const u of this.users) {
+        try {
+          await prisma.user.upsert({
+            where: { id: u.id },
+            update: {
+              fullName: u.fullName,
+              avatarUrl: u.avatarUrl,
+              departmentOrUnit: u.departmentOrUnit,
+              totalDistanceKm: u.totalDistanceKm,
+              totalActivities: u.totalActivities,
+            },
+            create: {
+              id: u.id,
+              email: u.email || `${u.id}@toprun.vn`,
+              fullName: u.fullName,
+              avatarUrl: u.avatarUrl,
+              departmentOrUnit: u.departmentOrUnit,
+              role: u.role,
+              totalDistanceKm: u.totalDistanceKm,
+              totalActivities: u.totalActivities,
+            },
+          });
+        } catch {}
+      }
+
+      const dbUsers = await prisma.user.findMany();
+      if (dbUsers.length > 0) {
+        const dbConns = await prisma.stravaConnection.findMany().catch(() => []);
+        this.users = dbUsers.map((dbU) => {
+          const conn = dbConns.find((c) => c.userId === dbU.id);
+          return {
+            id: dbU.id,
+            email: dbU.email,
+            fullName: dbU.fullName,
+            avatarUrl:
+              dbU.avatarUrl ||
+              `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(dbU.email)}`,
+            gender: (dbU.gender as any) || 'MALE',
+            departmentOrUnit: dbU.departmentOrUnit || 'Runner Community',
+            role: dbU.role as any as UserRole,
+            totalDistanceKm: dbU.totalDistanceKm,
+            totalActivities: dbU.totalActivities,
+            pr5kSec: dbU.pr5kSec,
+            pr10kSec: dbU.pr10kSec,
+            pr21kSec: dbU.pr21kSec,
+            pr42kSec: dbU.pr42kSec,
+            stravaConnected: Boolean(conn?.isActive),
+            stravaAthleteId: conn?.athleteId || null,
+            stravaUsername: conn?.username || null,
+            lastStravaSyncAt: conn?.lastSyncAt ? conn.lastSyncAt.toISOString() : null,
+          };
+        });
+      }
+    } catch (err) {
+      console.warn('[TopRunEngine] Lỗi đồng bộ users với DB:', err);
+    }
+  }
+
+  private async syncEventsWithDatabase() {
+    try {
+      const dbCount = await prisma.event.count();
+      if (dbCount === 0 || dbCount < this.events.length) {
+        for (const ev of this.events) {
+          await this.persistEventToDb(ev);
+        }
+      }
+
+      const dbEvents = await prisma.event.findMany({
+        include: {
+          categories: true,
+          challengeTiers: true,
+          teams: true,
+        },
+      });
+
+      if (dbEvents.length > 0) {
+        this.events = dbEvents.map((e) => ({
+          id: e.id,
+          slug: e.slug,
+          title: e.title,
+          subtitle: e.subtitle || '',
+          description: e.description,
+          bannerUrl: e.bannerUrl || '',
+          eventType: e.eventType as any,
+          runMode: e.runMode as any,
+          status: e.status as any,
+          startDateIso: e.startDate.toISOString(),
+          endDateIso: e.endDate.toISOString(),
+          creatorId: e.creatorId,
+          participantCount: e.participantCount,
+          ruleConfig: e.ruleConfig as any,
+          ebibConfig: (e.ebibConfig as any) || undefined,
+          categories: e.categories.map((c) => ({
+            id: c.id,
+            name: c.name,
+            targetDistanceKm: c.targetDistanceKm,
+            bibPrefix: c.bibPrefix,
+          })),
+          challengeTiers: e.challengeTiers.map((t) => ({
+            id: t.id,
+            tierName: t.tierName,
+            tierLevel: t.tierLevel as any,
+            conditionType: t.conditionType as any,
+            thresholdValue: t.thresholdValue,
+            minDailyDistanceKm: t.minDailyDistanceKm ?? 2.0,
+            awardBadgeUrl: t.awardBadgeUrl,
+            rewardDescription: t.rewardDescription,
+          })),
+          teams: e.teams.map((tm) => ({
+            id: tm.id,
+            name: tm.name,
+            memberCount: tm.memberCount,
+            totalValidDistanceKm: tm.totalValidDistanceKm,
+            totalMultipliedDistanceKm: tm.totalMultipliedDistanceKm,
+          })),
+        }));
+      }
+    } catch (err) {
+      console.warn('[TopRunEngine] Lỗi đồng bộ events với DB:', err);
+    }
+  }
+
+  async persistEventToDb(ev: StoredEvent) {
+    try {
+      const creatorId = this.users.some((u) => u.id === ev.creatorId)
+        ? ev.creatorId
+        : this.users[0]?.id || 'usr_admin_01';
+
+      await prisma.event.upsert({
+        where: { id: ev.id },
+        update: {
+          title: ev.title,
+          subtitle: ev.subtitle,
+          description: ev.description,
+          bannerUrl: ev.bannerUrl,
+          eventType: ev.eventType as any,
+          runMode: ev.runMode as any,
+          status: ev.status as any,
+          startDate: new Date(ev.startDateIso),
+          endDate: new Date(ev.endDateIso),
+          ruleConfig: ev.ruleConfig as any,
+          ebibConfig: (ev.ebibConfig as any) || null,
+          participantCount: ev.participantCount,
+        },
+        create: {
+          id: ev.id,
+          slug: ev.slug,
+          title: ev.title,
+          subtitle: ev.subtitle,
+          description: ev.description,
+          bannerUrl: ev.bannerUrl,
+          eventType: ev.eventType as any,
+          runMode: ev.runMode as any,
+          status: ev.status as any,
+          startDate: new Date(ev.startDateIso),
+          endDate: new Date(ev.endDateIso),
+          ruleConfig: ev.ruleConfig as any,
+          ebibConfig: (ev.ebibConfig as any) || null,
+          creatorId,
+          participantCount: ev.participantCount,
+        },
+      });
+
+      for (const cat of ev.categories) {
+        await prisma.eventCategory.upsert({
+          where: { id: cat.id },
+          update: {
+            name: cat.name,
+            targetDistanceKm: cat.targetDistanceKm,
+            bibPrefix: cat.bibPrefix,
+          },
+          create: {
+            id: cat.id,
+            eventId: ev.id,
+            name: cat.name,
+            targetDistanceKm: cat.targetDistanceKm,
+            bibPrefix: cat.bibPrefix,
+          },
+        });
+      }
+
+      for (const tier of ev.challengeTiers) {
+        await prisma.eventChallengeTier.upsert({
+          where: { id: tier.id },
+          update: {
+            tierName: tier.tierName,
+            tierLevel: tier.tierLevel,
+            conditionType: tier.conditionType as any,
+            thresholdValue: tier.thresholdValue,
+            minDailyDistanceKm: tier.minDailyDistanceKm ?? 2.0,
+            awardBadgeUrl: tier.awardBadgeUrl,
+            rewardDescription: tier.rewardDescription,
+          },
+          create: {
+            id: tier.id,
+            eventId: ev.id,
+            tierName: tier.tierName,
+            tierLevel: tier.tierLevel,
+            conditionType: tier.conditionType as any,
+            thresholdValue: tier.thresholdValue,
+            minDailyDistanceKm: tier.minDailyDistanceKm ?? 2.0,
+            awardBadgeUrl: tier.awardBadgeUrl,
+            rewardDescription: tier.rewardDescription,
+          },
+        });
+      }
+
+      for (const tm of ev.teams) {
+        await prisma.eventTeam.upsert({
+          where: { id: tm.id },
+          update: {
+            name: tm.name,
+            memberCount: tm.memberCount,
+            totalValidDistanceKm: tm.totalValidDistanceKm,
+            totalMultipliedDistanceKm: tm.totalMultipliedDistanceKm,
+          },
+          create: {
+            id: tm.id,
+            eventId: ev.id,
+            name: tm.name,
+            memberCount: tm.memberCount,
+            totalValidDistanceKm: tm.totalValidDistanceKm,
+            totalMultipliedDistanceKm: tm.totalMultipliedDistanceKm,
+          },
+        });
+      }
+    } catch (err) {
+      console.warn(`[TopRunEngine] Lỗi lưu Event ${ev.id} vào DB:`, err);
+    }
+  }
+
+  private async syncParticipationsWithDatabase() {
+    try {
+      const dbCount = await prisma.eventParticipation.count();
+      if (dbCount === 0 || dbCount < this.participations.length) {
+        for (const p of this.participations) {
+          await this.persistParticipationToDb(p);
+        }
+      }
+
+      const dbParts = await prisma.eventParticipation.findMany({
+        include: {
+          raceKitOrder: true,
+          awardsUnlocked: true,
+          category: true,
+          team: true,
+          user: true,
+          event: true,
+        },
+      });
+
+      if (dbParts.length > 0) {
+        this.participations = dbParts.map((dp) => {
+          const ev = this.events.find((e) => e.id === dp.eventId);
+          const cat = ev?.categories.find((c) => c.id === dp.categoryId);
+
+          return {
+            id: dp.id,
+            eventId: dp.eventId,
+            userId: dp.userId,
+            userName: dp.user.fullName,
+            userAvatar: dp.user.avatarUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${dp.userId}`,
+            userDepartment: dp.user.departmentOrUnit || 'Runner Community',
+            categoryId: dp.categoryId,
+            categoryName: dp.category?.name || cat?.name || 'Mục tiêu Finisher',
+            targetDistanceKm: dp.category?.targetDistanceKm || cat?.targetDistanceKm || 50,
+            teamId: dp.teamId,
+            teamName: dp.team?.name || null,
+            bibNumber: dp.bibNumber,
+            selectedChallengeTierIds: Array.isArray(dp.selectedChallengeTierIds)
+              ? (dp.selectedChallengeTierIds as string[])
+              : [],
+            joinedAtIso: dp.joinedAt.toISOString(),
+            dualGoalProgress: calculateDualGoalProgress({
+              runMode: (ev?.runMode as any) || RunMode.ACCUMULATIVE,
+              targetCategory: {
+                id: dp.categoryId,
+                name: dp.category?.name || 'Target',
+                targetDistanceKm: dp.category?.targetDistanceKm || 50,
+                bibPrefix: dp.bibNumber.split('-')[0] + '-' || 'TOP-',
+              },
+              challengeTiers: ev?.challengeTiers || [],
+              activityLogs: [],
+              previouslyCompletedTargetAtIso: dp.targetCompletedAt ? dp.targetCompletedAt.toISOString() : undefined,
+            }),
+            raceKitOrder: {
+              id: dp.raceKitOrder?.id || `ord_${dp.id}`,
+              shirtSize: dp.raceKitOrder?.shirtSize || 'L',
+              medalEngravingName: dp.raceKitOrder?.medalEngravingName || dp.user.fullName,
+              recipientName: dp.raceKitOrder?.recipientName || dp.user.fullName,
+              phone: dp.raceKitOrder?.phone || '0909123456',
+              shippingAddress: dp.raceKitOrder?.shippingAddress || 'Chưa cập nhật',
+              fulfillmentStatus: (dp.raceKitOrder?.fulfillmentStatus as any) || FulfillmentStatus.PENDING_TARGET,
+              shippingProvider: dp.raceKitOrder?.shippingProvider || null,
+              trackingCode: dp.raceKitOrder?.trackingCode || null,
+            },
+          };
+        });
+      }
+    } catch (err) {
+      console.warn('[TopRunEngine] Lỗi đồng bộ participations với DB:', err);
+    }
+  }
+
+  async persistParticipationToDb(p: StoredParticipation) {
+    try {
+      const evExists = await prisma.event.findUnique({ where: { id: p.eventId } });
+      const userExists = await prisma.user.findUnique({ where: { id: p.userId } });
+      if (!evExists || !userExists) return;
+
+      const catExists = await prisma.eventCategory.findUnique({ where: { id: p.categoryId } });
+      if (!catExists) {
+        await prisma.eventCategory.create({
+          data: {
+            id: p.categoryId,
+            eventId: p.eventId,
+            name: p.categoryName || 'Mục tiêu Finisher',
+            targetDistanceKm: p.targetDistanceKm || 50,
+            bibPrefix: p.bibNumber.split('-')[0] + '-' || 'TOP-',
+          },
+        });
+      }
+
+      await prisma.eventParticipation.upsert({
+        where: {
+          eventId_userId: {
+            eventId: p.eventId,
+            userId: p.userId,
+          },
+        },
+        update: {
+          bibNumber: p.bibNumber,
+          categoryId: p.categoryId,
+          teamId: p.teamId || null,
+          selectedChallengeTierIds: (p.selectedChallengeTierIds || []) as any,
+          validRawDistanceKm: p.dualGoalProgress.target.currentRawDistanceKm,
+          validMultipliedDistanceKm: p.dualGoalProgress.target.currentMultipliedDistanceKm,
+          targetProgressPct: p.dualGoalProgress.target.progressPercentage,
+          isTargetCompleted: p.dualGoalProgress.target.isCompleted,
+          targetCompletedAt: p.dualGoalProgress.target.completedAtIso
+            ? new Date(p.dualGoalProgress.target.completedAtIso)
+            : null,
+        },
+        create: {
+          id: p.id,
+          eventId: p.eventId,
+          userId: p.userId,
+          categoryId: p.categoryId,
+          teamId: p.teamId || null,
+          bibNumber: p.bibNumber,
+          selectedChallengeTierIds: (p.selectedChallengeTierIds || []) as any,
+          validRawDistanceKm: p.dualGoalProgress.target.currentRawDistanceKm,
+          validMultipliedDistanceKm: p.dualGoalProgress.target.currentMultipliedDistanceKm,
+          targetProgressPct: p.dualGoalProgress.target.progressPercentage,
+          isTargetCompleted: p.dualGoalProgress.target.isCompleted,
+          targetCompletedAt: p.dualGoalProgress.target.completedAtIso
+            ? new Date(p.dualGoalProgress.target.completedAtIso)
+            : null,
+          joinedAt: new Date(p.joinedAtIso),
+        },
+      });
+
+      if (p.raceKitOrder) {
+        await prisma.raceKitOrder.upsert({
+          where: { participationId: p.id },
+          update: {
+            shirtSize: p.raceKitOrder.shirtSize,
+            medalEngravingName: p.raceKitOrder.medalEngravingName,
+            recipientName: p.raceKitOrder.recipientName,
+            phone: p.raceKitOrder.phone,
+            shippingAddress: p.raceKitOrder.shippingAddress,
+            fulfillmentStatus: p.raceKitOrder.fulfillmentStatus as any,
+            shippingProvider: p.raceKitOrder.shippingProvider,
+            trackingCode: p.raceKitOrder.trackingCode,
+          },
+          create: {
+            id: p.raceKitOrder.id || `ord_${p.id}`,
+            participationId: p.id,
+            shirtSize: p.raceKitOrder.shirtSize,
+            medalEngravingName: p.raceKitOrder.medalEngravingName,
+            recipientName: p.raceKitOrder.recipientName,
+            phone: p.raceKitOrder.phone,
+            shippingAddress: p.raceKitOrder.shippingAddress,
+            fulfillmentStatus: p.raceKitOrder.fulfillmentStatus as any,
+            shippingProvider: p.raceKitOrder.shippingProvider,
+            trackingCode: p.raceKitOrder.trackingCode,
+          },
+        });
+      }
+    } catch (err) {
+      console.warn(`[TopRunEngine] Lỗi lưu Participation ${p.id} vào DB:`, err);
+    }
+  }
+
+  private async syncActivitiesWithDatabase() {
+    try {
+      const dbCount = await prisma.activity.count();
+      if (dbCount === 0 || dbCount < this.activities.length) {
+        for (const act of this.activities) {
+          await this.persistActivityToDb(act);
+        }
+      }
+
+      const dbActivities = await prisma.activity.findMany({
+        include: {
+          splits: { orderBy: { splitIndex: 'asc' } },
+          kudos: true,
+          comments: true,
+          user: true,
+        },
+        orderBy: { startDate: 'desc' },
+      });
+
+      if (dbActivities.length > 0) {
+        this.activities = dbActivities.map((da) => ({
+          id: da.id,
+          userId: da.userId,
+          userName: da.user.fullName,
+          userAvatar: da.user.avatarUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${da.userId}`,
+          userDepartment: da.user.departmentOrUnit || 'Runner Community',
+          source: da.source as any,
+          externalId: da.externalId,
+          name: da.name,
+          sportType: da.sportType,
+          startDateIso: da.startDate.toISOString(),
+          rawDistanceKm: roundKm(da.distanceMeters / 1000),
+          validDistanceKm: da.validDistanceKm,
+          invalidDistanceKm: roundKm(Math.max(0, da.distanceMeters / 1000 - da.validDistanceKm)),
+          movingTimeSec: da.movingTimeSec,
+          elapsedTimeSec: da.elapsedTimeSec,
+          avgPaceSecPerKm: da.avgPaceSecPerKm,
+          formattedPace: formatPace(da.avgPaceSecPerKm),
+          totalElevationGainMeters: da.totalElevationGain,
+          averageHeartrate: da.avgHeartrate,
+          maxHeartrate: da.maxHeartrate,
+          averageCadenceSpm: da.avgCadenceSpm,
+          calories: da.calories || Math.round(da.validDistanceKm * 68),
+          mapPolyline: da.mapPolyline || '',
+          deviceName: da.deviceName || 'Strava Sync',
+          isManual: da.isManual,
+          isHidden: da.isHidden,
+          antiCheatStatus: da.antiCheatStatus as any,
+          flagReasons: Array.isArray(da.flagReasons) ? (da.flagReasons as string[]) : [],
+          adminReviewNote: da.adminReviewNote,
+          splits: da.splits.map((sp) => ({
+            splitIndex: sp.splitIndex,
+            distanceMeters: sp.distanceMeters,
+            movingTimeSec: sp.movingTimeSec,
+            paceSecPerKm: sp.paceSecPerKm,
+            formattedPace: formatPace(sp.paceSecPerKm),
+            elevationDiffMeters: sp.elevationDiffMeters,
+            averageHeartrate: sp.avgHeartrate,
+            isValid: sp.isValid,
+            invalidReason: sp.invalidReason,
+          })),
+          kudosCount: da.kudosCount || da.kudos.length,
+          kudoedByUserIds: da.kudos.map((k) => k.userId),
+          comments: da.comments.map((cm) => ({
+            id: cm.id,
+            userId: cm.userId,
+            userName: this.users.find((u) => u.id === cm.userId)?.fullName || 'Runner',
+            content: cm.content,
+            createdAtIso: cm.createdAt.toISOString(),
+          })),
+          eventContributions: [],
+        }));
+      }
+    } catch (err) {
+      console.warn('[TopRunEngine] Lỗi đồng bộ activities với DB:', err);
+    }
+  }
+
+  async persistActivityToDb(act: StoredActivity) {
+    try {
+      const userExists = await prisma.user.findUnique({ where: { id: act.userId } });
+      if (!userExists) return;
+
+      const savedAct = await prisma.activity.upsert({
+        where: {
+          source_externalId: {
+            source: act.source as any,
+            externalId: act.externalId,
+          },
+        },
+        update: {
+          name: act.name,
+          sportType: String(act.sportType),
+          validDistanceKm: act.validDistanceKm,
+          movingTimeSec: act.movingTimeSec,
+          elapsedTimeSec: act.elapsedTimeSec,
+          avgPaceSecPerKm: act.avgPaceSecPerKm,
+          totalElevationGain: act.totalElevationGainMeters,
+          avgHeartrate: act.averageHeartrate,
+          maxHeartrate: act.maxHeartrate,
+          avgCadenceSpm: act.averageCadenceSpm,
+          calories: act.calories,
+          mapPolyline: act.mapPolyline,
+          deviceName: act.deviceName,
+          isManual: act.isManual,
+          isHidden: act.isHidden ?? false,
+          antiCheatStatus: act.antiCheatStatus as any,
+          flagReasons: (act.flagReasons || []) as any,
+          adminReviewNote: act.adminReviewNote,
+        },
+        create: {
+          id: act.id,
+          userId: act.userId,
+          source: act.source as any,
+          externalId: act.externalId,
+          name: act.name,
+          sportType: String(act.sportType),
+          startDate: new Date(act.startDateIso),
+          distanceMeters: act.rawDistanceKm * 1000,
+          validDistanceKm: act.validDistanceKm,
+          movingTimeSec: act.movingTimeSec,
+          elapsedTimeSec: act.elapsedTimeSec,
+          avgPaceSecPerKm: act.avgPaceSecPerKm,
+          totalElevationGain: act.totalElevationGainMeters,
+          avgHeartrate: act.averageHeartrate,
+          maxHeartrate: act.maxHeartrate,
+          avgCadenceSpm: act.averageCadenceSpm,
+          calories: act.calories,
+          mapPolyline: act.mapPolyline,
+          deviceName: act.deviceName,
+          isManual: act.isManual,
+          isHidden: act.isHidden ?? false,
+          antiCheatStatus: act.antiCheatStatus as any,
+          flagReasons: (act.flagReasons || []) as any,
+          adminReviewNote: act.adminReviewNote,
+        },
+      });
+
+      if (act.splits && act.splits.length > 0) {
+        await prisma.activitySplit.deleteMany({ where: { activityId: savedAct.id } });
+        await prisma.activitySplit.createMany({
+          data: act.splits.map((sp) => ({
+            activityId: savedAct.id,
+            splitIndex: sp.splitIndex,
+            distanceMeters: sp.distanceMeters,
+            movingTimeSec: sp.movingTimeSec,
+            paceSecPerKm: sp.paceSecPerKm,
+            elevationDiffMeters: sp.elevationDiffMeters || 0,
+            avgHeartrate: sp.averageHeartrate,
+            isValid: sp.isValid,
+            invalidReason: sp.invalidReason,
+          })),
+        });
+      }
+    } catch (err) {
+      console.warn(`[TopRunEngine] Lỗi lưu Activity ${act.id} vào DB:`, err);
+    }
+  }
+
+  async deleteActivityFromDb(actId: string) {
+    try {
+      await prisma.activity.delete({ where: { id: actId } }).catch(() => {});
+    } catch {}
+  }
+
+  async deleteEventFromDb(eventId: string) {
+    try {
+      await prisma.event.delete({ where: { id: eventId } }).catch(() => {});
+    } catch {}
+  }
+
+  private async syncClubsWithDatabase() {
+    try {
+      const dbClubs = await prisma.club.findMany({
+        include: { members: { include: { user: true } } },
+      });
+      if (dbClubs.length === 0 && this.clubs.length > 0) {
+        for (const cl of this.clubs) {
+          await prisma.club.upsert({
+            where: { slug: cl.slug },
+            update: {
+              name: cl.name,
+              description: cl.description,
+              totalDistanceKm: cl.totalDistanceKm,
+              memberCount: cl.memberCount,
+            },
+            create: {
+              id: cl.id,
+              slug: cl.slug,
+              name: cl.name,
+              description: cl.description,
+              totalDistanceKm: cl.totalDistanceKm,
+              memberCount: cl.memberCount,
+              inviteCode: cl.inviteCode,
+            },
+          }).catch(() => {});
+        }
+      }
+    } catch {}
   }
 
   private loadCachedStravaActivities() {
@@ -741,6 +1377,11 @@ export class TopRunEngineService {
             totalMultipliedDistanceKm: 290.8,
           },
         ],
+        ebibConfig: {
+          theme: EBibTheme.MODERN_TITANIUM,
+          primaryColor: '#FC4C02',
+          slogan: 'BỨT PHÁ GIỚI HẠN • RUN TO CONQUER',
+        },
       },
       {
         id: 'evt_mini_half_2026',
@@ -781,6 +1422,11 @@ export class TopRunEngineService {
           },
         ],
         teams: [],
+        ebibConfig: {
+          theme: EBibTheme.NEON_CYBER,
+          primaryColor: '#06B6D4',
+          slogan: 'CYBER HALF MARATHON • SPEED UNLEASHED',
+        },
       },
       {
         id: 'evt_winter_challenge_2026',
@@ -824,6 +1470,83 @@ export class TopRunEngineService {
           },
         ],
         teams: [],
+        ebibConfig: {
+          theme: EBibTheme.MINIMAL_CLEAN,
+          primaryColor: '#2563EB',
+          slogan: 'WINTER TRAIL RUNNER • BĂNG QUA THỬ THÁCH',
+        },
+      },
+      {
+        id: 'evt_summer_2026_completed',
+        slug: 'toprun-summer-sprint-2026',
+        title: 'TOPRUN SUMMER SPRINT 2026 — RỰC LỬA ĐAM MÊ',
+        subtitle: 'Giải chạy mùa hè đã kết thúc thành công rực rỡ • Xem lại Bảng vinh danh & Chứng nhận',
+        description:
+          'Giải đấu mùa hè 2026 đã khép lại với hơn 200 VĐV hoàn thành mục tiêu. Runner có thể tra cứu lại thành tích, tải E-BIB và E-Certificate kỷ niệm tại đây.',
+        bannerUrl: 'https://images.unsplash.com/photo-1530549387789-4c1017266635?auto=format&fit=crop&w=1200&q=80',
+        eventType: EventType.VIRTUAL_RACE,
+        runMode: RunMode.ACCUMULATIVE,
+        status: EventStatus.COMPLETED,
+        startDateIso: '2026-06-01T00:00:00.000Z',
+        endDateIso: '2026-08-31T23:59:59.000Z',
+        creatorId: 'usr_admin_01',
+        participantCount: 215,
+        ruleConfig: EventRuleConfigSchema.parse({
+          allowedSportTypes: [SportType.RUN, SportType.TRAIL_RUN],
+          minPaceSecPerKm: 180,
+          maxPaceSecPerKm: 900,
+          minActivityDistanceKm: 1.0,
+          requireHeartRate: false,
+          allowSplitFiltering: true,
+          weekendMultiplier: 1.0,
+        }),
+        categories: [
+          { id: 'cat_sm_42k', name: 'Mốc Target 42KM Summer Finisher', targetDistanceKm: 42, bibPrefix: 'SUM42-' },
+          { id: 'cat_sm_100k', name: 'Mốc Target 100KM Summer Hero', targetDistanceKm: 100, bibPrefix: 'SUM100-' },
+        ],
+        challengeTiers: [],
+        teams: [],
+        ebibConfig: {
+          theme: EBibTheme.SUNSET_CRIMSON,
+          primaryColor: '#EF4444',
+          slogan: 'SUMMER HEAT • RỰC LỬA ĐAM MÊ',
+        },
+      },
+      {
+        id: 'evt_spring_2027_upcoming',
+        slug: 'toprun-spring-marathon-2027',
+        title: 'TOPRUN SPRING MARATHON 2027 — KHỞI ĐẦU NĂM MỚI',
+        subtitle: 'Sắp mở đăng ký • Khởi động năm mới với những bước chạy bứt phá',
+        description:
+          'Giải chạy mùa xuân chào năm mới 2027. Đang trong giai đoạn chuẩn bị mở cổng đăng ký chính thức, giữ chỗ số BIB đẹp ngay hôm nay!',
+        bannerUrl: 'https://images.unsplash.com/photo-1502680390469-be75c86b636f?auto=format&fit=crop&w=1200&q=80',
+        eventType: EventType.VIRTUAL_RACE,
+        runMode: RunMode.ACCUMULATIVE,
+        status: EventStatus.UPCOMING,
+        startDateIso: '2027-01-01T00:00:00.000Z',
+        endDateIso: '2027-02-28T23:59:59.000Z',
+        creatorId: 'usr_admin_01',
+        participantCount: 45,
+        ruleConfig: EventRuleConfigSchema.parse({
+          allowedSportTypes: [SportType.RUN, SportType.TRAIL_RUN],
+          minPaceSecPerKm: 180,
+          maxPaceSecPerKm: 900,
+          minActivityDistanceKm: 1.0,
+          requireHeartRate: false,
+          allowSplitFiltering: true,
+          weekendMultiplier: 1.0,
+        }),
+        categories: [
+          { id: 'cat_sp_50k', name: 'Mốc Target 50KM Spring Start', targetDistanceKm: 50, bibPrefix: 'SPR50-' },
+          { id: 'cat_sp_100k', name: 'Mốc Target 100KM Spring Master', targetDistanceKm: 100, bibPrefix: 'SPR100-' },
+        ],
+        challengeTiers: [],
+        teams: [],
+        ebibConfig: {
+          theme: EBibTheme.MODERN_TITANIUM,
+          primaryColor: '#FC4C02',
+          slogan: 'NEW YEAR • NEW RUNNING GOALS',
+        },
       },
     ];
 
@@ -1289,6 +2012,69 @@ export class TopRunEngineService {
     return this.users;
   }
 
+  updateUserProfile(
+    userId: string,
+    data: {
+      fullName?: string;
+      avatarUrl?: string;
+      departmentOrUnit?: string;
+    }
+  ) {
+    let user = this.users.find((u) => u.id === userId);
+    if (user) {
+      if (data.fullName !== undefined) user.fullName = data.fullName.trim();
+      if (data.avatarUrl !== undefined) user.avatarUrl = data.avatarUrl;
+      if (data.departmentOrUnit !== undefined) user.departmentOrUnit = data.departmentOrUnit;
+    } else if (data.fullName) {
+      const newUser: UserProfile = {
+        id: userId,
+        email: '',
+        fullName: data.fullName.trim(),
+        avatarUrl: data.avatarUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${userId}`,
+        gender: 'OTHER',
+        departmentOrUnit: data.departmentOrUnit || 'Runner Community',
+        role: UserRole.RUNNER,
+        totalDistanceKm: 0,
+        totalActivities: 0,
+        pr5kSec: null,
+        pr10kSec: null,
+        pr21kSec: null,
+        pr42kSec: null,
+        stravaConnected: false,
+        stravaAthleteId: null,
+        stravaUsername: null,
+        lastStravaSyncAt: null,
+      };
+      this.users.push(newUser);
+      user = newUser;
+    }
+
+    const newName = data.fullName?.trim();
+    const newAvatar = data.avatarUrl;
+    const newDept = data.departmentOrUnit;
+
+    // Cascade update to all participations in tournaments
+    for (const p of this.participations) {
+      if (p.userId === userId) {
+        if (newName) p.userName = newName;
+        if (newAvatar) p.userAvatar = newAvatar;
+        if (newDept !== undefined) p.userDepartment = newDept;
+      }
+    }
+
+    // Cascade update to all tracklog activities
+    for (const a of this.activities) {
+      if (a.userId === userId) {
+        if (newName) a.userName = newName;
+        if (newAvatar) a.userAvatar = newAvatar;
+        if (newDept !== undefined) a.userDepartment = newDept;
+      }
+    }
+
+    this.saveEngineState();
+    return user;
+  }
+
   getUserProfileAndTrophyCase(userId: string) {
     const user = this.users.find((u) => u.id === userId) || this.users[0];
     const userParticipations = this.participations.filter((p) => p.userId === user.id);
@@ -1297,13 +2083,15 @@ export class TopRunEngineService {
 
     // Tổng hợp Tủ Huy Chương (E-BIB, E-Certificate & Challenge Badges)
     const trophyCase = userParticipations.map((part) => {
-      const ev = this.events.find((e) => e.id === part.eventId)!;
+      const ev = this.events.find((e) => e.id === part.eventId) || this.events[0];
       const eBibSvg = generateEBibSvg({
         eventTitle: ev.title,
         categoryName: part.categoryName,
         bibNumber: part.bibNumber,
         runnerName: user.fullName,
         teamName: part.teamName || undefined,
+        config: ev.ebibConfig,
+        eventDate: ev.startDateIso,
       });
 
       const unlockedBadges = part.dualGoalProgress.challenges.filter((c) => c.isUnlocked);
@@ -1378,26 +2166,29 @@ export class TopRunEngineService {
           a.dualGoalProgress.target.currentMultipliedDistanceKm
       );
 
-    const individualLeaderboard = eventParticipations.map((p, idx) => ({
-      rank: idx + 1,
-      participationId: p.id,
-      userId: p.userId,
-      userName: p.userName,
-      userAvatar: p.userAvatar,
-      department: p.userDepartment,
-      bibNumber: p.bibNumber,
-      teamName: p.teamName,
-      targetCategoryName: p.categoryName,
-      targetDistanceKm: p.targetDistanceKm,
-      rawDistanceKm: p.dualGoalProgress.target.currentRawDistanceKm,
-      multipliedDistanceKm: p.dualGoalProgress.target.currentMultipliedDistanceKm,
-      targetProgressPct: p.dualGoalProgress.target.progressPercentage,
-      isTargetCompleted: p.dualGoalProgress.target.isCompleted,
-      unlockedChallengesCount: p.dualGoalProgress.challenges.filter((c) => c.isUnlocked).length,
-      unlockedChallengeBadges: p.dualGoalProgress.challenges
-        .filter((c) => c.isUnlocked)
-        .map((c) => ({ tierName: c.tierName, badge: c.awardBadgeUrl })),
-    }));
+    const individualLeaderboard = eventParticipations.map((p, idx) => {
+      const u = this.users.find((user) => user.id === p.userId);
+      return {
+        rank: idx + 1,
+        participationId: p.id,
+        userId: p.userId,
+        userName: u?.fullName || p.userName,
+        userAvatar: u?.avatarUrl || p.userAvatar,
+        department: u?.departmentOrUnit || p.userDepartment,
+        bibNumber: p.bibNumber,
+        teamName: p.teamName,
+        targetCategoryName: p.categoryName,
+        targetDistanceKm: p.targetDistanceKm,
+        rawDistanceKm: p.dualGoalProgress.target.currentRawDistanceKm,
+        multipliedDistanceKm: p.dualGoalProgress.target.currentMultipliedDistanceKm,
+        targetProgressPct: p.dualGoalProgress.target.progressPercentage,
+        isTargetCompleted: p.dualGoalProgress.target.isCompleted,
+        unlockedChallengesCount: p.dualGoalProgress.challenges.filter((c) => c.isUnlocked).length,
+        unlockedChallengeBadges: p.dualGoalProgress.challenges
+          .filter((c) => c.isUnlocked)
+          .map((c) => ({ tierName: c.tierName, badge: c.awardBadgeUrl })),
+      };
+    });
 
     const teamLeaderboard = [...event.teams]
       .sort((a, b) => b.totalMultipliedDistanceKm - a.totalMultipliedDistanceKm)
@@ -1485,7 +2276,73 @@ export class TopRunEngineService {
 
     this.events.unshift(newEvent);
     this.saveEngineState();
+    this.persistEventToDb(newEvent).catch(() => {});
     return newEvent;
+  }
+
+  checkBibAvailability(eventId: string, bibNumber: string, currentUserId?: string) {
+    const bibClean = (bibNumber || '').trim().toUpperCase();
+    if (!bibClean) {
+      return { available: false, reason: 'Số BIB không được để trống.' };
+    }
+    const event = this.events.find((e) => e.id === eventId || e.slug === eventId);
+    if (!event) return { available: false, reason: 'Không tìm thấy giải đấu.' };
+
+    const duplicate = this.participations.find(
+      (p) =>
+        p.eventId === event.id &&
+        p.bibNumber.toUpperCase() === bibClean &&
+        (!currentUserId || p.userId !== currentUserId)
+    );
+
+    if (duplicate) {
+      // Suggest alternate
+      const numPart = bibClean.match(/\d+/);
+      const nextNum = numPart ? parseInt(numPart[0], 10) + 1 : 101;
+      const prefix = bibClean.replace(/\d+$/, '');
+      const suggested = `${prefix || 'TOP-'}${nextNum}`;
+      return {
+        available: false,
+        reason: `Số BIB "${bibClean}" đã có người đăng ký.`,
+        suggestedBib: suggested,
+      };
+    }
+
+    return { available: true };
+  }
+
+  updateParticipationBib(eventId: string, userId: string, newBibNumber: string) {
+    const bibClean = (newBibNumber || '').trim().toUpperCase();
+    if (!bibClean || bibClean.length < 2) {
+      throw new BadRequestException('Số BIB không hợp lệ (tối thiểu 2 ký tự).');
+    }
+
+    const event = this.events.find((e) => e.id === eventId || e.slug === eventId);
+    if (!event) throw new NotFoundException('Không tìm thấy giải đấu');
+
+    const part = this.participations.find((p) => p.eventId === event.id && p.userId === userId);
+    if (!part) throw new NotFoundException('Vận động viên chưa đăng ký giải đấu này.');
+
+    const duplicate = this.participations.find(
+      (p) => p.eventId === event.id && p.userId !== userId && p.bibNumber.toUpperCase() === bibClean
+    );
+    if (duplicate) {
+      throw new BadRequestException(`Số BIB "${bibClean}" đã có vận động viên khác trong giải sử dụng.`);
+    }
+
+    part.bibNumber = bibClean;
+    this.saveEngineState();
+    prisma.eventParticipation
+      .update({
+        where: { eventId_userId: { eventId: event.id, userId } },
+        data: { bibNumber: bibClean },
+      })
+      .catch(() => {});
+    return {
+      success: true,
+      bibNumber: part.bibNumber,
+      participation: part,
+    };
   }
 
   registerForEvent(
@@ -1494,6 +2351,8 @@ export class TopRunEngineService {
       userId: string;
       categoryId: string;
       teamId?: string;
+      bibNumber?: string;
+      selectedChallengeTierIds?: string[];
       shirtSize: string;
       medalEngravingName?: string;
       recipientName: string;
@@ -1513,8 +2372,23 @@ export class TopRunEngineService {
       return existing;
     }
 
-    const seq = String(this.participations.filter((p) => p.eventId === event.id).length + 101).padStart(4, '0');
-    const bibNumber = `${category.bibPrefix}${seq}`;
+    let finalBib = (payload.bibNumber || '').trim().toUpperCase();
+    if (finalBib) {
+      const isDuplicate = this.participations.some(
+        (p) => p.eventId === event.id && p.bibNumber.toUpperCase() === finalBib
+      );
+      if (isDuplicate) {
+        throw new BadRequestException(`Số BIB "${finalBib}" đã có người đăng ký trong giải. Vui lòng chọn số khác.`);
+      }
+    } else {
+      let count = this.participations.filter((p) => p.eventId === event.id).length + 101;
+      let candidate = `${category.bibPrefix}${String(count).padStart(4, '0')}`;
+      while (this.participations.some((p) => p.eventId === event.id && p.bibNumber.toUpperCase() === candidate.toUpperCase())) {
+        count++;
+        candidate = `${category.bibPrefix}${String(count).padStart(4, '0')}`;
+      }
+      finalBib = candidate;
+    }
 
     const newPart: StoredParticipation = {
       id: `part_${Date.now()}`,
@@ -1528,7 +2402,8 @@ export class TopRunEngineService {
       targetDistanceKm: category.targetDistanceKm,
       teamId: team?.id || null,
       teamName: team?.name || null,
-      bibNumber,
+      bibNumber: finalBib,
+      selectedChallengeTierIds: payload.selectedChallengeTierIds || [],
       joinedAtIso: new Date().toISOString(),
       dualGoalProgress: calculateDualGoalProgress({
         runMode: event.runMode,
@@ -1553,6 +2428,13 @@ export class TopRunEngineService {
     event.participantCount += 1;
     this.recalculateUserParticipation(user.id);
     this.saveEngineState();
+    this.persistParticipationToDb(newPart).catch(() => {});
+    prisma.event
+      .update({
+        where: { id: event.id },
+        data: { participantCount: event.participantCount },
+      })
+      .catch(() => {});
     return newPart;
   }
 
@@ -1578,6 +2460,7 @@ export class TopRunEngineService {
       event.challengeTiers = payload.challengeTiers;
     }
     this.saveEngineState();
+    this.persistEventToDb(event).catch(() => {});
     return event;
   }
 
@@ -1595,6 +2478,7 @@ export class TopRunEngineService {
     }
     this.events.splice(index, 1);
     this.saveEngineState();
+    this.deleteEventFromDb(event.id).catch(() => {});
     return { success: true, message: `Đã xoá giải đấu "${event.title}" thành công.` };
   }
 
@@ -1603,18 +2487,24 @@ export class TopRunEngineService {
   // --------------------------------------------------------------------------
 
   getActivities(userId?: string, role?: string) {
+    let list: StoredActivity[] = [];
     if (role === 'ADMIN') {
-      if (userId) {
-        return this.activities.filter((a) => a.userId === userId);
-      }
-      return this.activities;
+      list = userId ? this.activities.filter((a) => a.userId === userId) : this.activities;
+    } else if (userId) {
+      list = this.activities.filter((a) => a.userId === userId);
+    } else {
+      return [];
     }
-    if (userId) {
-      return this.activities.filter(
-        (a) => a.userId === userId
-      );
-    }
-    return [];
+
+    return list.map((a) => {
+      const u = this.users.find((user) => user.id === a.userId);
+      return {
+        ...a,
+        userName: u?.fullName || a.userName,
+        userAvatar: u?.avatarUrl || a.userAvatar,
+        userDepartment: u?.departmentOrUnit || a.userDepartment,
+      };
+    });
   }
 
   getActivityById(id: string) {
@@ -1702,6 +2592,12 @@ export class TopRunEngineService {
     act.isHidden = isHidden !== undefined ? Boolean(isHidden) : !act.isHidden;
     this.recalculateUserParticipation(act.userId);
     this.saveEngineState();
+    prisma.activity
+      .update({
+        where: { id: act.id },
+        data: { isHidden: act.isHidden },
+      })
+      .catch(() => {});
     return {
       activity: act,
       allActivities: this.activities,
@@ -1725,6 +2621,7 @@ export class TopRunEngineService {
     }
     this.recalculateUserParticipation(removed.userId);
     this.saveEngineState();
+    this.deleteActivityFromDb(removed.id).catch(() => {});
     return {
       removedId: activityId,
       removedName: removed.name,
@@ -1892,6 +2789,19 @@ export class TopRunEngineService {
     });
 
     this.saveEngineState();
+    this.persistActivityToDb(storedAct).catch(() => {});
+    for (const p of updatedParticipations) {
+      this.persistParticipationToDb(p).catch(() => {});
+    }
+    prisma.user
+      .update({
+        where: { id: user.id },
+        data: {
+          totalDistanceKm: user.totalDistanceKm,
+          totalActivities: user.totalActivities,
+        },
+      })
+      .catch(() => {});
 
     return {
       activity: storedAct,
@@ -2054,6 +2964,9 @@ export class TopRunEngineService {
       act.antiCheatStatus = AntiCheatStatus.REJECTED;
       act.adminReviewNote = payload.adminNote || 'Admin đã từ chối buổi chạy do vi phạm quy chế chống gian lận.';
     }
+    this.recalculateUserParticipation(act.userId);
+    this.saveEngineState();
+    this.persistActivityToDb(act).catch(() => {});
     return act;
   }
 
@@ -2095,6 +3008,16 @@ export class TopRunEngineService {
       part.raceKitOrder.trackingCode = payload.trackingCode;
     }
     this.saveEngineState();
+    prisma.raceKitOrder
+      .update({
+        where: { participationId },
+        data: {
+          fulfillmentStatus: payload.fulfillmentStatus as any,
+          shippingProvider: payload.shippingProvider,
+          trackingCode: payload.trackingCode,
+        },
+      })
+      .catch(() => {});
     return part.raceKitOrder;
   }
 }

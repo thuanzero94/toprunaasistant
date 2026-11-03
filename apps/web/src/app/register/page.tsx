@@ -21,6 +21,7 @@ import {
   User,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import TopRunLogo from '../../components/TopRunLogo';
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -126,27 +127,8 @@ export default function RegisterPage() {
       <div className="w-full lg:w-7/12 flex flex-col justify-between p-6 sm:p-12 lg:p-16 overflow-y-auto">
         {/* Top bar with Logo & Theme Switcher */}
         <div className="flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-[#FC4C02] flex items-center justify-center shadow-md">
-              <svg viewBox="0 0 32 32" className="w-5 h-5 text-white" fill="none">
-                <path
-                  d="M6 22L13 10L18 17L26 8"
-                  stroke="currentColor"
-                  strokeWidth="3.2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-                <circle cx="26" cy="8" r="2.5" fill="currentColor" />
-              </svg>
-            </div>
-            <div>
-              <span className="font-extrabold text-lg tracking-tight text-slate-900 dark:text-white leading-none">
-                TOPRun
-              </span>
-              <div className="text-[11px] font-medium text-slate-500 dark:text-slate-400">
-                Virtual Race &amp; Strava Sync
-              </div>
-            </div>
+          <Link href="/" className="hover:opacity-90 transition">
+            <TopRunLogo variant="full" size="md" />
           </Link>
 
           <button

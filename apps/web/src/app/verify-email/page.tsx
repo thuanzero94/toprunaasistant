@@ -15,6 +15,7 @@ import {
   AlertCircle,
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import TopRunLogo from '../../components/TopRunLogo';
 
 export default function VerifyEmailPage() {
   const router = useRouter();
@@ -109,13 +110,10 @@ export default function VerifyEmailPage() {
     <div className="min-h-screen flex items-center justify-center p-4 bg-[#F8FAFC] dark:bg-[#090D16] text-slate-900 dark:text-slate-100">
       <div className="max-w-md w-full p-8 rounded-2xl bg-white dark:bg-[#0F1420] border border-slate-200/80 dark:border-slate-800 shadow-xl text-center space-y-6">
         {/* Brand */}
-        <div className="flex items-center justify-center gap-2">
-          <div className="w-8 h-8 rounded-xl bg-[#FC4C02] flex items-center justify-center text-white font-extrabold text-sm">
-            TR
-          </div>
-          <span className="font-extrabold text-base tracking-tight text-slate-900 dark:text-white">
-            TOPRun Assistant
-          </span>
+        <div className="flex justify-center">
+          <Link href="/" className="hover:opacity-90 transition">
+            <TopRunLogo variant="full" size="md" />
+          </Link>
         </div>
 
         {loading ? (

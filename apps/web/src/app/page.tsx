@@ -42,8 +42,11 @@ import AdminManagementPortal, { AdminEventFormState } from '../components/AdminM
 import RunnerEventModals from '../components/RunnerEventModals';
 import RunnerMyEvents, { MyEventItem } from '../components/RunnerMyEvents';
 import RunnerExploreEvents, { ExploreEventItem } from '../components/RunnerExploreEvents';
+import RunnerTrophyAndEBibView from '../components/RunnerTrophyAndEBibView';
 import TournamentParticipantModal, { ParticipantDetailData } from '../components/TournamentParticipantModal';
 import UserTracklogExplorer, { TracklogActivityItem } from '../components/UserTracklogExplorer';
+import TopRunLogo from '../components/TopRunLogo';
+import MobileBottomNav from '../components/MobileBottomNav';
 import {
   AntiCheatStatus,
   ChallengeConditionType,
@@ -252,6 +255,13 @@ export default function TopRunWebApp() {
   // Runner Tournament Sub-tab & Participant Inspection State
   const [runnerEventSubTab, setRunnerEventSubTab] = useState<'my-events' | 'explore' | 'detail'>('my-events');
   const [selectedParticipantDetail, setSelectedParticipantDetail] = useState<ParticipantDetailData | null>(null);
+  const [trophyCase, setTrophyCase] = useState<any[]>([]);
+  const [editBibModalState, setEditBibModalState] = useState<{
+    show: boolean;
+    eventId: string;
+    bibNumber: string;
+    eventTitle: string;
+  }>({ show: false, eventId: '', bibNumber: '', eventTitle: '' });
 
   const handleDeleteEvent = useCallback(
     async (eventId: string, title: string) => {
@@ -533,6 +543,26 @@ export default function TopRunWebApp() {
     }
   };
 
+  const fetchUserProfileAndTrophyCase = useCallback(async () => {
+    if (!user?.id) return;
+    try {
+      const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1';
+      const res = await fetch(`${apiBase}/users/${encodeURIComponent(user.id)}/profile`);
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data.trophyCase)) {
+          setTrophyCase(data.trophyCase);
+        }
+      }
+    } catch (err) {
+      console.warn('Chưa tải được profile/trophyCase:', (err as any)?.message);
+    }
+  }, [user?.id]);
+
+  useEffect(() => {
+    fetchUserProfileAndTrophyCase();
+  }, [fetchUserProfileAndTrophyCase]);
+
   const handleConfirmRegisterEvent = useCallback(
     async (eventId: string, regData: any) => {
       try {
@@ -547,6 +577,8 @@ export default function TopRunWebApp() {
           body: JSON.stringify({
             userId: user?.id,
             categoryId: regData.categoryId,
+            bibNumber: regData.bibNumber,
+            selectedChallengeTierIds: regData.selectedChallengeTierIds,
             teamId: regData.teamId,
             shirtSize: regData.shirtSize,
             medalEngravingName: regData.medalEngravingName,
@@ -566,13 +598,51 @@ export default function TopRunWebApp() {
           setMyShirtSize(regData.shirtSize);
         }
 
-        await Promise.all([fetchEventsList(), fetchEventDetails(eventId)]);
+        await Promise.all([fetchEventsList(), fetchEventDetails(eventId), fetchUserProfileAndTrophyCase()]);
         setSyncBannerMessage(`🎉 Đăng ký thành công! Bạn đã được cấp số E-BIB: ${data.bibNumber}`);
       } catch (err: any) {
         alert(err.message || 'Lỗi khi gọi API đăng ký.');
       }
     },
-    [user?.id, selectedEventId, fetchEventsList, fetchEventDetails]
+    [user?.id, selectedEventId, fetchEventsList, fetchEventDetails, fetchUserProfileAndTrophyCase]
+  );
+
+  const handleUpdateBib = useCallback(
+    async (eventId: string, newBib: string) => {
+      try {
+        const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1';
+        const token = typeof window !== 'undefined' ? localStorage.getItem('toprun_auth_token') : null;
+        const res = await fetch(`${apiBase}/events/${encodeURIComponent(eventId)}/bib`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({
+            userId: user?.id,
+            bibNumber: newBib,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data.message || 'Cập nhật số BIB thất bại.');
+        }
+
+        if (eventId === selectedEventId) {
+          setMyBibNumber(data.bibNumber);
+        }
+
+        await Promise.all([
+          fetchEventsList(),
+          fetchEventDetails(eventId),
+          fetchUserProfileAndTrophyCase(),
+        ]);
+        setSyncBannerMessage(`🎉 Đã cập nhật thành công số E-BIB mới: ${data.bibNumber}`);
+      } catch (err: any) {
+        throw err;
+      }
+    },
+    [user?.id, selectedEventId, fetchEventsList, fetchEventDetails, fetchUserProfileAndTrophyCase]
   );
 
   useEffect(() => {
@@ -742,13 +812,14 @@ export default function TopRunWebApp() {
   });
 
   const myEventsList: MyEventItem[] = useMemo(() => {
+    if (!user?.id) return [];
     return eventsList
+      .filter((ev) => ev.participants?.some((p: any) => p.userId === user.id))
       .map((ev) => {
-        const part = ev.participants?.find((p: any) => p.userId === user?.id);
-        const isCurrent = ev.id === selectedEventId;
-        const myBib = part?.bibNumber || (isCurrent ? myBibNumber : undefined);
-        const myTarget = part?.targetDistanceKm || (isCurrent ? myTargetKm : 50);
-        const myValidKm = part?.totalValidKm ?? (isCurrent ? dualGoalProgress.target.currentMultipliedDistanceKm : 0);
+        const part = ev.participants?.find((p: any) => p.userId === user.id);
+        const myBib = part?.bibNumber;
+        const myTarget = part?.targetDistanceKm || 50;
+        const myValidKm = part?.totalValidKm || 0;
         return {
           id: ev.id,
           title: ev.title,
@@ -760,15 +831,19 @@ export default function TopRunWebApp() {
           myTotalValidKm: myValidKm,
           myProgressPercent: Math.round((myValidKm / (myTarget || 1)) * 100),
           myRank: part?.rank,
-          myChallengeTier:
-            part?.challengeTier ||
-            (isCurrent ? dualGoalProgress.challenges.find((c) => c.isUnlocked)?.tierName : undefined),
+          myChallengeTier: part?.challengeTier,
           ruleConfig: ev.ruleConfig,
           totalParticipants: ev.participantsCount || (ev.participants ? ev.participants.length : 0),
         };
-      })
-      .filter((ev) => Boolean(ev.myBibNumber));
-  }, [eventsList, user?.id, selectedEventId, myBibNumber, myTargetKm, dualGoalProgress]);
+      });
+  }, [eventsList, user?.id]);
+
+  // Tự động chuyển sang tab "Khám phá giải mới" nếu User chưa tham gia giải nào
+  useEffect(() => {
+    if (eventsList.length > 0 && myEventsList.length === 0 && runnerEventSubTab === 'my-events') {
+      setRunnerEventSubTab('explore');
+    }
+  }, [eventsList.length, myEventsList.length, runnerEventSubTab]);
 
   const joinedEventIds = useMemo(() => {
     return new Set(myEventsList.map((e) => e.id));
@@ -1213,48 +1288,17 @@ export default function TopRunWebApp() {
   return (
     <div className="min-h-screen flex flex-col lg:flex-row bg-[#F8FAFC] dark:bg-[#090D16] text-slate-900 dark:text-slate-100 transition-colors duration-200">
       {/* =====================================================================
-          LEFT SIDEBAR NAVIGATION (DESKTOP FIXED, MOBILE TOP/SCROLLABLE)
+          LEFT SIDEBAR NAVIGATION (DESKTOP FIXED)
          ===================================================================== */}
-      <aside className="lg:w-64 lg:shrink-0 lg:h-screen lg:sticky lg:top-0 border-b lg:border-b-0 lg:border-r border-slate-200/80 dark:border-slate-800/80 bg-white dark:bg-[#0C101B] flex flex-col justify-between z-30">
+      <aside className="hidden lg:flex lg:w-64 lg:shrink-0 lg:h-screen lg:sticky lg:top-0 border-r border-slate-200/80 dark:border-slate-800/80 bg-white dark:bg-[#0C101B] flex-col justify-between z-30">
         <div className="p-4 lg:p-5 space-y-6">
           {/* Brand Logo */}
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-[#FC4C02] flex items-center justify-center shadow-sm shrink-0">
-                <svg viewBox="0 0 32 32" className="w-5 h-5 text-white" fill="none">
-                  <path
-                    d="M6 22L13 10L18 17L26 8"
-                    stroke="currentColor"
-                    strokeWidth="3.2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                  <circle cx="26" cy="8" r="2.5" fill="currentColor" />
-                </svg>
-              </div>
-              <div>
-                <div className="font-extrabold text-base tracking-tight text-slate-900 dark:text-white leading-none">
-                  TOPRun
-                </div>
-                <div className="text-[11px] font-medium text-slate-500 dark:text-slate-400 mt-1">
-                  Virtual Race &amp; Strava Sync
-                </div>
-              </div>
-            </div>
-
-            {/* Mobile Theme Toggle */}
-            <button
-              type="button"
-              onClick={toggleTheme}
-              className="lg:hidden p-2 rounded-xl border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 cursor-pointer"
-              aria-label="Chuyển đổi giao diện Sáng / Tối"
-            >
-              {theme === 'dark' ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4" />}
-            </button>
+            <TopRunLogo variant="full" size="md" onClick={() => setActiveTab('events')} />
           </div>
 
           {/* Primary Navigation */}
-          <nav className="flex lg:flex-col gap-1 overflow-x-auto lg:overflow-visible pb-1 lg:pb-0">
+          <nav className="flex flex-col gap-1">
             {navItems.map((item) => {
               const Icon = item.icon;
               const isActive = activeTab === item.id;
@@ -1263,7 +1307,7 @@ export default function TopRunWebApp() {
                   key={item.id}
                   type="button"
                   onClick={() => setActiveTab(item.id)}
-                  className={`group flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-left transition-all whitespace-nowrap lg:whitespace-normal cursor-pointer ${
+                  className={`group flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-left transition-all cursor-pointer ${
                     isActive
                       ? 'bg-[#FC4C02]/10 dark:bg-[#FC4C02]/15 text-[#FC4C02] font-semibold'
                       : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-white font-medium'
@@ -1275,8 +1319,8 @@ export default function TopRunWebApp() {
                     }`}
                   />
                   <div className="min-w-0">
-                    <div className="text-xs sm:text-[13px] leading-tight truncate">{item.label}</div>
-                    <div className="hidden lg:block text-[11px] text-slate-400 dark:text-slate-500 truncate mt-0.5 font-normal">
+                    <div className="text-[13px] leading-tight truncate">{item.label}</div>
+                    <div className="text-[11px] text-slate-400 dark:text-slate-500 truncate mt-0.5 font-normal">
                       {item.subLabel}
                     </div>
                   </div>
@@ -1367,65 +1411,124 @@ export default function TopRunWebApp() {
       <div className="flex-1 flex flex-col min-w-0">
         {/* Clean Contextual Top Workspace Header */}
         <header className="sticky top-0 z-20 bg-white/85 dark:bg-[#090D16]/85 backdrop-blur-md border-b border-slate-200/80 dark:border-slate-800/80 px-4 sm:px-8 h-16 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-4 min-w-0">
-            <div>
-              <h1 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white tracking-tight">
-                {currentNav.label}
-              </h1>
-              <p className="text-xs text-slate-500 dark:text-slate-400 hidden sm:block">
-                {currentNav.subLabel}
-              </p>
+          {/* MOBILE HEADER (Visible on < lg screens) */}
+          <div className="flex lg:hidden items-center justify-between w-full gap-2">
+            <div className="flex items-center gap-2 min-w-0">
+              <TopRunLogo variant="compact" size="sm" />
+              {eventsList.length > 0 && (
+                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-orange-50 dark:bg-[#FC4C02]/10 border border-orange-200/80 dark:border-[#FC4C02]/25 max-w-[160px] sm:max-w-[220px]">
+                  <Trophy className="w-3 h-3 text-[#FC4C02] shrink-0" />
+                  <select
+                    value={selectedEventId}
+                    onChange={(e) => setSelectedEventId(e.target.value)}
+                    className="bg-transparent text-[11px] font-bold text-slate-800 dark:text-slate-100 w-full truncate focus:outline-none cursor-pointer"
+                  >
+                    {eventsList.map((ev) => (
+                      <option key={ev.id} value={ev.id} className="bg-white dark:bg-[#0F1420] text-slate-900 dark:text-white">
+                        {ev.title}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
             </div>
 
-            {/* BỘ CHỌN GIẢI ĐẤU TRÊN HEADER (MULTI-EVENT SELECTOR) */}
-            {eventsList.length > 0 && (
-              <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-orange-50 dark:bg-[#FC4C02]/10 border border-orange-200/80 dark:border-[#FC4C02]/25 shadow-xs">
-                <Trophy className="w-3.5 h-3.5 text-[#FC4C02] shrink-0" />
-                <span className="text-[11px] font-bold text-[#FC4C02] uppercase tracking-wider shrink-0">
-                  Giải đấu:
-                </span>
-                <select
-                  value={selectedEventId}
-                  onChange={(e) => setSelectedEventId(e.target.value)}
-                  className="bg-transparent text-xs font-bold text-slate-800 dark:text-slate-100 max-w-[200px] lg:max-w-[320px] truncate focus:outline-none cursor-pointer"
+            <div className="flex items-center gap-1.5 shrink-0">
+              {user.role === 'ADMIN' && (
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('admin')}
+                  title="Quản trị giải đấu"
+                  className={`p-2 rounded-xl border transition cursor-pointer ${
+                    activeTab === 'admin'
+                      ? 'bg-[#FC4C02] text-white border-[#FC4C02]'
+                      : 'border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:text-[#FC4C02]'
+                  }`}
                 >
-                  {eventsList.map((ev) => (
-                    <option key={ev.id} value={ev.id} className="bg-white dark:bg-[#0F1420] text-slate-900 dark:text-white">
-                      {ev.title}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
+                  <ShieldCheck className="w-4 h-4" />
+                </button>
+              )}
+
+              <button
+                type="button"
+                onClick={toggleTheme}
+                title={theme === 'dark' ? 'Chuyển sang nền sáng' : 'Chuyển sang nền tối'}
+                className="p-2 rounded-xl border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:text-amber-500 transition cursor-pointer"
+              >
+                {theme === 'dark' ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-slate-600" />}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveTab('account')}
+                title="Tài khoản cá nhân"
+                className="w-8 h-8 rounded-xl overflow-hidden ring-1 ring-slate-200 dark:ring-slate-800 hover:ring-[#FC4C02] transition cursor-pointer shrink-0"
+              >
+                <img
+                  src={
+                    user.avatarUrl ||
+                    `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(user.email)}`
+                  }
+                  alt={user.fullName}
+                  className="w-full h-full object-cover"
+                />
+              </button>
+            </div>
           </div>
 
-          <div className="flex items-center gap-2.5">
-            <button
-              type="button"
-              onClick={() => setShowSimulatorDrawer(!showSimulatorDrawer)}
-              className="lg:hidden px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-800 text-xs font-medium flex items-center gap-1.5 cursor-pointer"
-            >
-              <FlaskConical className="w-3.5 h-3.5 text-[#FC4C02]" />
-              <span>Test dữ liệu</span>
-            </button>
+          {/* DESKTOP HEADER (Visible on >= lg screens) */}
+          <div className="hidden lg:flex items-center justify-between w-full gap-4">
+            <div className="flex items-center gap-4 min-w-0">
+              <div>
+                <h1 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white tracking-tight">
+                  {currentNav.label}
+                </h1>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  {currentNav.subLabel}
+                </p>
+              </div>
 
-            <button
-              type="button"
-              onClick={() => setActiveTab('account')}
-              className="px-3.5 py-2 rounded-xl bg-[#FC4C02]/10 hover:bg-[#FC4C02]/15 text-[#FC4C02] border border-[#FC4C02]/20 text-xs font-semibold flex items-center gap-2 transition cursor-pointer"
-            >
-              <span className="w-2 h-2 rounded-full bg-[#FC4C02]" />
-              <span className="max-w-[130px] sm:max-w-[180px] truncate">{user.fullName}</span>
-            </button>
+              {/* BỘ CHỌN GIẢI ĐẤU TRÊN HEADER (MULTI-EVENT SELECTOR) */}
+              {eventsList.length > 0 && (
+                <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-orange-50 dark:bg-[#FC4C02]/10 border border-orange-200/80 dark:border-[#FC4C02]/25 shadow-xs">
+                  <Trophy className="w-3.5 h-3.5 text-[#FC4C02] shrink-0" />
+                  <span className="text-[11px] font-bold text-[#FC4C02] uppercase tracking-wider shrink-0">
+                    Giải đấu:
+                  </span>
+                  <select
+                    value={selectedEventId}
+                    onChange={(e) => setSelectedEventId(e.target.value)}
+                    className="bg-transparent text-xs font-bold text-slate-800 dark:text-slate-100 max-w-[200px] lg:max-w-[320px] truncate focus:outline-none cursor-pointer"
+                  >
+                    {eventsList.map((ev) => (
+                      <option key={ev.id} value={ev.id} className="bg-white dark:bg-[#0F1420] text-slate-900 dark:text-white">
+                        {ev.title}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </div>
 
-            <button
-              type="button"
-              onClick={logout}
-              title="Đăng xuất tài khoản"
-              className="p-2 rounded-xl border border-slate-200 dark:border-slate-800 text-slate-500 hover:text-red-500 hover:border-red-500/30 hover:bg-red-500/10 transition cursor-pointer"
-            >
-              <LogOut className="w-4 h-4" />
-            </button>
+            <div className="flex items-center gap-2.5">
+              <button
+                type="button"
+                onClick={() => setActiveTab('account')}
+                className="px-3.5 py-2 rounded-xl bg-[#FC4C02]/10 hover:bg-[#FC4C02]/15 text-[#FC4C02] border border-[#FC4C02]/20 text-xs font-semibold flex items-center gap-2 transition cursor-pointer"
+              >
+                <span className="w-2 h-2 rounded-full bg-[#FC4C02]" />
+                <span className="max-w-[130px] sm:max-w-[180px] truncate">{user.fullName}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={logout}
+                title="Đăng xuất tài khoản"
+                className="p-2 rounded-xl border border-slate-200 dark:border-slate-800 text-slate-500 hover:text-red-500 hover:border-red-500/30 hover:bg-red-500/10 transition cursor-pointer"
+              >
+                <LogOut className="w-4 h-4" />
+              </button>
+            </div>
           </div>
         </header>
 
@@ -1495,7 +1598,7 @@ export default function TopRunWebApp() {
         )}
 
         {/* Workspace Content Container */}
-        <main className="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-8 py-6 sm:py-8 space-y-8">
+        <main className="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-8 py-6 sm:py-8 pb-24 lg:pb-8 space-y-8">
           {/* =================================================================
               VIEW 1: TỔNG QUAN GIẢI CHẠY & TIẾN ĐỘ 2 TẦNG
              ================================================================= */}
@@ -1551,6 +1654,10 @@ export default function TopRunWebApp() {
                     setRunnerEventSubTab('detail');
                   }}
                   onGoToExplore={() => setRunnerEventSubTab('explore')}
+                  onOpenEBib={(eventId) => {
+                    setSelectedEventId(eventId);
+                    setActiveTab('trophy');
+                  }}
                 />
               ) : runnerEventSubTab === 'explore' ? (
                 <RunnerExploreEvents
@@ -2063,89 +2170,24 @@ export default function TopRunWebApp() {
               VIEW 3: TỦ HUY CHƯƠNG, E-BIB & E-CERTIFICATE
              ================================================================= */}
           {activeTab === 'trophy' && (
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-              {/* E-BIB Card */}
-              <div className="lg:col-span-5 rounded-2xl bg-white dark:bg-[#0F1420] border border-slate-200/80 dark:border-slate-800/80 p-6 space-y-4 shadow-sm">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-base font-bold text-slate-900 dark:text-white">
-                    Số báo danh điện tử (E-BIB)
-                  </h2>
-                  <span className="text-xs text-emerald-600 dark:text-emerald-400 font-semibold">
-                    Đã kích hoạt
-                  </span>
-                </div>
-
-                <div className="rounded-2xl overflow-hidden border border-slate-800 bg-[#0C101B] p-6 text-center space-y-4 shadow-md">
-                  <div className="bg-[#FC4C02] py-2 px-4 rounded-xl">
-                    <div className="text-[11px] font-extrabold tracking-widest text-white uppercase">
-                      TOPRUN AUTUMN VIRTUAL RACE 2026
-                    </div>
-                    <div className="text-[10px] font-semibold text-white/90">
-                      HẠNG MỤC FINISHER {myTargetKm}KM
-                    </div>
-                  </div>
-                  <div className="py-5">
-                    <div className="text-4xl sm:text-5xl font-extrabold tracking-wider text-white font-mono">
-                      {myBibNumber}
-                    </div>
-                  </div>
-                  <div className="border-t border-dashed border-slate-700 pt-3">
-                    <div className="text-base font-bold text-white tracking-wide">
-                      {user?.fullName?.toUpperCase() || 'VẬN ĐỘNG VIÊN'}
-                    </div>
-                    <div className="text-[11px] text-slate-400 mt-0.5">
-                      {user?.departmentOrUnit?.toUpperCase() || 'TOPRUN ATHLETE'}
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Finisher E-Certificate */}
-              <div className="lg:col-span-7 rounded-2xl bg-white dark:bg-[#0F1420] border border-slate-200/80 dark:border-slate-800/80 p-6 space-y-4 shadow-sm">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-base font-bold text-slate-900 dark:text-white">
-                    Giấy chứng nhận hoàn thành (Finisher E-Certificate)
-                  </h2>
-                  <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60">
-                    Đạt mục tiêu {myTargetKm}KM
-                  </span>
-                </div>
-
-                <div className="rounded-2xl border border-amber-500/40 bg-[#0C101B] p-6 sm:p-8 text-center space-y-5 shadow-md">
-                  <div className="text-[11px] font-bold tracking-[0.2em] text-amber-400 uppercase">
-                    OFFICIAL FINISHER CERTIFICATE
-                  </div>
-                  <h3 className="text-lg sm:text-xl font-extrabold text-white">
-                    {currentEventData?.title?.toUpperCase() || 'TOPRUN VIRTUAL RACE 2026'}
-                  </h3>
-                  <p className="text-xs text-slate-400">
-                    Chứng nhận vận động viên mang số BIB <strong className="text-white font-mono">{myBibNumber}</strong>
-                  </p>
-                  <div className="text-2xl sm:text-3xl font-extrabold text-amber-400">
-                    {user?.fullName?.toUpperCase() || 'VẬN ĐỘNG VIÊN'}
-                  </div>
-
-                  <div className="grid grid-cols-3 gap-3 p-4 rounded-xl bg-slate-900/90 border border-slate-800">
-                    <div>
-                      <div className="text-[10px] text-slate-400 uppercase">Cự ly đăng ký</div>
-                      <div className="text-sm font-bold text-white font-mono mt-1">{myTargetKm} KM</div>
-                    </div>
-                    <div>
-                      <div className="text-[10px] text-slate-400 uppercase">Quãng đường tích lũy</div>
-                      <div className="text-base font-extrabold text-emerald-400 font-mono mt-0.5">
-                        {dualGoalProgress.target.currentMultipliedDistanceKm} KM
-                      </div>
-                    </div>
-                    <div>
-                      <div className="text-[10px] text-slate-400 uppercase">Huy hiệu mở rộng</div>
-                      <div className="text-sm font-bold text-amber-400 font-mono mt-1">
-                        {dualGoalProgress.challenges.filter((c) => c.isUnlocked).length} Huy hiệu
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
+            <RunnerTrophyAndEBibView
+              myEvents={myEventsList}
+              trophyCase={trophyCase}
+              user={user}
+              currentEventData={currentEventData}
+              onOpenEditBib={(eventId, currentBib, eventTitle) =>
+                setEditBibModalState({
+                  show: true,
+                  eventId,
+                  bibNumber: currentBib,
+                  eventTitle,
+                })
+              }
+              onGoToExplore={() => {
+                setActiveTab('events');
+                setRunnerEventSubTab('explore');
+              }}
+            />
           )}
 
           {/* =================================================================
@@ -2236,6 +2278,13 @@ export default function TopRunWebApp() {
         </main>
       </div>
 
+      {/* MOBILE BOTTOM NAVIGATION BAR */}
+      <MobileBottomNav
+        activeTab={activeTab}
+        onChangeTab={setActiveTab}
+        myEventsCount={myEventsList.length}
+      />
+
       <RunnerEventModals
         showShareModal={showShareModal}
         onCloseShareModal={() => setShowShareModal(false)}
@@ -2258,8 +2307,15 @@ export default function TopRunWebApp() {
         onSubmitCreateNewEvent={handleCreateNewEvent}
         currentEvent={eventsList.find((e) => e.id === selectedEventId) || currentEventData}
         clubsList={currentEventData?.teams || []}
+        currentUser={user}
         currentUserName={user?.fullName || ''}
         onConfirmRegister={handleConfirmRegisterEvent}
+        showEditBibModal={editBibModalState.show}
+        onCloseEditBibModal={() => setEditBibModalState((prev) => ({ ...prev, show: false }))}
+        onSubmitEditBib={handleUpdateBib}
+        editBibInitialValue={editBibModalState.bibNumber}
+        editBibEventId={editBibModalState.eventId}
+        editBibEventTitle={editBibModalState.eventTitle}
       />
 
       <TournamentParticipantModal

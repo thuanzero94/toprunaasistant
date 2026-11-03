@@ -1,8 +1,12 @@
 import Link from 'next/link';
+import TopRunLogo from '../components/TopRunLogo';
 
 export default function NotFound() {
   return (
-    <div className="min-h-screen bg-slate-950 text-white flex flex-col items-center justify-center p-6 text-center">
+    <div className="min-h-screen bg-[#090D16] text-white flex flex-col items-center justify-center p-6 text-center">
+      <Link href="/" className="mb-6 hover:opacity-90 transition">
+        <TopRunLogo variant="full" size="lg" />
+      </Link>
       <div className="w-16 h-16 rounded-2xl bg-[#FC4C02]/10 text-[#FC4C02] flex items-center justify-center mb-4 text-2xl font-bold font-mono">
         404
       </div>

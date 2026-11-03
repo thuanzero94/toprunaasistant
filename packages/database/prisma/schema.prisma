@@ -242,6 +242,7 @@ model Activity {
   mapPolyline           String?                    @db.Text // Google Encoded Polyline
   deviceName            String?
   isManual              Boolean                    @default(false)
+  isHidden              Boolean                    @default(false)
 
   // Trạng thái chống gian lận
   antiCheatStatus       AntiCheatStatus            @default(VALID)
@@ -355,6 +356,7 @@ model Event {
 
   // Cấu hình Quy tắc Chấm điểm & Chống gian lận (EventRuleConfig JSON)
   ruleConfig      Json                 // { allowedSportTypes, minPaceSecPerKm, maxPaceSecPerKm, weekendMultiplier, allowSplitFiltering... }
+  ebibConfig      Json?
 
   creatorId       String
   participantCount Int                 @default(0)
@@ -438,6 +440,7 @@ model EventParticipation {
 
   bibNumber                 String                     // VD: "TOP50-0018"
   eBibSvgUrl                String?
+  selectedChallengeTierIds  Json?
 
   // Tiến độ Tầng 1: TARGET (Finisher Goal)
   validRawDistanceKm        Float                      @default(0) // Tổng km thực tế hợp lệ

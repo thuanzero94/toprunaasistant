@@ -45,7 +45,7 @@ export default function RunnerExploreEvents({
   onOpenRegister,
 }: RunnerExploreEventsProps) {
   const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'ALL' | 'ACTIVE' | 'UPCOMING'>('ALL');
+  const [statusFilter, setStatusFilter] = useState<'ACTIVE' | 'UPCOMING' | 'COMPLETED' | 'ALL'>('ACTIVE');
 
   const filteredEvents = useMemo(() => {
     return eventsList.filter((ev) => {
@@ -77,7 +77,7 @@ export default function RunnerExploreEvents({
 
         {/* Filter & Search Controls */}
         <div className="flex flex-wrap items-center gap-2">
-          <div className="relative w-full sm:w-64">
+          <div className="relative w-full sm:w-60">
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
               type="text"
@@ -89,18 +89,23 @@ export default function RunnerExploreEvents({
           </div>
 
           <div className="flex items-center gap-1 bg-white dark:bg-[#0F1420] p-1 rounded-xl border border-slate-200 dark:border-slate-800">
-            {(['ALL', 'ACTIVE', 'UPCOMING'] as const).map((st) => (
+            {([
+              { key: 'ACTIVE', label: 'Đang sẵn sàng' },
+              { key: 'UPCOMING', label: 'Sắp diễn ra' },
+              { key: 'COMPLETED', label: 'Đã kết thúc' },
+              { key: 'ALL', label: 'Tất cả' },
+            ] as const).map(({ key, label }) => (
               <button
-                key={st}
+                key={key}
                 type="button"
-                onClick={() => setStatusFilter(st)}
+                onClick={() => setStatusFilter(key)}
                 className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
-                  statusFilter === st
+                  statusFilter === key
                     ? 'bg-[#FC4C02] text-white shadow-xs'
                     : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                 }`}
               >
-                {st === 'ALL' ? 'Tất cả' : st === 'ACTIVE' ? 'Đang diễn ra' : 'Sắp diễn ra'}
+                {label}
               </button>
             ))}
           </div>
@@ -137,14 +142,19 @@ export default function RunnerExploreEvents({
                     </span>
 
                     {ev.status === EventStatus.ACTIVE ? (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/90 text-white">
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/90 text-white shadow-xs">
                         <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
-                        Đang mở
+                        Đang sẵn sàng
+                      </span>
+                    ) : ev.status === EventStatus.UPCOMING ? (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/90 text-white shadow-xs">
+                        <Clock className="w-3 h-3" />
+                        Sắp diễn ra
                       </span>
                     ) : (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/90 text-white">
-                        <Clock className="w-3 h-3" />
-                        Sắp mở
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-600/90 text-white shadow-xs">
+                        <CheckCircle2 className="w-3 h-3" />
+                        Đã kết thúc
                       </span>
                     )}
                   </div>
@@ -237,7 +247,25 @@ export default function RunnerExploreEvents({
                           onClick={() => onSelectEvent(ev.id)}
                           className="py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition flex items-center justify-center gap-1 cursor-pointer"
                         >
+                          <span>{ev.status === EventStatus.COMPLETED ? 'Xem kết quả' : 'Vào giải đấu'}</span>
+                          <ArrowRight className="w-3.5 h-3.5" />
+                        </button>
+                      ) : ev.status === EventStatus.COMPLETED ? (
+                        <button
+                          type="button"
+                          onClick={() => onSelectEvent(ev.id)}
+                          className="py-2 px-3 rounded-xl bg-slate-700 hover:bg-slate-600 text-white text-xs font-bold transition flex items-center justify-center gap-1 cursor-pointer"
+                        >
                           <span>Xem BXH</span>
+                          <ArrowRight className="w-3.5 h-3.5" />
+                        </button>
+                      ) : ev.status === EventStatus.UPCOMING ? (
+                        <button
+                          type="button"
+                          onClick={() => onOpenRegister(ev)}
+                          className="py-2 px-3 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold transition flex items-center justify-center gap-1 shadow-sm cursor-pointer"
+                        >
+                          <span>Đặt chỗ sớm</span>
                           <ArrowRight className="w-3.5 h-3.5" />
                         </button>
                       ) : (
@@ -246,7 +274,7 @@ export default function RunnerExploreEvents({
                           onClick={() => onOpenRegister(ev)}
                           className="py-2 px-3 rounded-xl bg-[#FC4C02] hover:bg-[#E34402] text-white text-xs font-bold transition flex items-center justify-center gap-1 shadow-sm cursor-pointer"
                         >
-                          <span>Đăng ký</span>
+                          <span>Đăng ký ngay</span>
                           <ArrowRight className="w-3.5 h-3.5" />
                         </button>
                       )}

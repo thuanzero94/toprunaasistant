@@ -74,6 +74,21 @@ export enum FulfillmentStatus {
   DELIVERED = 'DELIVERED',                     // VĐV đã nhận hàng thành công
 }
 
+export enum EBibTheme {
+  MODERN_TITANIUM = 'MODERN_TITANIUM',
+  NEON_CYBER = 'NEON_CYBER',
+  SUNSET_CRIMSON = 'SUNSET_CRIMSON',
+  MINIMAL_CLEAN = 'MINIMAL_CLEAN',
+}
+
+export interface EBibConfig {
+  theme?: EBibTheme | string;
+  primaryColor?: string;
+  accentColor?: string;
+  slogan?: string;
+  backgroundImageUrl?: string;
+}
+
 // ============================================================================
 // 2. ZOD SCHEMAS & INTERFACES CHO RULE ENGINE
 // ============================================================================
