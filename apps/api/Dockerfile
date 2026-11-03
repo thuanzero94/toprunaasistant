@@ -48,14 +48,18 @@ COPY apps/api/package.json ./apps/api/
 # Install production dependencies only
 RUN npm ci --omit=dev
 
-# Copy generated Prisma Client and built artifacts from builder
+# Copy generated Prisma Client, CLI and built artifacts from builder
 COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
+COPY --from=builder /app/node_modules/prisma ./node_modules/prisma
+COPY --from=builder /app/node_modules/.bin ./node_modules/.bin
 COPY --from=builder /app/packages/database/prisma ./packages/database/prisma
 COPY --from=builder /app/packages/database/dist ./packages/database/dist
 COPY --from=builder /app/packages/shared/dist ./packages/shared/dist
 COPY --from=builder /app/apps/api/dist ./apps/api/dist
 
+ENV PATH="/app/node_modules/.bin:${PATH}"
+
 EXPOSE 4000
 
-CMD ["node", "apps/api/dist/main.js"]
+CMD ["sh", "-c", "npx prisma db push --schema=packages/database/prisma/schema.prisma --skip-generate --accept-data-loss && node apps/api/dist/main.js"]

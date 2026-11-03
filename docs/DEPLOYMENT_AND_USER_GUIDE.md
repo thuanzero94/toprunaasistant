@@ -116,18 +116,26 @@ nano .env
 ```
 
 ### Bước 3.3: Khởi động hệ thống Production
-Sử dụng script `manage.sh` đã được tích hợp sẵn:
-```bash
-# Cấp quyền thực thi cho script
-chmod +x manage.sh
+Hệ thống hỗ trợ script điều phối đa nền tảng:
+- **Trên Linux/VPS:**
+  ```bash
+  chmod +x manage.sh
+  ./manage.sh build
+  ./manage.sh start
+  ```
+- **Trên Windows Docker Production:**
+  ```powershell
+  .\manage.ps1 build
+  .\manage.ps1 start
+  ```
 
-# Build & khởi chạy toàn bộ 5 containers ngầm (Nginx, Web, API, Postgres, Redis)
-./manage.sh build
-./manage.sh start
-
-# Đẩy schema Prisma vào cơ sở dữ liệu Postgres
-docker compose -f docker-compose.prod.yml exec -T api npx prisma db push --schema=packages/database/prisma/schema.prisma
-```
+> 💡 **Khởi tạo bảng cơ sở dữ liệu PostgreSQL (Tự động):**
+> Container `api` đã được tích hợp cơ chế tự động chạy `npx prisma db push` ngay khi khởi động.
+> Nếu khởi tạo database lần đầu thủ công, bạn chỉ cần gõ 1 lệnh duy nhất:
+> ```bash
+> docker compose -f docker-compose.prod.yml exec -T api npx prisma db push --schema=packages/database/prisma/schema.prisma --accept-data-loss
+> docker compose -f docker-compose.prod.yml restart api
+> ```
 
 ### Bước 3.4: Kiểm tra trạng thái hệ thống
 ```bash
@@ -140,7 +148,88 @@ Tất cả 5 containers (`toprun-prod-nginx`, `toprun-prod-web`, `toprun-prod-ap
 
 ---
 
-## 4. CẤU HÌNH CLOUDFLARE DNS & SSL CHO MÁY PROD
+## 4. CẤU HÌNH CLOUDFLARE CHO TÊN MIỀN TENTEN.VN & ĐỊNH TUYẾN (CHUẨN HOÁ)
+
+Hệ thống hỗ trợ 2 phương án tùy thuộc vào hạ tầng mạng của bạn, trong đó **Phương án A (Cloudflare Tunnel)** là giải pháp tối ưu nhất cho máy Production hiện tại (không cần mở port router, không lo IP động):
+
+---
+
+### PHƯƠNG ÁN A: MÁY PRODUCTION KHÔNG THỂ MỞ PORT (CLOUDFLARE TUNNEL - KHUYÊN DÙNG CHUẨN)
+> **Áp dụng cho:** Máy chủ Windows Production, máy đặt tại văn phòng/mạng nội bộ không thể mở port router hoặc không có IP tĩnh.  
+> **Ưu điểm:** Hoàn toàn miễn phí, không cần mở bất kỳ cổng nào trên modem, bảo vệ IP gốc, tự động có chứng chỉ bảo mật HTTPS/SSL từ Cloudflare.
+
+#### Bước 4.1. Cập nhật 2 Nameserver chính thức từ TenTen.vn sang Cloudflare
+1. Đăng nhập trang quản trị tên miền tại **[TenTen.vn](https://tenten.vn)**.
+2. Vào mục **Quản lý dịch vụ** ➔ **Tên miền** ➔ Chọn tên miền **`toprunassistant.io.vn`**.
+3. Nhấn nút **Cập nhật thông tin Nameserver** và điền chính xác 2 Nameserver được Cloudflare cấp:
+   - **NS1**: `cody.ns.cloudflare.com`
+   - **NS2**: `lara.ns.cloudflare.com`
+   - **NS3**: *(Xoá trống hoặc để trống)*
+4. Nhấn nút màu cam: **CẬP NHẬT**.
+5. Đăng nhập vào **[Cloudflare Dashboard](https://dash.cloudflare.com/)** ➔ Chọn tên miền `toprunassistant.io.vn` ➔ Nhấn **Done, check nameservers**. Chờ 1 - 5 phút để trạng thái tên miền chuyển sang **Active (Màu xanh lá)**.
+
+#### Bước 4.2. Tạo Cloudflare Tunnel trên Dashboard
+1. Truy cập trang quản trị Cloudflare Zero Trust: **[https://one.dash.cloudflare.com/](https://one.dash.cloudflare.com/)**.
+2. Vào menu bên trái: **Networks** ➔ chọn **Tunnels** ➔ nhấn **Add a tunnel** (hoặc chọn tunnel đã tạo).
+3. Chọn loại kết nối: **Cloudflared** ➔ Đặt tên tunnel (ví dụ: `toprun-prod-tunnel`) ➔ nhấn **Save tunnel**.
+4. Tại mục chọn hệ điều hành, chọn **Windows (64-bit)**:
+   - Cloudflare sẽ hiển thị lệnh cài đặt kèm mã **Token** dịch vụ:
+     ```powershell
+     cloudflared.exe service install <TOKEN_DO_CLOUDFLARE_CAP>
+     ```
+
+#### Bước 4.3. Cài đặt và kích hoạt Cloudflare Tunnel trên máy Production (Windows)
+Mở **PowerShell với quyền Admin** (Run as Administrator) trên máy Production và thực hiện:
+```powershell
+# 1. Tải và cài đặt công cụ cloudflared chính thức
+winget install --id Cloudflare.cloudflared -e
+
+# 2. Cài đặt dịch vụ chạy ngầm với Token do Cloudflare cấp
+cloudflared.exe service install <TOKEN_DO_CLOUDFLARE_CAP>
+
+# 3. Khởi động dịch vụ
+Start-Service cloudflared
+```
+*Trạng thái Tunnel trên Dashboard Cloudflare sẽ hiển thị **Connected (Màu xanh lá)**.*
+
+#### Bước 4.4. Cấu hình định tuyến (Public Hostnames) kết hợp với Nginx Docker
+Trong trang quản trị Tunnel trên Cloudflare, chọn tab **Public Hostnames** ➔ Nhấn **Add a public hostname** để tạo 2 bản ghi định tuyến:
+
+##### 1. Bản ghi Web Frontend:
+- **Subdomain:** *(để trống)*
+- **Domain:** `toprunassistant.io.vn`
+- **Path:** *(để trống)*
+- **Service Type:** `HTTP`
+- **URL:** `localhost:80` (Nginx tự động proxy sang container `toprun-prod-web:3000`)
+- Nhấn **Save hostname**.
+
+##### 2. Bản ghi Backend API & Strava Webhook:
+- **Subdomain:** `api`
+- **Domain:** `toprunassistant.io.vn`
+- **Path:** *(để trống)*
+- **Service Type:** `HTTP`
+- **URL:** `localhost:80` (Nginx tự động proxy sang container `toprun-prod-api:4000`)
+- Nhấn **Save hostname**.
+
+> [!TIP]
+> **Vì sao cả 2 đều trỏ về `localhost:80`?**  
+> Do file cấu hình `docker/nginx/conf.d/default.conf` đã thiết lập sẵn 2 khối `server`:
+> - Nhận request tên miền `toprunassistant.io.vn` ➔ chuyển tiếp nội bộ đến `http://web:3000`.
+> - Nhận request tên miền `api.toprunassistant.io.vn` ➔ chuyển tiếp nội bộ đến `http://api:4000`.  
+> Nginx đóng vai trò là Reverse Proxy tập trung giúp xử lý headers, timeout, và chuyển tiếp IP thực (`CF-Connecting-IP`).
+
+#### Bước 4.5. Kiểm tra kết nối sau khi cấu hình hoàn tất
+1. **Kiểm tra API Backend & Tài liệu Swagger:**
+   Mở trình duyệt truy cập: 👉 **`https://api.toprunassistant.io.vn/api/docs`**
+   - Màn hình hiển thị giao diện **Swagger UI** màu xanh lá của NestJS ➔ API đã thông mạng thành công 100%!
+2. **Kiểm tra Giao diện Web Runner:**
+   Mở trình duyệt truy cập: 👉 **`https://toprunassistant.io.vn`**
+   - Giao diện Next.js 15 hiển thị đầy đủ, không bị lỗi CORS hay lỗi mất kết nối API.
+
+---
+
+### PHƯƠNG ÁN B: MÁY CHỦ VPS LINUX CÓ IP TĨNH CÔNG KHAI (CLOUDFLARE DNS A RECORD)
+> Áp dụng cho: VPS thuê tại Data Center (Vietnix, Linode, AWS...) có IP tĩnh và mở được port 80/443.
 
 1. Đăng nhập trang quản trị **[Cloudflare Dashboard](https://dash.cloudflare.com/)**.
 2. Chọn tên miền **`toprunassistant.io.vn`** ➔ vào mục **DNS** ➔ **Records**:

@@ -9,6 +9,9 @@ import {
 } from '@nestjs/common';
 import { prisma, Gender, UserRole } from '@toprun/database';
 import * as crypto from 'node:crypto';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import * as cp from 'node:child_process';
 import { MailService } from './mail.service';
 
 /**
@@ -182,7 +185,57 @@ export class AccountService implements OnModuleInit {
           },
         });
       }
-    } catch (err) {
+    } catch (err: any) {
+      if (err?.code === 'P2021' || err?.message?.includes('does not exist')) {
+        console.log('🔄 [AccountService] Phát hiện bảng cơ sở dữ liệu chưa được khởi tạo. Đang tự động chạy prisma db push...');
+        try {
+          const candidates = [
+            path.resolve(process.cwd(), 'packages/database/prisma/schema.prisma'),
+            path.resolve(process.cwd(), 'prisma/schema.prisma'),
+            path.resolve(__dirname, '../../packages/database/prisma/schema.prisma'),
+            path.resolve(__dirname, '../../../packages/database/prisma/schema.prisma'),
+          ];
+          const schemaPath = candidates.find((p) => fs.existsSync(p)) || candidates[0];
+          cp.execSync(`npx prisma db push --schema="${schemaPath}" --skip-generate --accept-data-loss`, {
+            stdio: 'inherit',
+            env: process.env,
+          });
+          console.log('✅ [AccountService] Đồng bộ bảng thành công! Đang hoàn tất khởi tạo tài khoản Admin...');
+          const defaultPwdHash = this.hashPassword('TopRun@2026');
+          await prisma.user.upsert({
+            where: { email: 'admin@toprun.vn' },
+            update: { role: UserRole.ADMIN },
+            create: {
+              id: 'usr_admin_01',
+              email: 'admin@toprun.vn',
+              passwordHash: defaultPwdHash,
+              fullName: 'Nguyễn Hữu Thuận (Alan Hoàng)',
+              avatarUrl: 'https://dgalywyr863hv.cloudfront.net/pictures/athletes/126278000/57450920/1/large.jpg',
+              gender: Gender.MALE,
+              phone: '0909123456',
+              departmentOrUnit: 'ASSA ABLOY Engineering',
+              bio: 'Runner & System Architect • Chinh phục mọi giới hạn cùng TOPRunAssistant',
+              role: UserRole.ADMIN,
+              weightKg: 68,
+              heightCm: 173,
+              maxHeartRate: 192,
+              defaultShirtSize: 'L',
+              defaultShippingAddress: 'Tòa nhà ASSA ABLOY Vietnam, Hà Nội',
+              totalDistanceKm: 184.5,
+              totalActivities: 18,
+              pr5kSec: 1290,
+              pr10kSec: 2740,
+              pr21kSec: 6120,
+              pr42kSec: 13500,
+              prCertLink: 'https://www.strava.com/athletes/126278000',
+            },
+          });
+          console.log('✅ [AccountService] Khởi tạo tài khoản Admin mặc định admin@toprun.vn thành công!');
+          return;
+        } catch (pushErr) {
+          console.error('❌ [AccountService] Lỗi tự động đồng bộ bảng PostgreSQL:', pushErr);
+        }
+      }
       console.warn('⚠️ Không thể khởi tạo dữ liệu mặc định vào PostgreSQL:', err);
     }
   }
