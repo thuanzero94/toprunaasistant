@@ -1,6 +1,6 @@
 {
   "name": "top-run-assistant",
-  "version": "1.0.0",
+  "version": "26.11.0",
   "private": true,
   "description": "TOPRunAssistant - Multi-platform Running Management, Tracklog, Challenge & Virtual Race Platform (Android, iOS, Web) with Strava API Sync",
   "workspaces": [

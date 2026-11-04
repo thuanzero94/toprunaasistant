@@ -1,6 +1,6 @@
 {
   "name": "@toprun/web",
-  "version": "1.0.0",
+  "version": "26.11.0",
   "private": true,
   "scripts": {
     "dev": "next dev -H 0.0.0.0 -p 3005",
@@ -25,4 +25,3 @@
     "typescript": "^5.7.2"
   }
 }
-
