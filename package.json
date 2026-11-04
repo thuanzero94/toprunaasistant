@@ -33,13 +33,15 @@
     "prod:reload": "docker compose -f docker-compose.prod.yml build web && docker compose -f docker-compose.prod.yml up -d --no-deps web",
     "prod:restart": "docker compose -f docker-compose.prod.yml build web api && docker compose -f docker-compose.prod.yml up -d --remove-orphans && docker compose -f docker-compose.prod.yml exec -T api npx prisma db push --schema=packages/database/prisma/schema.prisma && docker image prune -f",
     "prod:status": "docker compose -f docker-compose.prod.yml ps",
-    "prod:logs": "docker compose -f docker-compose.prod.yml logs -f"
+    "prod:logs": "docker compose -f docker-compose.prod.yml logs -f",
+    "release": "tsx scripts/release.ts"
   },
   "dependencies": {
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },
   "devDependencies": {
+    "tsx": "^4.23.15",
     "turbo": "^2.3.3",
     "typescript": "^5.7.2"
   },
@@ -47,4 +49,3 @@
     "node": ">=20.0.0"
   }
 }
-
