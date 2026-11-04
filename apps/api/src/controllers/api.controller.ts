@@ -56,7 +56,11 @@ export class ApiController {
       defaultShirtSize?: string;
     }
   ) {
-    return this.accountService.register(body);
+    const res = await this.accountService.register(body);
+    if (res?.user?.id) {
+      await this.engine.ensureUser(res.user.id).catch(() => {});
+    }
+    return res;
   }
 
   @Get('auth/verify-email')
@@ -83,7 +87,11 @@ export class ApiController {
   @HttpCode(200)
   @ApiOperation({ summary: 'Đăng nhập bằng Email & Mật khẩu (nhận JWT Token & Trạng thái Strava)' })
   async loginAccount(@Body() body: { email: string; password: string }) {
-    return this.accountService.login(body);
+    const res = await this.accountService.login(body);
+    if (res?.user?.id) {
+      await this.engine.ensureUser(res.user.id).catch(() => {});
+    }
+    return res;
   }
 
   @Post('auth/google')
@@ -98,7 +106,11 @@ export class ApiController {
       googleId?: string;
     }
   ) {
-    return this.accountService.loginWithGoogle(body);
+    const res = await this.accountService.loginWithGoogle(body);
+    if (res?.user?.id) {
+      await this.engine.ensureUser(res.user.id).catch(() => {});
+    }
+    return res;
   }
 
   @Get('auth/me')
@@ -362,8 +374,8 @@ export class ApiController {
   @ApiOperation({
     summary: 'Hồ sơ chi tiết VĐV + Tủ Huy Chương (E-BIB, E-Certificate, Challenge Badges, PRs, Đơn hàng Race-kit)',
   })
-  getUserProfile(@Param('userId') userId: string) {
-    return this.engine.getUserProfileAndTrophyCase(userId);
+  async getUserProfile(@Param('userId') userId: string) {
+    return await this.engine.getUserProfileAndTrophyCase(userId);
   }
 
   // ==========================================================================
@@ -395,7 +407,7 @@ export class ApiController {
     const callbackData = await this.accountService.handleStravaOAuthCallbackAndSync(code, state);
     const stravaAvatar = callbackData.athlete?.profile || callbackData.athlete?.profile_medium;
     if (stravaAvatar) {
-      this.engine.updateUserProfile(callbackData.userId, { avatarUrl: stravaAvatar });
+      await this.engine.updateUserProfile(callbackData.userId, { avatarUrl: stravaAvatar });
     }
     const syncRes = await this.engine.exchangeStravaCode(code, callbackData.userId).catch(() => ({
       syncedCount: 0,
@@ -428,7 +440,7 @@ export class ApiController {
   async syncLiveStrava(@Body() body: { userId?: string; windowDays?: number }) {
     const userId = body?.userId || 'usr_admin_01';
     const windowDays = body?.windowDays || 30;
-    const syncRes = await this.engine.syncLiveStravaActivities(userId);
+    const syncRes = await this.engine.syncLiveStravaActivities(userId, windowDays);
 
     const validCount = syncRes.syncedActivities.filter(
       (a) => a.antiCheatStatus === AntiCheatStatus.VALID
@@ -476,7 +488,7 @@ export class ApiController {
   @ApiOperation({
     summary: 'Nhận sự kiện Real-time từ Strava Webhook (aspect_type: create | update | delete)',
   })
-  handleStravaWebhookEvent(
+  async handleStravaWebhookEvent(
     @Body()
     eventPayload: {
       object_type: 'activity' | 'athlete';
@@ -489,7 +501,7 @@ export class ApiController {
   ) {
     // Phản hồi dưới 200ms theo chuẩn Strava API và tự động đồng bộ + chấm điểm
     if (eventPayload.object_type === 'activity' && eventPayload.aspect_type === 'create') {
-      const syncResult = this.engine.simulateStravaSync({
+      const syncResult = await this.engine.simulateStravaSync({
         userId: 'usr_admin_01',
         scenario: 'clean_run',
       });
@@ -508,14 +520,14 @@ export class ApiController {
     summary:
       'Giả lập đồng bộ Tracklog từ Strava (1. Buổi chạy chuẩn, 2. Cuối tuần nhân đôi x2, 3. Quên tắt Strava khi đi xe máy ở km cuối để kiểm chứng Split-Level Anti-Cheat)',
   })
-  simulateStravaSync(
+  async simulateStravaSync(
     @Body()
     body: {
       userId?: string;
       scenario?: 'clean_run' | 'weekend_double' | 'mixed_motorbike_cheat';
     }
   ) {
-    return this.engine.simulateStravaSync(body);
+    return await this.engine.simulateStravaSync(body);
   }
 
   // ==========================================================================
@@ -560,8 +572,8 @@ export class ApiController {
 
   @Post('activities/upload-gpx')
   @ApiOperation({ summary: 'Tải lên file GPX XML để tự động phân tích tọa độ, chia Splits từng km và chấm điểm' })
-  uploadGpx(@Body() body: { userId?: string; fileName?: string; gpxXmlContent: string }) {
-    return this.engine.uploadGpxXml(body.userId || 'usr_admin_01', body.gpxXmlContent, body.fileName);
+  async uploadGpx(@Body() body: { userId?: string; fileName?: string; gpxXmlContent: string }) {
+    return await this.engine.uploadGpxXml(body.userId || 'usr_admin_01', body.gpxXmlContent, body.fileName);
   }
 
   @Post('activities/:id/kudos')
@@ -572,8 +584,8 @@ export class ApiController {
 
   @Post('activities/:id/comments')
   @ApiOperation({ summary: 'Bình luận vào buổi chạy' })
-  addComment(@Param('id') id: string, @Body() body: { userId?: string; content: string }) {
-    return this.engine.addComment(id, body.userId || 'usr_admin_01', body.content);
+  async addComment(@Param('id') id: string, @Body() body: { userId?: string; content: string }) {
+    return await this.engine.addComment(id, body.userId || 'usr_admin_01', body.content);
   }
 
   // ==========================================================================
@@ -662,7 +674,7 @@ export class ApiController {
   @ApiOperation({
     summary: 'Đăng ký tham gia giải: Chọn Mốc Target, chọn Đội, đặt size áo Race-kit & Nhận số E-BIB ngay lập tức',
   })
-  registerEvent(
+  async registerEvent(
     @Param('id') eventId: string,
     @Body()
     body: {
@@ -678,7 +690,7 @@ export class ApiController {
       shippingAddress: string;
     }
   ) {
-    return this.engine.registerForEvent(eventId, body);
+    return await this.engine.registerForEvent(eventId, body);
   }
 
   @Patch('events/:id/bib')

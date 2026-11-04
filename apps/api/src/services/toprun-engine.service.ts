@@ -378,6 +378,71 @@ export class TopRunEngineService implements OnModuleInit {
     }
   }
 
+  mapDbUserToStoredUser(dbU: any, conn?: any): UserProfile {
+    return {
+      id: dbU.id,
+      email: dbU.email,
+      fullName: dbU.fullName,
+      avatarUrl:
+        dbU.avatarUrl ||
+        `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(dbU.email)}`,
+      gender: (dbU.gender as any) || 'MALE',
+      departmentOrUnit: dbU.departmentOrUnit || 'Runner Community',
+      role: dbU.role as any as UserRole,
+      honorBadge: dbU.honorBadge || null,
+      totalDistanceKm: Number(dbU.totalDistanceKm || 0),
+      totalActivities: Number(dbU.totalActivities || 0),
+      pr5kSec: dbU.pr5kSec ?? null,
+      pr10kSec: dbU.pr10kSec ?? null,
+      pr21kSec: dbU.pr21kSec ?? null,
+      pr42kSec: dbU.pr42kSec ?? null,
+      stravaConnected: Boolean(conn?.isActive),
+      stravaAthleteId: conn?.athleteId || null,
+      stravaUsername: conn?.username || null,
+      lastStravaSyncAt: conn?.lastSyncAt ? conn.lastSyncAt.toISOString() : null,
+    };
+  }
+
+  async ensureUser(userId: string): Promise<UserProfile> {
+    if (!userId) {
+      throw new BadRequestException('ID vận động viên không được để trống.');
+    }
+    const existing = this.users.find((u) => u.id === userId);
+    if (existing) {
+      return existing;
+    }
+
+    try {
+      const dbU = await prisma.user.findUnique({
+        where: { id: userId },
+        include: { stravaConnection: true },
+      });
+      if (dbU) {
+        const stored = this.mapDbUserToStoredUser(dbU, dbU.stravaConnection);
+        const idx = this.users.findIndex((u) => u.id === stored.id);
+        if (idx >= 0) {
+          this.users[idx] = stored;
+        } else {
+          this.users.push(stored);
+        }
+        return stored;
+      }
+    } catch (err) {
+      console.warn(`[TopRunEngine] ensureUser Prisma query failed for userId=${userId}:`, err);
+    }
+
+    throw new NotFoundException(`Không tìm thấy thông tin vận động viên (ID: ${userId}).`);
+  }
+
+  upsertUserInMemory(user: UserProfile) {
+    const idx = this.users.findIndex((u) => u.id === user.id);
+    if (idx >= 0) {
+      this.users[idx] = { ...this.users[idx], ...user };
+    } else {
+      this.users.push(user);
+    }
+  }
+
   private async syncUsersWithDatabase() {
     try {
       const dbUsersCount = await prisma.user.count();
@@ -408,28 +473,7 @@ export class TopRunEngineService implements OnModuleInit {
         const dbConns = await prisma.stravaConnection.findMany().catch(() => []);
         this.users = dbUsers.map((dbU) => {
           const conn = dbConns.find((c) => c.userId === dbU.id);
-          return {
-            id: dbU.id,
-            email: dbU.email,
-            fullName: dbU.fullName,
-            avatarUrl:
-              dbU.avatarUrl ||
-              `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(dbU.email)}`,
-            gender: (dbU.gender as any) || 'MALE',
-            departmentOrUnit: dbU.departmentOrUnit || 'Runner Community',
-            role: dbU.role as any as UserRole,
-            honorBadge: dbU.honorBadge || null,
-            totalDistanceKm: dbU.totalDistanceKm,
-            totalActivities: dbU.totalActivities,
-            pr5kSec: dbU.pr5kSec,
-            pr10kSec: dbU.pr10kSec,
-            pr21kSec: dbU.pr21kSec,
-            pr42kSec: dbU.pr42kSec,
-            stravaConnected: Boolean(conn?.isActive),
-            stravaAthleteId: conn?.athleteId || null,
-            stravaUsername: conn?.username || null,
-            lastStravaSyncAt: conn?.lastSyncAt ? conn.lastSyncAt.toISOString() : null,
-          };
+          return this.mapDbUserToStoredUser(dbU, conn);
         });
       }
     } catch (err) {
@@ -1029,15 +1073,16 @@ export class TopRunEngineService implements OnModuleInit {
     this.stravaConfig.accessToken = tokenData.access_token;
     this.stravaConfig.refreshToken = tokenData.refresh_token;
 
-    const user = this.users.find((u) => u.id === userId) || this.users[0];
+    const user = await this.ensureUser(userId);
     if (tokenData.athlete) {
       user.stravaConnected = true;
       user.stravaAthleteId = String(tokenData.athlete.id);
       user.stravaUsername = tokenData.athlete.username || `${tokenData.athlete.firstname || ''} ${tokenData.athlete.lastname || ''}`.trim();
+      this.saveEngineState();
     }
 
     // Tự động đồng bộ ngay các hoạt động gần nhất sau khi cấp quyền thành công
-    const syncRes = await this.syncLiveStravaActivities(user.id);
+    const syncRes = await this.syncLiveStravaActivities(user.id, 30);
     return {
       athlete: tokenData.athlete,
       syncedCount: syncRes.syncedActivities.length,
@@ -1047,25 +1092,29 @@ export class TopRunEngineService implements OnModuleInit {
 
   /**
    * Gọi trực tiếp Strava API v3 (`GET /api/v3/athlete/activities` & `/api/v3/activities/:id`)
-   * bằng Client ID 292007 và Token của bạn để kéo Tracklog thật về hệ thống
+   * bằng Client ID và Token của từng VĐV để kéo Tracklog thật về hệ thống
    */
-  async syncLiveStravaActivities(userId = 'usr_admin_01') {
+  async syncLiveStravaActivities(userId = 'usr_admin_01', windowDays: number = 30) {
     process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+
+    const user = await this.ensureUser(userId);
 
     // 0. Đọc Token & Strava App được gán của User từ bảng strava_connections trong PostgreSQL
     let clientId = this.stravaConfig.clientId;
     let clientSecret = this.stravaConfig.clientSecret;
+    let userAccessToken = this.stravaConfig.accessToken;
+    let userRefreshToken = this.stravaConfig.refreshToken;
 
     try {
       const dbConn = await prisma.stravaConnection.findUnique({
-        where: { userId },
+        where: { userId: user.id },
         include: { stravaApp: true },
       });
       if (dbConn?.accessToken) {
-        this.stravaConfig.accessToken = dbConn.accessToken;
+        userAccessToken = dbConn.accessToken;
       }
       if (dbConn?.refreshToken) {
-        this.stravaConfig.refreshToken = dbConn.refreshToken;
+        userRefreshToken = dbConn.refreshToken;
       }
       if (dbConn?.stravaApp) {
         clientId = dbConn.stravaApp.clientId;
@@ -1076,55 +1125,61 @@ export class TopRunEngineService implements OnModuleInit {
     }
 
     // 1. Làm mới Access Token bằng Refresh Token với đúng App credentials đã phân bổ
-    try {
-      const refreshRes = await fetch('https://www.strava.com/oauth/token', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          client_id: clientId,
-          client_secret: clientSecret,
-          refresh_token: this.stravaConfig.refreshToken,
-          grant_type: 'refresh_token',
-        }),
-      });
-      if (refreshRes.ok) {
-        const refreshed: any = await refreshRes.json();
-        if (refreshed.access_token) this.stravaConfig.accessToken = refreshed.access_token;
-        if (refreshed.refresh_token) this.stravaConfig.refreshToken = refreshed.refresh_token;
+    if (userRefreshToken) {
+      try {
+        const refreshRes = await fetch('https://www.strava.com/oauth/token', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            client_id: clientId,
+            client_secret: clientSecret,
+            refresh_token: userRefreshToken,
+            grant_type: 'refresh_token',
+          }),
+        });
+        if (refreshRes.ok) {
+          const refreshed: any = await refreshRes.json();
+          if (refreshed.access_token) userAccessToken = refreshed.access_token;
+          if (refreshed.refresh_token) userRefreshToken = refreshed.refresh_token;
 
-        await prisma.stravaConnection
-          .update({
-            where: { userId },
-            data: {
-              accessToken: refreshed.access_token,
-              refreshToken: refreshed.refresh_token || undefined,
-              expiresAt: Number(refreshed.expires_at || Math.floor(Date.now() / 1000) + 21600),
-            },
-          })
-          .catch(() => {});
+          await prisma.stravaConnection
+            .update({
+              where: { userId: user.id },
+              data: {
+                accessToken: refreshed.access_token,
+                refreshToken: refreshed.refresh_token || undefined,
+                expiresAt: Number(refreshed.expires_at || Math.floor(Date.now() / 1000) + 21600),
+              },
+            })
+            .catch(() => {});
+        }
+      } catch {
+        // Giữ nguyên accessToken hiện tại nếu refresh lỗi
       }
-    } catch {
-      // Giữ nguyên accessToken hiện tại nếu refresh lỗi
     }
 
     // 2. Lấy thông tin Athlete thật từ Strava
     const athleteRes = await fetch('https://www.strava.com/api/v3/athlete', {
-      headers: { Authorization: `Bearer ${this.stravaConfig.accessToken}` },
+      headers: { Authorization: `Bearer ${userAccessToken}` },
     });
     const athleteData: any = athleteRes.ok ? await athleteRes.json() : null;
 
     if (athleteData?.id) {
-      const user = this.users.find((u) => u.id === userId) || this.users[0];
       user.stravaConnected = true;
       user.stravaAthleteId = String(athleteData.id);
       user.stravaUsername =
         athleteData.username || `${athleteData.firstname || ''} ${athleteData.lastname || ''}`.trim();
+      this.saveEngineState();
     }
 
-    // 3. Lấy danh sách Activities từ Strava (yêu cầu scope activity:read hoặc activity:read_all)
-    const actsRes = await fetch('https://www.strava.com/api/v3/athlete/activities?per_page=10', {
-      headers: { Authorization: `Bearer ${this.stravaConfig.accessToken}` },
-    });
+    // 3. Lấy danh sách Activities từ Strava theo cửa sổ thời gian windowDays (mặc định 30 ngày)
+    const afterTimestamp = Math.floor(Date.now() / 1000) - windowDays * 86400;
+    const actsRes = await fetch(
+      `https://www.strava.com/api/v3/athlete/activities?after=${afterTimestamp}&per_page=50`,
+      {
+        headers: { Authorization: `Bearer ${userAccessToken}` },
+      }
+    );
 
     if (!actsRes.ok) {
       const errBody = await actsRes.text();
@@ -1133,7 +1188,7 @@ export class TopRunEngineService implements OnModuleInit {
         athlete: athleteData,
         message:
           'Token mặc định trên trang cài đặt Strava chỉ có phạm vi "read" (chỉ đọc hồ sơ). Hãy nhấn vào đường dẫn authorizeUrl bên dưới (1 click) để cấp quyền "activity:read_all" đọc toàn bộ Tracklog chạy bộ!',
-        authorizeUrl: `https://www.strava.com/oauth/authorize?client_id=${this.stravaConfig.clientId}&response_type=code&redirect_uri=${encodeURIComponent(this.stravaConfig.redirectUri)}&approval_prompt=force&scope=read,activity:read_all&state=${userId}`,
+        authorizeUrl: `https://www.strava.com/oauth/authorize?client_id=${clientId}&response_type=code&redirect_uri=${encodeURIComponent(this.stravaConfig.redirectUri)}&approval_prompt=force&scope=read,activity:read_all&state=${user.id}`,
         stravaError: errBody,
         syncedActivities: [],
       };
@@ -1144,7 +1199,21 @@ export class TopRunEngineService implements OnModuleInit {
 
     for (const summaryAct of stravaList) {
       const extId = String(summaryAct.id);
-      if (this.deletedExternalIds.has(extId) || this.activities.some((a) => a.externalId === extId)) {
+      if (this.deletedExternalIds.has(extId)) {
+        continue;
+      }
+
+      // Tự động kiểm tra và chuyển giao quyền sở hữu nếu bài chạy này từng bị gán nhầm sang Admin trước đó
+      const existingAct = this.activities.find((a) => a.externalId === extId);
+      if (existingAct) {
+        if (existingAct.userId !== user.id) {
+          existingAct.userId = user.id;
+          existingAct.userName = user.fullName;
+          existingAct.userAvatar = user.avatarUrl;
+          existingAct.userDepartment = user.departmentOrUnit;
+          this.persistActivityToDb(existingAct).catch(() => {});
+          syncedActivities.push(existingAct);
+        }
         continue;
       }
 
@@ -1152,7 +1221,7 @@ export class TopRunEngineService implements OnModuleInit {
       let detailAct = summaryAct;
       try {
         const detailRes = await fetch(`https://www.strava.com/api/v3/activities/${summaryAct.id}`, {
-          headers: { Authorization: `Bearer ${this.stravaConfig.accessToken}` },
+          headers: { Authorization: `Bearer ${userAccessToken}` },
         });
         if (detailRes.ok) {
           detailAct = await detailRes.json();
@@ -1188,12 +1257,12 @@ export class TopRunEngineService implements OnModuleInit {
         splits: rawSplits,
       };
 
-      const ingested = this.ingestAndScoreActivity(userId, rawInput, ActivitySource.STRAVA);
+      const ingested = this.ingestAndScoreActivity(user.id, rawInput, ActivitySource.STRAVA, user);
       syncedActivities.push(ingested.activity);
     }
 
     this.activities.sort((a, b) => new Date(b.startDateIso).getTime() - new Date(a.startDateIso).getTime());
-    this.recalculateUserParticipation(userId);
+    this.recalculateUserParticipation(user.id);
     this.saveActivitiesCache();
 
     return {
@@ -2121,8 +2190,8 @@ export class TopRunEngineService implements OnModuleInit {
     }
   }
 
-  getUserProfileAndTrophyCase(userId: string) {
-    const user = this.users.find((u) => u.id === userId) || this.users[0];
+  async getUserProfileAndTrophyCase(userId: string) {
+    const user = await this.ensureUser(userId);
     const userParticipations = this.participations.filter((p) => p.userId === user.id);
     const userActivities = this.activities.filter((a) => a.userId === user.id);
     const userNotifications = this.notifications.filter((n) => n.userId === user.id);
@@ -2397,7 +2466,7 @@ export class TopRunEngineService implements OnModuleInit {
     };
   }
 
-  registerForEvent(
+  async registerForEvent(
     eventId: string,
     payload: {
       userId: string;
@@ -2415,7 +2484,7 @@ export class TopRunEngineService implements OnModuleInit {
     const event = this.events.find((e) => e.id === eventId || e.slug === eventId);
     if (!event) throw new NotFoundException('Không tìm thấy giải đấu');
 
-    const user = this.users.find((u) => u.id === payload.userId) || this.users[0];
+    const user = await this.ensureUser(payload.userId);
     const category = event.categories.find((c) => c.id === payload.categoryId) || event.categories[0];
     const team = event.teams.find((t) => t.id === payload.teamId) || null;
 
@@ -2693,13 +2762,17 @@ export class TopRunEngineService implements OnModuleInit {
   ingestAndScoreActivity(
     userId: string,
     rawInput: RawActivityInput,
-    source: ActivitySource = ActivitySource.STRAVA
+    source: ActivitySource = ActivitySource.STRAVA,
+    preloadedUser?: UserProfile
   ): {
     activity: StoredActivity;
     evaluation: ActivityEvaluationResult;
     updatedParticipations: StoredParticipation[];
   } {
-    const user = this.users.find((u) => u.id === userId) || this.users[0];
+    const user = preloadedUser || this.users.find((u) => u.id === userId);
+    if (!user) {
+      throw new NotFoundException(`Không tìm thấy vận động viên (ID: ${userId}) để ghi nhận hoạt động.`);
+    }
 
     // Tìm tất cả giải đấu mà user đang tham gia
     const userParts = this.participations.filter((p) => p.userId === user.id);
@@ -2870,11 +2943,12 @@ export class TopRunEngineService implements OnModuleInit {
    * - `clean_run`: Buổi chạy chuẩn 10km (hoặc cuối tuần x2 = 20km)
    * - `mixed_motorbike_cheat`: Buổi chạy 6km trong đó 5km đầu chạy bộ chuẩn, km thứ 6 quên tắt đồng hồ khi đi xe máy (01:35/km)
    */
-  simulateStravaSync(params: {
+  async simulateStravaSync(params: {
     userId?: string;
     scenario?: 'clean_run' | 'weekend_double' | 'mixed_motorbike_cheat';
   }) {
     const userId = params.userId || 'usr_admin_01';
+    const user = await this.ensureUser(userId);
     const scenario = params.scenario || 'clean_run';
 
     if (scenario === 'mixed_motorbike_cheat') {
@@ -2900,7 +2974,7 @@ export class TopRunEngineService implements OnModuleInit {
           { splitIndex: 6, distanceMeters: 1000, movingTimeSec: 95, elevationDiffMeters: 0, averageHeartrate: 118 }, // 01:35/km -> Xe máy!
         ],
       };
-      return this.ingestAndScoreActivity(userId, rawInput, ActivitySource.STRAVA);
+      return this.ingestAndScoreActivity(user.id, rawInput, ActivitySource.STRAVA, user);
     }
 
     const isWeekend = scenario === 'weekend_double';
@@ -2931,15 +3005,16 @@ export class TopRunEngineService implements OnModuleInit {
       })),
     };
 
-    return this.ingestAndScoreActivity(userId, rawInput, ActivitySource.STRAVA);
+    return this.ingestAndScoreActivity(user.id, rawInput, ActivitySource.STRAVA, user);
   }
 
-  uploadGpxXml(userId: string, gpxXml: string, fileName?: string) {
+  async uploadGpxXml(userId: string, gpxXml: string, fileName?: string) {
     if (!gpxXml || !gpxXml.includes('<trkpt')) {
       throw new BadRequestException('Nội dung file GPX không hợp lệ (thiếu thẻ <trkpt>).');
     }
+    const user = await this.ensureUser(userId);
     const rawInput = parseGpxToActivityInput(gpxXml, fileName);
-    return this.ingestAndScoreActivity(userId, rawInput, ActivitySource.GPX_UPLOAD);
+    return this.ingestAndScoreActivity(user.id, rawInput, ActivitySource.GPX_UPLOAD, user);
   }
 
   // --------------------------------------------------------------------------
@@ -2960,9 +3035,9 @@ export class TopRunEngineService implements OnModuleInit {
     return act;
   }
 
-  addComment(activityId: string, userId: string, content: string) {
+  async addComment(activityId: string, userId: string, content: string) {
     const act = this.getActivityById(activityId);
-    const user = this.users.find((u) => u.id === userId) || this.users[0];
+    const user = await this.ensureUser(userId);
     const cmt = {
       id: `cmt_${Date.now()}`,
       userId: user.id,
