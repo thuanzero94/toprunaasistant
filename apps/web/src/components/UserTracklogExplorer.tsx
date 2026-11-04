@@ -22,7 +22,7 @@ import {
   formatPace,
   roundKm,
 } from '@toprun/shared';
-import TracklogChartsOverview from './tracklog/TracklogChartsOverview';
+import TracklogDistanceChart from './tracklog/TracklogDistanceChart';
 import TracklogActivityCard from './tracklog/TracklogActivityCard';
 import TracklogDetailView from './tracklog/TracklogDetailView';
 
@@ -296,9 +296,9 @@ export default function UserTracklogExplorer({
       </div>
 
       {/* =====================================================================
-          2. BỘ 4 BIỂU ĐỒ PHÂN TÍCH CHUYÊN SÂU CHO RUNNER
+          2. BIỂU ĐỒ QUÃNG ĐƯỜNG TẬP LUYỆN TƯƠNG TÁC THEO TUẦN / THÁNG / NĂM
          ===================================================================== */}
-      <TracklogChartsOverview
+      <TracklogDistanceChart
         activities={filteredActivities}
         selectedActivityId={selectedActivityId}
         onSelectActivity={(id) => {

@@ -236,6 +236,93 @@ function SharkCrown({ width, height }: { width: number; height: number }) {
 }
 
 /**
+ * SVG VƯƠNG MIỆN HOÀNG ĐẾ KIẾN TRÚC SƯ ĐỘC BẢN CHO FOUNDER (ROYAL ARCHITECT CROWN)
+ */
+function FounderCrown({ width, height }: { width: number; height: number }) {
+  return (
+    <div
+      className="absolute left-1/2 -translate-x-1/2 z-20 pointer-events-none drop-shadow-[0_0_10px_rgba(245,158,11,0.9)] transition-transform duration-300 group-hover:-translate-y-0.5"
+      style={{ width: `${width}px`, height: `${height}px` }}
+    >
+      <svg
+        viewBox="0 0 64 42"
+        fill="none"
+        xmlns="http://www.w3.org/2000/svg"
+        className="w-full h-full"
+      >
+        <defs>
+          <linearGradient id="founderGoldBody" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="#FEF08A" />
+            <stop offset="35%" stopColor="#F59E0B" />
+            <stop offset="70%" stopColor="#D97706" />
+            <stop offset="100%" stopColor="#78350F" />
+          </linearGradient>
+          <linearGradient id="founderPeakGold" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stopColor="#FFFBEB" />
+            <stop offset="50%" stopColor="#FBBF24" />
+            <stop offset="100%" stopColor="#B45309" />
+          </linearGradient>
+          <radialGradient id="rubyGlow" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stopColor="#FCA5A5" />
+            <stop offset="40%" stopColor="#EF4444" />
+            <stop offset="100%" stopColor="#991B1B" />
+          </radialGradient>
+        </defs>
+
+        {/* Hào quang tia sáng đỉnh trung tâm */}
+        <circle cx="32" cy="10" r="10" fill="#F59E0B" opacity="0.25" filter="blur(2px)" />
+
+        {/* Thân vương miện hoàng gia 5 đỉnh chạm khắc */}
+        <path
+          d="M 12 34 
+             L 16 16 
+             L 24 24 
+             L 32 4 
+             L 40 24 
+             L 48 16 
+             L 52 34 
+             C 44 38, 20 38, 12 34 Z"
+          fill="url(#founderGoldBody)"
+          stroke="#FEF08A"
+          strokeWidth="1.2"
+          strokeLinejoin="round"
+        />
+
+        {/* Đai vương miện chân đế kim cương */}
+        <path
+          d="M 13 32 C 22 36, 42 36, 51 32 L 51 35 C 42 39, 22 39, 13 35 Z"
+          fill="url(#founderPeakGold)"
+          stroke="#F59E0B"
+          strokeWidth="0.8"
+        />
+
+        {/* Đỉnh chóp ngọc & sao danh vọng 3 ngọn chính */}
+        {/* Đỉnh giữa - Viên hồng ngọc Ruby Hoàng Gia */}
+        <circle cx="32" cy="4" r="3.2" fill="url(#rubyGlow)" stroke="#FFFBEB" strokeWidth="0.8" />
+        <circle cx="31" cy="3" r="0.8" fill="#FFFFFF" />
+
+        {/* Đỉnh trái & phải */}
+        <circle cx="16" cy="16" r="2.2" fill="#FEF08A" stroke="#B45309" strokeWidth="0.6" />
+        <circle cx="48" cy="16" r="2.2" fill="#FEF08A" stroke="#B45309" strokeWidth="0.6" />
+
+        {/* Họa tiết Ngôi sao Kiến trúc Sư ở giữa ngực vương miện */}
+        <path
+          d="M 32 18 L 33.5 22 L 38 22.5 L 34.5 25.5 L 35.5 30 L 32 27.5 L 28.5 30 L 29.5 25.5 L 26 22.5 L 30.5 22 Z"
+          fill="#FFFBEB"
+          stroke="#F59E0B"
+          strokeWidth="0.5"
+        />
+
+        {/* Kim cương đính dải chân */}
+        <polygon points="22,34 23.5,32.5 25,34 23.5,35.5" fill="#FFFFFF" />
+        <polygon points="32,35 33.5,33.5 35,35 33.5,36.5" fill="url(#rubyGlow)" />
+        <polygon points="42,34 43.5,32.5 45,34 43.5,35.5" fill="#FFFFFF" />
+      </svg>
+    </div>
+  );
+}
+
+/**
  * HUY HIỆU GÓC DƯỚI (CORNER ICON BADGE)
  */
 function CornerBadge({
@@ -341,6 +428,7 @@ export default function AthleteAvatar({
 
   const showWingsActual = showWings && cfg.hasWings && (size === 'md' || size === 'lg' || size === 'xl' || size === '2xl');
   const showSharkActual = showSharkCrown && cfg.hasSharkCrown && (size === 'md' || size === 'lg' || size === 'xl' || size === '2xl');
+  const showFounderActual = showSharkCrown && Boolean(cfg.hasFounderCrown) && (size === 'md' || size === 'lg' || size === 'xl' || size === '2xl');
 
   return (
     <div
@@ -350,13 +438,20 @@ export default function AthleteAvatar({
       } ${className}`}
       title={`${user?.fullName || 'VĐV'} • ${cfg.title}`}
     >
-      {/* 1. ĐÔI CÁNH THIÊN THẦN NỔI BẬT CHO ANGEL INVESTOR */}
+      {/* 1. ĐÔI CÁNH THIÊN THẦN NỔI BẬT CHO ANGEL INVESTOR & FOUNDER */}
       {showWingsActual && <AngelWings scale={sizeProps.wingsScale} />}
 
-      {/* 2. ĐẦU CÁ MẬP NGỰ TRÊN ĐỈNH ĐẦU AVATAR */}
+      {/* 2. ĐẦU CÁ MẬP NGỰ TRÊN ĐỈNH ĐẦU AVATAR CHO SHARK ANGEL */}
       {showSharkActual && (
         <div className={`absolute ${sizeProps.sharkTopOffset} left-0 right-0 flex justify-center`}>
           <SharkCrown width={sizeProps.sharkWidth} height={sizeProps.sharkHeight} />
+        </div>
+      )}
+
+      {/* 2B. VƯƠNG MIỆN HOÀNG ĐẾ KIẾN TRÚC SƯ ĐẶC QUYỀN CHO FOUNDER */}
+      {showFounderActual && (
+        <div className={`absolute ${sizeProps.sharkTopOffset} left-0 right-0 flex justify-center`}>
+          <FounderCrown width={sizeProps.sharkWidth} height={sizeProps.sharkHeight} />
         </div>
       )}
 

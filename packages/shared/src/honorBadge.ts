@@ -10,6 +10,7 @@ export interface AthleteBadgeConfig {
   glowColor: string;
   hasWings: boolean;
   hasSharkCrown: boolean;
+  hasFounderCrown?: boolean;
   cornerIcon: 'diamond' | 'shield' | 'crown_gold' | 'crown_silver' | 'crown_bronze' | 'zap' | null;
 }
 
@@ -52,6 +53,7 @@ export function getAthleteBadgeConfig(
       glowColor: '#f59e0b',
       hasWings: true,
       hasSharkCrown: false,
+      hasFounderCrown: true,
       cornerIcon: 'diamond',
     };
   }

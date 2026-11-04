@@ -49,6 +49,7 @@ import UserTracklogExplorer, { TracklogActivityItem } from '../components/UserTr
 import TopRunLogo from '../components/TopRunLogo';
 import MobileBottomNav from '../components/MobileBottomNav';
 import AthleteAvatar, { AthleteHonorPill } from '../components/AthleteAvatar';
+import AthleteDeepDashboard from '../components/dashboard/AthleteDeepDashboard';
 import {
   AntiCheatStatus,
   ChallengeConditionType,
@@ -150,13 +151,13 @@ const INITIAL_CHALLENGE_TIERS = [
   },
 ];
 
-type NavTab = 'events' | 'tracklogs' | 'trophy' | 'clubs' | 'account' | 'admin';
+type NavTab = 'dashboard' | 'tournaments' | 'events' | 'tracklogs' | 'trophy' | 'clubs' | 'account' | 'admin';
 
 export default function TopRunWebApp() {
   const router = useRouter();
   const { user, logout, isLoading: isAuthLoading, updateUserSession } = useAuth();
 
-  const [activeTab, setActiveTab] = useState<NavTab>('events');
+  const [activeTab, setActiveTab] = useState<NavTab>('dashboard');
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
   const [showSimulatorDrawer, setShowSimulatorDrawer] = useState(false);
   const [leaderboardMode, setLeaderboardMode] = useState<'individual' | 'team'>('individual');
@@ -298,10 +299,10 @@ export default function TopRunWebApp() {
     [selectedEventId, eventsList]
   );
 
-  // Guard Admin tab: Redirect to events if user is not ADMIN
+  // Guard Admin tab: Redirect to dashboard if user is not ADMIN
   useEffect(() => {
     if (user && user.role !== 'ADMIN' && activeTab === 'admin') {
-      setActiveTab('events');
+      setActiveTab('dashboard');
     }
   }, [user, activeTab]);
 
@@ -706,12 +707,12 @@ export default function TopRunWebApp() {
       startDateIso: sa.startDateIso || new Date().toISOString(),
       dateStr: sa.startDateIso
         ? new Date(sa.startDateIso).toLocaleString('vi-VN', {
-            day: '2-digit',
-            month: '2-digit',
-            year: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit',
-          })
+          day: '2-digit',
+          month: '2-digit',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+        })
         : 'Vừa đồng bộ',
       rawDistanceKm: Number(sa.rawDistanceKm ?? 0),
       validDistanceKm: validKm,
@@ -920,10 +921,10 @@ export default function TopRunWebApp() {
       prev.map((a) =>
         a.id === activityId
           ? {
-              ...a,
-              isHidden: nextHidden,
-              finalCountedDistanceKm: nextHidden ? 0 : a.validDistanceKm,
-            }
+            ...a,
+            isHidden: nextHidden,
+            finalCountedDistanceKm: nextHidden ? 0 : a.validDistanceKm,
+          }
           : a
       )
     );
@@ -1096,12 +1097,12 @@ export default function TopRunWebApp() {
                 o.fulfillmentStatus === 'DELIVERED'
                   ? 'Đã giao hàng'
                   : o.fulfillmentStatus === 'SHIPPED'
-                  ? 'Đang vận chuyển'
-                  : o.fulfillmentStatus === 'PACKING'
-                  ? 'Đang đóng gói'
-                  : o.isTargetCompleted
-                  ? 'Đủ điều kiện nhận giải'
-                  : 'Đang tích lũy',
+                    ? 'Đang vận chuyển'
+                    : o.fulfillmentStatus === 'PACKING'
+                      ? 'Đang đóng gói'
+                      : o.isTargetCompleted
+                        ? 'Đủ điều kiện nhận giải'
+                        : 'Đang tích lũy',
               carrier: o.shippingProvider || '-',
               trackingCode: o.trackingCode || '-',
             }))
@@ -1308,16 +1309,17 @@ export default function TopRunWebApp() {
   };
 
   const navItems: { id: NavTab; label: string; subLabel: string; icon: any }[] = [
-    { id: 'events', label: 'Tổng quan & Tiến độ', subLabel: 'Mục tiêu & Thử thách', icon: LayoutDashboard },
-    { id: 'tracklogs', label: 'Nhật ký & Tracklog', subLabel: 'Bản đồ GPS & Tốc độ từng km', icon: Activity },
+    { id: 'dashboard', label: 'Dashboard Chuyên Sâu', subLabel: 'Phân tích thể lực & Phong độ', icon: LayoutDashboard },
+    { id: 'tournaments', label: 'Giải Đấu & Thử Thách', subLabel: 'Giải của tôi & Khám phá giải', icon: Trophy },
+    { id: 'tracklogs', label: 'Nhật Ký & Tracklog', subLabel: 'Bản đồ GPS & Tốc độ từng km', icon: Activity },
     { id: 'trophy', label: 'Bảng Vàng PR & Xếp Hạng', subLabel: 'Kỷ lục cá nhân & BXH Runner', icon: Flame },
-    { id: 'clubs', label: 'Câu lạc bộ & Đội nhóm', subLabel: 'Thi đua liên phòng ban', icon: Users },
-    { id: 'account', label: 'Hồ sơ & Kết nối Strava', subLabel: 'Tài khoản & Đồng bộ tự động', icon: UserCheck },
+    { id: 'clubs', label: 'Câu Lạc Bộ & Đội Nhóm', subLabel: 'Thi đua liên phòng ban', icon: Users },
+    { id: 'account', label: 'Hồ Sơ & Kết Nối Strava', subLabel: 'Tài khoản & Đồng bộ tự động', icon: UserCheck },
     ...(user?.role === 'ADMIN'
       ? [
           {
             id: 'admin' as NavTab,
-            label: 'Quản trị & Kiểm duyệt',
+            label: 'Quản Trị & Kiểm Duyệt',
             subLabel: 'Users, Giải chạy & Kiểm duyệt',
             icon: ShieldCheck,
           },
@@ -1325,7 +1327,9 @@ export default function TopRunWebApp() {
       : []),
   ];
 
-  const currentNav = navItems.find((n) => n.id === activeTab) || navItems[0];
+  const currentNav =
+    navItems.find((n) => n.id === activeTab) ||
+    (activeTab === 'events' ? navItems[1] : navItems[0]);
 
   if (isAuthLoading) {
     return (
@@ -1355,7 +1359,7 @@ export default function TopRunWebApp() {
         <div className="p-4 lg:p-5 space-y-6">
           {/* Brand Logo */}
           <div className="flex items-center justify-between">
-            <TopRunLogo variant="full" size="md" onClick={() => setActiveTab('events')} />
+            <TopRunLogo variant="full" size="md" onClick={() => setActiveTab('dashboard')} />
           </div>
 
           {/* Primary Navigation */}
@@ -1368,16 +1372,14 @@ export default function TopRunWebApp() {
                   key={item.id}
                   type="button"
                   onClick={() => setActiveTab(item.id)}
-                  className={`group flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-left transition-all cursor-pointer ${
-                    isActive
-                      ? 'bg-[#FC4C02]/10 dark:bg-[#FC4C02]/15 text-[#FC4C02] font-semibold'
-                      : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-white font-medium'
-                  }`}
+                  className={`group flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-left transition-all cursor-pointer ${isActive
+                    ? 'bg-[#FC4C02]/10 dark:bg-[#FC4C02]/15 text-[#FC4C02] font-semibold'
+                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-white font-medium'
+                    }`}
                 >
                   <Icon
-                    className={`w-4 h-4 shrink-0 transition-colors ${
-                      isActive ? 'text-[#FC4C02]' : 'text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-200'
-                    }`}
+                    className={`w-4 h-4 shrink-0 transition-colors ${isActive ? 'text-[#FC4C02]' : 'text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-200'
+                      }`}
                   />
                   <div className="min-w-0">
                     <div className="text-[13px] leading-tight truncate">{item.label}</div>
@@ -1416,11 +1418,10 @@ export default function TopRunWebApp() {
             <button
               type="button"
               onClick={() => setShowSimulatorDrawer(!showSimulatorDrawer)}
-              className={`px-3 py-2 rounded-xl border text-xs font-medium flex items-center justify-center gap-1.5 transition cursor-pointer ${
-                showSimulatorDrawer
-                  ? 'border-[#FC4C02] bg-[#FC4C02]/10 text-[#FC4C02]'
-                  : 'border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800/60 text-slate-700 dark:text-slate-300'
-              }`}
+              className={`px-3 py-2 rounded-xl border text-xs font-medium flex items-center justify-center gap-1.5 transition cursor-pointer ${showSimulatorDrawer
+                ? 'border-[#FC4C02] bg-[#FC4C02]/10 text-[#FC4C02]'
+                : 'border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800/60 text-slate-700 dark:text-slate-300'
+                }`}
             >
               <FlaskConical className="w-3.5 h-3.5" />
               <span>Chế độ Test</span>
@@ -1471,23 +1472,7 @@ export default function TopRunWebApp() {
           {/* MOBILE HEADER (Visible on < lg screens) */}
           <div className="flex lg:hidden items-center justify-between w-full gap-2">
             <div className="flex items-center gap-2 min-w-0">
-              <TopRunLogo variant="compact" size="sm" />
-              {eventsList.length > 0 && (
-                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-orange-50 dark:bg-[#FC4C02]/10 border border-orange-200/80 dark:border-[#FC4C02]/25 max-w-[160px] sm:max-w-[220px]">
-                  <Trophy className="w-3 h-3 text-[#FC4C02] shrink-0" />
-                  <select
-                    value={selectedEventId}
-                    onChange={(e) => setSelectedEventId(e.target.value)}
-                    className="bg-transparent text-[11px] font-bold text-slate-800 dark:text-slate-100 w-full truncate focus:outline-none cursor-pointer"
-                  >
-                    {eventsList.map((ev) => (
-                      <option key={ev.id} value={ev.id} className="bg-white dark:bg-[#0F1420] text-slate-900 dark:text-white">
-                        {ev.title}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
+              <TopRunLogo variant="compact" size="sm" onClick={() => setActiveTab('dashboard')} />
             </div>
 
             <div className="flex items-center gap-1.5 shrink-0">
@@ -1496,11 +1481,10 @@ export default function TopRunWebApp() {
                   type="button"
                   onClick={() => setActiveTab('admin')}
                   title="Quản trị giải đấu"
-                  className={`p-2 rounded-xl border transition cursor-pointer ${
-                    activeTab === 'admin'
-                      ? 'bg-[#FC4C02] text-white border-[#FC4C02]'
-                      : 'border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:text-[#FC4C02]'
-                  }`}
+                  className={`p-2 rounded-xl border transition cursor-pointer ${activeTab === 'admin'
+                    ? 'bg-[#FC4C02] text-white border-[#FC4C02]'
+                    : 'border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:text-[#FC4C02]'
+                    }`}
                 >
                   <ShieldCheck className="w-4 h-4" />
                 </button>
@@ -1546,27 +1530,6 @@ export default function TopRunWebApp() {
                   {currentNav.subLabel}
                 </p>
               </div>
-
-              {/* BỘ CHỌN GIẢI ĐẤU TRÊN HEADER (MULTI-EVENT SELECTOR) */}
-              {eventsList.length > 0 && (
-                <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-orange-50 dark:bg-[#FC4C02]/10 border border-orange-200/80 dark:border-[#FC4C02]/25 shadow-xs">
-                  <Trophy className="w-3.5 h-3.5 text-[#FC4C02] shrink-0" />
-                  <span className="text-[11px] font-bold text-[#FC4C02] uppercase tracking-wider shrink-0">
-                    Giải đấu:
-                  </span>
-                  <select
-                    value={selectedEventId}
-                    onChange={(e) => setSelectedEventId(e.target.value)}
-                    className="bg-transparent text-xs font-bold text-slate-800 dark:text-slate-100 max-w-[200px] lg:max-w-[320px] truncate focus:outline-none cursor-pointer"
-                  >
-                    {eventsList.map((ev) => (
-                      <option key={ev.id} value={ev.id} className="bg-white dark:bg-[#0F1420] text-slate-900 dark:text-white">
-                        {ev.title}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
             </div>
 
             <div className="flex items-center gap-2.5">
@@ -1659,9 +1622,26 @@ export default function TopRunWebApp() {
         {/* Workspace Content Container */}
         <main className="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-8 py-6 sm:py-8 pb-24 lg:pb-8 space-y-8">
           {/* =================================================================
-              VIEW 1: TỔNG QUAN GIẢI CHẠY & TIẾN ĐỘ 2 TẦNG
+              VIEW 1: DASHBOARD CHUYÊN SÂU PHÂN TÍCH THỂ LỰC & PHONG ĐỘ
              ================================================================= */}
-          {activeTab === 'events' && (
+          {activeTab === 'dashboard' && (
+            <AthleteDeepDashboard
+              activities={activities}
+              user={user}
+              eventsCount={eventsList.length}
+              onNavigateToTracklogs={() => setActiveTab('tracklogs')}
+              onNavigateToTournaments={() => setActiveTab('tournaments')}
+              onSelectActivity={(actId) => {
+                setSelectedActivityId(actId);
+                setActiveTab('tracklogs');
+              }}
+            />
+          )}
+
+          {/* =================================================================
+              VIEW 2: GIẢI ĐẤU & TIẾN ĐỘ 2 TẦNG (TOURNAMENTS HUB)
+             ================================================================= */}
+          {(activeTab === 'tournaments' || activeTab === 'events') && (
             <div className="space-y-6">
               {/* Runner Event Hub Navigation Pills */}
               <div className="flex flex-wrap items-center justify-between gap-3 p-1.5 rounded-2xl bg-white dark:bg-[#0F1420] border border-slate-200/80 dark:border-slate-800/80 shadow-xs">
@@ -1669,11 +1649,10 @@ export default function TopRunWebApp() {
                   <button
                     type="button"
                     onClick={() => setRunnerEventSubTab('my-events')}
-                    className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 cursor-pointer ${
-                      runnerEventSubTab === 'my-events'
-                        ? 'bg-[#FC4C02] text-white shadow-xs'
-                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                    }`}
+                    className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 cursor-pointer ${runnerEventSubTab === 'my-events'
+                      ? 'bg-[#FC4C02] text-white shadow-xs'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                      }`}
                   >
                     <Trophy className="w-4 h-4" />
                     <span>Giải của tôi ({myEventsList.length})</span>
@@ -1682,27 +1661,48 @@ export default function TopRunWebApp() {
                   <button
                     type="button"
                     onClick={() => setRunnerEventSubTab('explore')}
-                    className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 cursor-pointer ${
-                      runnerEventSubTab === 'explore'
-                        ? 'bg-[#FC4C02] text-white shadow-xs'
-                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                    }`}
+                    className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 cursor-pointer ${runnerEventSubTab === 'explore'
+                      ? 'bg-[#FC4C02] text-white shadow-xs'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                      }`}
                   >
                     <Compass className="w-4 h-4" />
                     <span>Khám phá giải mới ({eventsList.length})</span>
                   </button>
                 </div>
 
-                {runnerEventSubTab === 'detail' && (
-                  <button
-                    type="button"
-                    onClick={() => setRunnerEventSubTab('my-events')}
-                    className="px-3.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5 transition cursor-pointer"
-                  >
-                    <ArrowLeft className="w-3.5 h-3.5" />
-                    <span>Quay lại danh sách giải</span>
-                  </button>
-                )}
+                <div className="flex items-center gap-2">
+                  {eventsList.length > 1 && (
+                    <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-orange-50 dark:bg-[#FC4C02]/10 border border-orange-200/80 dark:border-[#FC4C02]/25">
+                      <Trophy className="w-3.5 h-3.5 text-[#FC4C02] shrink-0" />
+                      <span className="text-[11px] font-bold text-[#FC4C02] uppercase tracking-wider shrink-0">
+                        Chọn giải:
+                      </span>
+                      <select
+                        value={selectedEventId}
+                        onChange={(e) => setSelectedEventId(e.target.value)}
+                        className="bg-transparent text-xs font-bold text-slate-800 dark:text-slate-100 max-w-[160px] sm:max-w-[220px] truncate focus:outline-none cursor-pointer"
+                      >
+                        {eventsList.map((ev) => (
+                          <option key={ev.id} value={ev.id} className="bg-white dark:bg-[#0F1420] text-slate-900 dark:text-white">
+                            {ev.title}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
+                  {runnerEventSubTab === 'detail' && (
+                    <button
+                      type="button"
+                      onClick={() => setRunnerEventSubTab('my-events')}
+                      className="px-3.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5 transition cursor-pointer"
+                    >
+                      <ArrowLeft className="w-3.5 h-3.5" />
+                      <span>Quay lại</span>
+                    </button>
+                  )}
+                </div>
               </div>
 
               {runnerEventSubTab === 'my-events' ? (
@@ -1734,511 +1734,498 @@ export default function TopRunWebApp() {
               ) : (
                 <>
                   {/* Clean Event Header Card */}
-              <div className="rounded-2xl bg-white dark:bg-[#0F1420] border border-slate-200/80 dark:border-slate-800/80 p-6 sm:p-7 shadow-sm">
-                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
-                  <div className="space-y-3 max-w-2xl">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                        {currentEventData?.status === 'ACTIVE' ? 'Đang diễn ra' : currentEventData?.status === 'UPCOMING' ? 'Sắp diễn ra' : 'Bản nháp'}
-                      </span>
-                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-semibold bg-[#FC4C02]/10 text-[#FC4C02]">
-                        <Flame className="w-3.5 h-3.5" />
-                        {(currentEventData?.ruleConfig?.weekendMultiplier || 1.0) > 1.0
-                          ? `Cuối tuần x${currentEventData.ruleConfig.weekendMultiplier} 🔥`
-                          : 'Tính điểm 1:1 theo km thực chạy'}
-                      </span>
-                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
-                        <ShieldCheck className="w-3.5 h-3.5" />
-                        Pace: {formatPace(currentEventData?.ruleConfig?.minPaceSecPerKm ?? 180)} – {formatPace(currentEventData?.ruleConfig?.maxPaceSecPerKm ?? 900)}
-                      </span>
-                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
-                        Min: {currentEventData?.ruleConfig?.minActivityDistanceKm ?? 1.0}km/bài
-                      </span>
-                    </div>
-
-                    <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white">
-                      {currentEventData?.title || 'TOPRun Virtual Race 2026'}
-                    </h2>
-                    <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
-                      {currentEventData?.subtitle || currentEventData?.description || 'Giải chạy tích lũy trực tuyến đồng bộ Strava API.'}
-                    </p>
-                  </div>
-
-                  <div className="flex flex-wrap sm:flex-nowrap lg:flex-col gap-2.5 shrink-0">
-                    <button
-                      type="button"
-                      onClick={() => setShowRegisterModal(true)}
-                      className="px-4 py-2.5 rounded-xl bg-[#FC4C02] hover:bg-[#E34402] text-white font-semibold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-sm transition cursor-pointer"
-                    >
-                      <Settings className="w-4 h-4" />
-                      <span>Đổi cự ly mục tiêu / Size áo</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setShowEBibModal(true)}
-                      className="px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-semibold text-xs sm:text-sm flex items-center justify-center gap-2 transition cursor-pointer"
-                    >
-                      <Award className="w-4 h-4 text-[#FC4C02]" />
-                      <span>Xem E-BIB ({myBibNumber}) &amp; Chứng nhận</span>
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              {/* Dual-Goal Progress Grid */}
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-                {/* TIER 1: TARGET FINISHER */}
-                <div className="lg:col-span-5 rounded-2xl bg-white dark:bg-[#0F1420] border border-slate-200/80 dark:border-slate-800/80 p-6 flex flex-col justify-between space-y-6 shadow-sm">
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 rounded-lg bg-[#FC4C02]/10 text-[#FC4C02] flex items-center justify-center">
-                          <Target className="w-4 h-4" />
+                  <div className="rounded-2xl bg-white dark:bg-[#0F1420] border border-slate-200/80 dark:border-slate-800/80 p-6 sm:p-7 shadow-sm">
+                    <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+                      <div className="space-y-3 max-w-2xl">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                            {currentEventData?.status === 'ACTIVE' ? 'Đang diễn ra' : currentEventData?.status === 'UPCOMING' ? 'Sắp diễn ra' : 'Bản nháp'}
+                          </span>
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-semibold bg-[#FC4C02]/10 text-[#FC4C02]">
+                            <Flame className="w-3.5 h-3.5" />
+                            {(currentEventData?.ruleConfig?.weekendMultiplier || 1.0) > 1.0
+                              ? `Cuối tuần x${currentEventData.ruleConfig.weekendMultiplier} 🔥`
+                              : 'Tính điểm 1:1 theo km thực chạy'}
+                          </span>
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                            <ShieldCheck className="w-3.5 h-3.5" />
+                            Pace: {formatPace(currentEventData?.ruleConfig?.minPaceSecPerKm ?? 180)} – {formatPace(currentEventData?.ruleConfig?.maxPaceSecPerKm ?? 900)}
+                          </span>
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                            Min: {currentEventData?.ruleConfig?.minActivityDistanceKm ?? 1.0}km/bài
+                          </span>
                         </div>
-                        <div>
-                          <div className="text-[11px] font-bold uppercase tracking-wider text-[#FC4C02]">
-                            Tầng 1 • Mục tiêu Finisher
+
+                        <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white">
+                          {currentEventData?.title || 'TOPRun Virtual Race 2026'}
+                        </h2>
+                        <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
+                          {currentEventData?.subtitle || currentEventData?.description || 'Giải chạy tích lũy trực tuyến đồng bộ Strava API.'}
+                        </p>
+                      </div>
+
+                      <div className="flex flex-wrap sm:flex-nowrap lg:flex-col gap-2.5 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => setShowRegisterModal(true)}
+                          className="px-4 py-2.5 rounded-xl bg-[#FC4C02] hover:bg-[#E34402] text-white font-semibold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-sm transition cursor-pointer"
+                        >
+                          <Settings className="w-4 h-4" />
+                          <span>Đổi cự ly mục tiêu / Size áo</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setShowEBibModal(true)}
+                          className="px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-semibold text-xs sm:text-sm flex items-center justify-center gap-2 transition cursor-pointer"
+                        >
+                          <Award className="w-4 h-4 text-[#FC4C02]" />
+                          <span>Xem E-BIB ({myBibNumber}) &amp; Chứng nhận</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Dual-Goal Progress Grid */}
+                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                    {/* TIER 1: TARGET FINISHER */}
+                    <div className="lg:col-span-5 rounded-2xl bg-white dark:bg-[#0F1420] border border-slate-200/80 dark:border-slate-800/80 p-6 flex flex-col justify-between space-y-6 shadow-sm">
+                      <div className="space-y-4">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <div className="w-8 h-8 rounded-lg bg-[#FC4C02]/10 text-[#FC4C02] flex items-center justify-center">
+                              <Target className="w-4 h-4" />
+                            </div>
+                            <div>
+                              <div className="text-[11px] font-bold uppercase tracking-wider text-[#FC4C02]">
+                                Tầng 1 • Mục tiêu Finisher
+                              </div>
+                              <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                                {dualGoalProgress.target.categoryName}
+                              </h3>
+                            </div>
                           </div>
-                          <h3 className="text-base font-bold text-slate-900 dark:text-white">
-                            {dualGoalProgress.target.categoryName}
-                          </h3>
-                        </div>
-                      </div>
-                      <span className="px-2.5 py-1 rounded-md bg-slate-100 dark:bg-slate-800 font-mono text-xs font-semibold text-slate-700 dark:text-slate-300">
-                        {myBibNumber}
-                      </span>
-                    </div>
-
-                    {/* Metric Box */}
-                    <div className="p-5 rounded-xl bg-slate-50 dark:bg-slate-900/70 border border-slate-200/70 dark:border-slate-800 space-y-3">
-                      <div className="flex items-baseline justify-between">
-                        <div>
-                          <span className="text-3xl sm:text-4xl font-extrabold font-mono text-slate-900 dark:text-white">
-                            {dualGoalProgress.target.currentMultipliedDistanceKm}
-                          </span>
-                          <span className="text-sm text-slate-500 dark:text-slate-400 font-mono ml-1">
-                            / {dualGoalProgress.target.targetDistanceKm} km
+                          <span className="px-2.5 py-1 rounded-md bg-slate-100 dark:bg-slate-800 font-mono text-xs font-semibold text-slate-700 dark:text-slate-300">
+                            {myBibNumber}
                           </span>
                         </div>
-                        <span className="text-base font-bold font-mono text-emerald-600 dark:text-emerald-400">
-                          {dualGoalProgress.target.progressPercentage}%
-                        </span>
-                      </div>
 
-                      <div className="w-full h-2.5 rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden">
-                        <div
-                          className="h-full rounded-full bg-[#FC4C02] transition-all duration-500"
-                          style={{ width: `${dualGoalProgress.target.progressPercentage}%` }}
-                        />
-                      </div>
-
-                      <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 pt-1">
-                        <span>Quãng đường gốc: {dualGoalProgress.target.currentRawDistanceKm} km</span>
-                        <span className="font-semibold text-emerald-600 dark:text-emerald-400">
-                          {dualGoalProgress.target.isCompleted
-                            ? 'Đã hoàn thành mục tiêu'
-                            : `Còn ${dualGoalProgress.target.remainingDistanceKm} km`}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Finisher Perks Checklist */}
-                  <div className="space-y-2.5 pt-4 border-t border-slate-100 dark:border-slate-800/80 text-xs">
-                    <div className="flex items-center justify-between">
-                      <span className="text-slate-600 dark:text-slate-400 flex items-center gap-2">
-                        <CheckCircle2
-                          className={`w-4 h-4 ${
-                            dualGoalProgress.target.eCertUnlocked ? 'text-emerald-500' : 'text-slate-400'
-                          }`}
-                        />
-                        Chứng nhận điện tử (E-Certificate)
-                      </span>
-                      <span
-                        className={`font-semibold ${
-                          dualGoalProgress.target.eCertUnlocked
-                            ? 'text-emerald-600 dark:text-emerald-400'
-                            : 'text-slate-400'
-                        }`}
-                      >
-                        {dualGoalProgress.target.eCertUnlocked ? 'Đã mở khóa' : 'Chưa mở khóa'}
-                      </span>
-                    </div>
-
-                    <div className="flex items-center justify-between">
-                      <span className="text-slate-600 dark:text-slate-400 flex items-center gap-2">
-                        <Truck
-                          className={`w-4 h-4 ${
-                            dualGoalProgress.target.raceKitQualified ? 'text-emerald-500' : 'text-slate-400'
-                          }`}
-                        />
-                        Huy chương thật &amp; Áo Finisher (Size {myShirtSize})
-                      </span>
-                      <span
-                        className={`font-semibold ${
-                          dualGoalProgress.target.raceKitQualified
-                            ? 'text-emerald-600 dark:text-emerald-400'
-                            : 'text-slate-400'
-                        }`}
-                      >
-                        {dualGoalProgress.target.raceKitQualified ? 'Đủ điều kiện nhận' : 'Đang tích lũy'}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* TIER 2: CHALLENGE AWARDS */}
-                <div className="lg:col-span-7 rounded-2xl bg-white dark:bg-[#0F1420] border border-slate-200/80 dark:border-slate-800/80 p-6 space-y-5 shadow-sm">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-8 h-8 rounded-lg bg-amber-500/10 text-amber-500 flex items-center justify-center">
-                        <Trophy className="w-4 h-4" />
-                      </div>
-                      <div>
-                        <div className="text-[11px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">
-                          Tầng 2 • Thử thách mở rộng
-                        </div>
-                        <h3 className="text-base font-bold text-slate-900 dark:text-white">
-                          Huy hiệu thành tích đặc biệt (Challenge Awards)
-                        </h3>
-                      </div>
-                    </div>
-
-                    <div className="text-right">
-                      <span className="text-xs text-slate-500 dark:text-slate-400">Đã mở khóa</span>
-                      <div className="text-lg font-extrabold font-mono text-slate-900 dark:text-white">
-                        {dualGoalProgress.challenges.filter((c) => c.isUnlocked).length} /{' '}
-                        {dualGoalProgress.challenges.length}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                    {dualGoalProgress.challenges.map((chal) => (
-                      <div
-                        key={chal.tierId}
-                        className={`p-4 rounded-xl border transition-all flex flex-col justify-between space-y-3 ${
-                          chal.isUnlocked
-                            ? 'bg-amber-50/40 dark:bg-amber-950/15 border-amber-300/80 dark:border-amber-700/60'
-                            : 'bg-slate-50/70 dark:bg-slate-900/50 border-slate-200/70 dark:border-slate-800'
-                        }`}
-                      >
-                        <div className="space-y-1.5">
-                          <div className="flex items-center justify-between gap-2">
-                            <span
-                              className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded ${
-                                chal.isUnlocked
-                                  ? 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300'
-                                  : 'bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
-                              }`}
-                            >
-                              {chal.isUnlocked ? 'Đã đạt' : chal.tierLevel}
+                        {/* Metric Box */}
+                        <div className="p-5 rounded-xl bg-slate-50 dark:bg-slate-900/70 border border-slate-200/70 dark:border-slate-800 space-y-3">
+                          <div className="flex items-baseline justify-between">
+                            <div>
+                              <span className="text-3xl sm:text-4xl font-extrabold font-mono text-slate-900 dark:text-white">
+                                {dualGoalProgress.target.currentMultipliedDistanceKm}
+                              </span>
+                              <span className="text-sm text-slate-500 dark:text-slate-400 font-mono ml-1">
+                                / {dualGoalProgress.target.targetDistanceKm} km
+                              </span>
+                            </div>
+                            <span className="text-base font-bold font-mono text-emerald-600 dark:text-emerald-400">
+                              {dualGoalProgress.target.progressPercentage}%
                             </span>
-                            <Medal
-                              className={`w-4 h-4 ${
-                                chal.isUnlocked ? 'text-amber-500' : 'text-slate-400 dark:text-slate-600'
-                              }`}
+                          </div>
+
+                          <div className="w-full h-2.5 rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden">
+                            <div
+                              className="h-full rounded-full bg-[#FC4C02] transition-all duration-500"
+                              style={{ width: `${dualGoalProgress.target.progressPercentage}%` }}
                             />
                           </div>
-                          <h4 className="text-sm font-bold text-slate-900 dark:text-white">
-                            {chal.tierName}
-                          </h4>
-                          <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-2">
-                            {chal.rewardDescription}
-                          </p>
-                        </div>
 
-                        <div className="space-y-1.5 pt-1">
-                          {chal.conditionType === ChallengeConditionType.SPEED_TARGET_TIME ? (
-                            <div className="space-y-1">
-                              <div className="flex items-center justify-between text-xs font-mono font-medium">
-                                <span className="text-amber-700 dark:text-amber-300 font-semibold text-[11px]">
-                                  {chal.isUnlocked
-                                    ? `Đã đạt: ${chal.currentValue > 0 ? `${chal.currentValue} phút` : 'Đạt chuẩn'}`
-                                    : `Cự ly: ${chal.targetSpeedDistanceKm || 5} km • Thời gian ≤ ${chal.thresholdValue} phút`}
-                                </span>
-                                <span
-                                  className={
-                                    chal.isUnlocked
-                                      ? 'text-amber-600 dark:text-amber-400 font-bold'
-                                      : 'text-slate-400 text-[11px]'
-                                  }
-                                >
-                                  {chal.isUnlocked ? '100%' : 'Chưa đạt'}
-                                </span>
-                              </div>
-                              <div className="w-full h-1.5 rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden">
-                                <div
-                                  className={`h-full rounded-full transition-all duration-500 ${
-                                    chal.isUnlocked ? 'bg-amber-500' : 'bg-slate-400 dark:bg-slate-600'
-                                  }`}
-                                  style={{ width: `${chal.isUnlocked ? 100 : 0}%` }}
-                                />
-                              </div>
-                            </div>
-                          ) : (
-                            <div className="space-y-1.5">
-                              <div className="flex justify-between text-xs font-mono font-medium">
-                                <span className="text-slate-600 dark:text-slate-300">
-                                  {chal.currentValue} / {chal.thresholdValue}{' '}
-                                  {chal.conditionType === ChallengeConditionType.STREAK_DAYS
-                                    ? 'ngày'
-                                    : chal.conditionType === ChallengeConditionType.ELEVATION_GAIN
-                                    ? 'm'
-                                    : 'km'}
-                                </span>
-                                <span
-                                  className={
-                                    chal.isUnlocked
-                                      ? 'text-amber-600 dark:text-amber-400 font-bold'
-                                      : 'text-slate-400'
-                                  }
-                                >
-                                  {chal.progressPercentage}%
-                                </span>
-                              </div>
-                              <div className="w-full h-1.5 rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden">
-                                <div
-                                  className={`h-full rounded-full transition-all duration-500 ${
-                                    chal.isUnlocked ? 'bg-amber-500' : 'bg-slate-400 dark:bg-slate-600'
-                                  }`}
-                                  style={{ width: `${chal.progressPercentage}%` }}
-                                />
-                              </div>
-                            </div>
-                          )}
+                          <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 pt-1">
+                            <span>Quãng đường gốc: {dualGoalProgress.target.currentRawDistanceKm} km</span>
+                            <span className="font-semibold text-emerald-600 dark:text-emerald-400">
+                              {dualGoalProgress.target.isCompleted
+                                ? 'Đã hoàn thành mục tiêu'
+                                : `Còn ${dualGoalProgress.target.remainingDistanceKm} km`}
+                            </span>
+                          </div>
                         </div>
                       </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
 
-              {/* REAL-TIME LEADERBOARD */}
-              <div className="rounded-2xl bg-white dark:bg-[#0F1420] border border-slate-200/80 dark:border-slate-800/80 p-6 space-y-5 shadow-sm">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-800/80 pb-4">
-                  <div>
-                    <h3 className="text-base font-bold text-slate-900 dark:text-white">
-                      Bảng xếp hạng giải đấu
-                    </h3>
-                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                      Cập nhật theo thời gian thực sau khi kiểm duyệt tốc độ từng km
-                    </p>
-                  </div>
-
-                  <div className="inline-flex p-1 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-200/70 dark:border-slate-800 self-start sm:self-auto">
-                    <button
-                      type="button"
-                      onClick={() => setLeaderboardMode('individual')}
-                      className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
-                        leaderboardMode === 'individual'
-                          ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-sm'
-                          : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
-                      }`}
-                    >
-                      Cá nhân
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setLeaderboardMode('team')}
-                      className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
-                        leaderboardMode === 'team'
-                          ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-sm'
-                          : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
-                      }`}
-                    >
-                      Đội nhóm / Phòng ban
-                    </button>
-                  </div>
-                </div>
-
-                {leaderboardMode === 'individual' ? (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-left border-collapse">
-                      <thead>
-                        <tr className="border-b border-slate-200/70 dark:border-slate-800 text-[11px] font-semibold uppercase text-slate-400">
-                          <th className="py-3 px-3">Hạng</th>
-                          <th className="py-3 px-3">Vận động viên</th>
-                          <th className="py-3 px-3">Mã BIB</th>
-                          <th className="py-3 px-3">Mục tiêu</th>
-                          <th className="py-3 px-3">Thực chạy</th>
-                          <th className="py-3 px-3">Tổng km tính giải</th>
-                          <th className="py-3 px-3">Trạng thái</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 text-sm">
-                        {(currentEventData?.individualLeaderboard?.length > 0
-                          ? currentEventData.individualLeaderboard.map((p: any) => ({
-                              userId: p.userId,
-                              name: p.userName,
-                              dept: p.department || 'VĐV Tự do',
-                              bib: p.bibNumber,
-                              targetName: `${p.targetDistanceKm} KM`,
-                              rawKm: p.rawDistanceKm,
-                              multipliedKm: p.multipliedDistanceKm,
-                              isFinisher: p.isTargetCompleted,
-                              isMe: user?.id ? p.userId === user.id : false,
-                              avatarUrl: p.avatarUrl,
-                              gender: p.gender,
-                            }))
-                          : [
-                              {
-                                userId: 'usr_tuan_minh',
-                                name: 'Nguyễn Tuấn Minh',
-                                dept: 'Khối Công Nghệ & R&D',
-                                bib: 'TOP100-0005',
-                                targetName: '100 KM',
-                                rawKm: 93.5,
-                                multipliedKm: 93.5,
-                                isFinisher: false,
-                                avatarUrl: '',
-                                gender: 'M',
-                              },
-                              {
-                                userId: user?.id || 'usr_alan',
-                                name: 'Nguyễn Hữu Thuận (Alan Hoàng)',
-                                dept: 'ASSA ABLOY Engineering',
-                                bib: myBibNumber,
-                                targetName: `${myTargetKm} KM`,
-                                rawKm: dualGoalProgress.target.currentRawDistanceKm,
-                                multipliedKm: dualGoalProgress.target.currentMultipliedDistanceKm,
-                                isFinisher: dualGoalProgress.target.isCompleted,
-                                isMe: true,
-                                avatarUrl: '',
-                                gender: 'M',
-                              },
-                            ]
-                        )
-                          .sort((a: any, b: any) => b.multipliedKm - a.multipliedKm)
-                          .map((row: any, index: number) => (
-                            <tr
-                              key={row.bib}
-                              onClick={() => {
-                                setSelectedParticipantDetail({
-                                  userId: row.userId || '',
-                                  name: row.name,
-                                  avatarUrl: row.avatarUrl,
-                                  clubName: row.dept,
-                                  bibNumber: row.bib,
-                                  targetDistanceKm: parseInt(row.targetName, 10) || 50,
-                                  totalValidKm: row.multipliedKm,
-                                  progressPercent: Math.round((row.multipliedKm / (parseInt(row.targetName, 10) || 1)) * 100),
-                                  rank: index + 1,
-                                  gender: row.gender,
-                                  activities: activities.filter(
-                                    (a) => a.userId === row.userId && !a.isHidden && a.validDistanceKm > 0
-                                  ),
-                                });
-                              }}
-                              className={`transition cursor-pointer ${
-                                (row as any).isMe
-                                  ? 'bg-[#FC4C02]/5 dark:bg-[#FC4C02]/10 hover:bg-[#FC4C02]/15'
-                                  : 'hover:bg-slate-50 dark:hover:bg-slate-800/40'
-                              }`}
-                            >
-                              <td className="py-3.5 px-3 font-mono font-bold text-sm">
-                                <span
-                                  className={`inline-flex items-center justify-center w-6 h-6 rounded-md text-xs ${
-                                    index === 0
-                                      ? 'bg-amber-500/20 text-amber-600 dark:text-amber-400 font-extrabold'
-                                      : index === 1
-                                      ? 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-extrabold'
-                                      : index === 2
-                                      ? 'bg-orange-500/15 text-orange-600 dark:text-orange-400 font-extrabold'
-                                      : 'text-slate-400'
-                                  }`}
-                                >
-                                  {index + 1}
-                                </span>
-                              </td>
-                              <td className="py-3.5 px-3">
-                                <div className="font-semibold text-slate-900 dark:text-white">
-                                  {row.name}
-                                </div>
-                                <div className="text-xs text-slate-500 dark:text-slate-400">{row.dept}</div>
-                              </td>
-                              <td className="py-3.5 px-3 font-mono text-xs text-slate-600 dark:text-slate-300 font-semibold">
-                                {row.bib}
-                              </td>
-                              <td className="py-3.5 px-3 font-mono text-xs text-slate-600 dark:text-slate-300">
-                                {row.targetName}
-                              </td>
-                              <td className="py-3.5 px-3 font-mono text-xs text-slate-600 dark:text-slate-300">
-                                {row.rawKm} km
-                              </td>
-                              <td className="py-3.5 px-3 font-mono font-bold text-slate-900 dark:text-white">
-                                {row.multipliedKm} km
-                              </td>
-                              <td className="py-3.5 px-3">
-                                {row.isFinisher ? (
-                                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60">
-                                    <CheckCircle2 className="w-3 h-3" />
-                                    Finisher
-                                  </span>
-                                ) : (
-                                  <span className="inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">
-                                    Đang chạy
-                                  </span>
-                                )}
-                              </td>
-                            </tr>
-                          ))}
-                      </tbody>
-                    </table>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    {[
-                      {
-                        rank: 1,
-                        name: 'Khối Công Nghệ & R&D (Engineering)',
-                        members: 18,
-                        totalKm: 418.6,
-                      },
-                      {
-                        rank: 2,
-                        name: 'Khối Vận Hành & Chuỗi Cung Ứng (Operations)',
-                        members: 22,
-                        totalKm: 375.2,
-                      },
-                      {
-                        rank: 3,
-                        name: 'Khối Kinh Doanh & Thương Mại (Commercial)',
-                        members: 16,
-                        totalKm: 290.8,
-                      },
-                    ].map((team) => (
-                      <div
-                        key={team.name}
-                        className="p-5 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200/70 dark:border-slate-800 space-y-3"
-                      >
+                      {/* Finisher Perks Checklist */}
+                      <div className="space-y-2.5 pt-4 border-t border-slate-100 dark:border-slate-800/80 text-xs">
                         <div className="flex items-center justify-between">
-                          <span className="text-xs font-bold uppercase text-[#FC4C02]">
-                            Hạng #{team.rank}
+                          <span className="text-slate-600 dark:text-slate-400 flex items-center gap-2">
+                            <CheckCircle2
+                              className={`w-4 h-4 ${dualGoalProgress.target.eCertUnlocked ? 'text-emerald-500' : 'text-slate-400'
+                                }`}
+                            />
+                            Chứng nhận điện tử (E-Certificate)
                           </span>
-                          <span className="text-xs text-slate-500">{team.members} thành viên</span>
+                          <span
+                            className={`font-semibold ${dualGoalProgress.target.eCertUnlocked
+                              ? 'text-emerald-600 dark:text-emerald-400'
+                              : 'text-slate-400'
+                              }`}
+                          >
+                            {dualGoalProgress.target.eCertUnlocked ? 'Đã mở khóa' : 'Chưa mở khóa'}
+                          </span>
                         </div>
-                        <h4 className="font-bold text-slate-900 dark:text-white text-sm">
-                          {team.name}
-                        </h4>
-                        <div className="flex items-baseline justify-between pt-2 border-t border-slate-200/70 dark:border-slate-800">
-                          <span className="text-2xl font-extrabold font-mono text-slate-900 dark:text-white">
-                            {team.totalKm} km
+
+                        <div className="flex items-center justify-between">
+                          <span className="text-slate-600 dark:text-slate-400 flex items-center gap-2">
+                            <Truck
+                              className={`w-4 h-4 ${dualGoalProgress.target.raceKitQualified ? 'text-emerald-500' : 'text-slate-400'
+                                }`}
+                            />
+                            Huy chương thật &amp; Áo Finisher (Size {myShirtSize})
                           </span>
-                          <span className="text-xs text-slate-500 font-mono">
-                            TB: {roundKm(team.totalKm / team.members)} km/người
+                          <span
+                            className={`font-semibold ${dualGoalProgress.target.raceKitQualified
+                              ? 'text-emerald-600 dark:text-emerald-400'
+                              : 'text-slate-400'
+                              }`}
+                          >
+                            {dualGoalProgress.target.raceKitQualified ? 'Đủ điều kiện nhận' : 'Đang tích lũy'}
                           </span>
                         </div>
                       </div>
-                    ))}
+                    </div>
+
+                    {/* TIER 2: CHALLENGE AWARDS */}
+                    <div className="lg:col-span-7 rounded-2xl bg-white dark:bg-[#0F1420] border border-slate-200/80 dark:border-slate-800/80 p-6 space-y-5 shadow-sm">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-8 h-8 rounded-lg bg-amber-500/10 text-amber-500 flex items-center justify-center">
+                            <Trophy className="w-4 h-4" />
+                          </div>
+                          <div>
+                            <div className="text-[11px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">
+                              Tầng 2 • Thử thách mở rộng
+                            </div>
+                            <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                              Huy hiệu thành tích đặc biệt (Challenge Awards)
+                            </h3>
+                          </div>
+                        </div>
+
+                        <div className="text-right">
+                          <span className="text-xs text-slate-500 dark:text-slate-400">Đã mở khóa</span>
+                          <div className="text-lg font-extrabold font-mono text-slate-900 dark:text-white">
+                            {dualGoalProgress.challenges.filter((c) => c.isUnlocked).length} /{' '}
+                            {dualGoalProgress.challenges.length}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                        {dualGoalProgress.challenges.map((chal) => (
+                          <div
+                            key={chal.tierId}
+                            className={`p-4 rounded-xl border transition-all flex flex-col justify-between space-y-3 ${chal.isUnlocked
+                              ? 'bg-amber-50/40 dark:bg-amber-950/15 border-amber-300/80 dark:border-amber-700/60'
+                              : 'bg-slate-50/70 dark:bg-slate-900/50 border-slate-200/70 dark:border-slate-800'
+                              }`}
+                          >
+                            <div className="space-y-1.5">
+                              <div className="flex items-center justify-between gap-2">
+                                <span
+                                  className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded ${chal.isUnlocked
+                                    ? 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300'
+                                    : 'bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+                                    }`}
+                                >
+                                  {chal.isUnlocked ? 'Đã đạt' : chal.tierLevel}
+                                </span>
+                                <Medal
+                                  className={`w-4 h-4 ${chal.isUnlocked ? 'text-amber-500' : 'text-slate-400 dark:text-slate-600'
+                                    }`}
+                                />
+                              </div>
+                              <h4 className="text-sm font-bold text-slate-900 dark:text-white">
+                                {chal.tierName}
+                              </h4>
+                              <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-2">
+                                {chal.rewardDescription}
+                              </p>
+                            </div>
+
+                            <div className="space-y-1.5 pt-1">
+                              {chal.conditionType === ChallengeConditionType.SPEED_TARGET_TIME ? (
+                                <div className="space-y-1">
+                                  <div className="flex items-center justify-between text-xs font-mono font-medium">
+                                    <span className="text-amber-700 dark:text-amber-300 font-semibold text-[11px]">
+                                      {chal.isUnlocked
+                                        ? `Đã đạt: ${chal.currentValue > 0 ? `${chal.currentValue} phút` : 'Đạt chuẩn'}`
+                                        : `Cự ly: ${chal.targetSpeedDistanceKm || 5} km • Thời gian ≤ ${chal.thresholdValue} phút`}
+                                    </span>
+                                    <span
+                                      className={
+                                        chal.isUnlocked
+                                          ? 'text-amber-600 dark:text-amber-400 font-bold'
+                                          : 'text-slate-400 text-[11px]'
+                                      }
+                                    >
+                                      {chal.isUnlocked ? '100%' : 'Chưa đạt'}
+                                    </span>
+                                  </div>
+                                  <div className="w-full h-1.5 rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden">
+                                    <div
+                                      className={`h-full rounded-full transition-all duration-500 ${chal.isUnlocked ? 'bg-amber-500' : 'bg-slate-400 dark:bg-slate-600'
+                                        }`}
+                                      style={{ width: `${chal.isUnlocked ? 100 : 0}%` }}
+                                    />
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="space-y-1.5">
+                                  <div className="flex justify-between text-xs font-mono font-medium">
+                                    <span className="text-slate-600 dark:text-slate-300">
+                                      {chal.currentValue} / {chal.thresholdValue}{' '}
+                                      {chal.conditionType === ChallengeConditionType.STREAK_DAYS
+                                        ? 'ngày'
+                                        : chal.conditionType === ChallengeConditionType.ELEVATION_GAIN
+                                          ? 'm'
+                                          : 'km'}
+                                    </span>
+                                    <span
+                                      className={
+                                        chal.isUnlocked
+                                          ? 'text-amber-600 dark:text-amber-400 font-bold'
+                                          : 'text-slate-400'
+                                      }
+                                    >
+                                      {chal.progressPercentage}%
+                                    </span>
+                                  </div>
+                                  <div className="w-full h-1.5 rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden">
+                                    <div
+                                      className={`h-full rounded-full transition-all duration-500 ${chal.isUnlocked ? 'bg-amber-500' : 'bg-slate-400 dark:bg-slate-600'
+                                        }`}
+                                      style={{ width: `${chal.progressPercentage}%` }}
+                                    />
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
                   </div>
-                )}
-              </div>
-            </>
+
+                  {/* REAL-TIME LEADERBOARD */}
+                  <div className="rounded-2xl bg-white dark:bg-[#0F1420] border border-slate-200/80 dark:border-slate-800/80 p-6 space-y-5 shadow-sm">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-800/80 pb-4">
+                      <div>
+                        <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                          Bảng xếp hạng giải đấu
+                        </h3>
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                          Cập nhật theo thời gian thực sau khi kiểm duyệt tốc độ từng km
+                        </p>
+                      </div>
+
+                      <div className="inline-flex p-1 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-200/70 dark:border-slate-800 self-start sm:self-auto">
+                        <button
+                          type="button"
+                          onClick={() => setLeaderboardMode('individual')}
+                          className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${leaderboardMode === 'individual'
+                            ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-sm'
+                            : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
+                            }`}
+                        >
+                          Cá nhân
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setLeaderboardMode('team')}
+                          className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${leaderboardMode === 'team'
+                            ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-sm'
+                            : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
+                            }`}
+                        >
+                          Đội nhóm / Phòng ban
+                        </button>
+                      </div>
+                    </div>
+
+                    {leaderboardMode === 'individual' ? (
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left border-collapse">
+                          <thead>
+                            <tr className="border-b border-slate-200/70 dark:border-slate-800 text-[11px] font-semibold uppercase text-slate-400">
+                              <th className="py-3 px-3">Hạng</th>
+                              <th className="py-3 px-3">Vận động viên</th>
+                              <th className="py-3 px-3">Mã BIB</th>
+                              <th className="py-3 px-3">Mục tiêu</th>
+                              <th className="py-3 px-3">Thực chạy</th>
+                              <th className="py-3 px-3">Tổng km tính giải</th>
+                              <th className="py-3 px-3">Trạng thái</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 text-sm">
+                            {(currentEventData?.individualLeaderboard?.length > 0
+                              ? currentEventData.individualLeaderboard.map((p: any) => ({
+                                userId: p.userId,
+                                name: p.userName,
+                                dept: p.department || 'VĐV Tự do',
+                                bib: p.bibNumber,
+                                targetName: `${p.targetDistanceKm} KM`,
+                                rawKm: p.rawDistanceKm,
+                                multipliedKm: p.multipliedDistanceKm,
+                                isFinisher: p.isTargetCompleted,
+                                isMe: user?.id ? p.userId === user.id : false,
+                                avatarUrl: p.avatarUrl,
+                                gender: p.gender,
+                              }))
+                              : [
+                                {
+                                  userId: 'usr_tuan_minh',
+                                  name: 'Nguyễn Tuấn Minh',
+                                  dept: 'Khối Công Nghệ & R&D',
+                                  bib: 'TOP100-0005',
+                                  targetName: '100 KM',
+                                  rawKm: 93.5,
+                                  multipliedKm: 93.5,
+                                  isFinisher: false,
+                                  avatarUrl: '',
+                                  gender: 'M',
+                                },
+                                {
+                                  userId: user?.id || 'usr_alan',
+                                  name: 'Nguyễn Hữu Thuận (Alan Hoàng)',
+                                  dept: 'ASSA ABLOY Engineering',
+                                  bib: myBibNumber,
+                                  targetName: `${myTargetKm} KM`,
+                                  rawKm: dualGoalProgress.target.currentRawDistanceKm,
+                                  multipliedKm: dualGoalProgress.target.currentMultipliedDistanceKm,
+                                  isFinisher: dualGoalProgress.target.isCompleted,
+                                  isMe: true,
+                                  avatarUrl: '',
+                                  gender: 'M',
+                                },
+                              ]
+                            )
+                              .sort((a: any, b: any) => b.multipliedKm - a.multipliedKm)
+                              .map((row: any, index: number) => (
+                                <tr
+                                  key={row.bib}
+                                  onClick={() => {
+                                    setSelectedParticipantDetail({
+                                      userId: row.userId || '',
+                                      name: row.name,
+                                      avatarUrl: row.avatarUrl,
+                                      clubName: row.dept,
+                                      bibNumber: row.bib,
+                                      targetDistanceKm: parseInt(row.targetName, 10) || 50,
+                                      totalValidKm: row.multipliedKm,
+                                      progressPercent: Math.round((row.multipliedKm / (parseInt(row.targetName, 10) || 1)) * 100),
+                                      rank: index + 1,
+                                      gender: row.gender,
+                                      activities: activities.filter(
+                                        (a) => a.userId === row.userId && !a.isHidden && a.validDistanceKm > 0
+                                      ),
+                                    });
+                                  }}
+                                  className={`transition cursor-pointer ${(row as any).isMe
+                                    ? 'bg-[#FC4C02]/5 dark:bg-[#FC4C02]/10 hover:bg-[#FC4C02]/15'
+                                    : 'hover:bg-slate-50 dark:hover:bg-slate-800/40'
+                                    }`}
+                                >
+                                  <td className="py-3.5 px-3 font-mono font-bold text-sm">
+                                    <span
+                                      className={`inline-flex items-center justify-center w-6 h-6 rounded-md text-xs ${index === 0
+                                        ? 'bg-amber-500/20 text-amber-600 dark:text-amber-400 font-extrabold'
+                                        : index === 1
+                                          ? 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-extrabold'
+                                          : index === 2
+                                            ? 'bg-orange-500/15 text-orange-600 dark:text-orange-400 font-extrabold'
+                                            : 'text-slate-400'
+                                        }`}
+                                    >
+                                      {index + 1}
+                                    </span>
+                                  </td>
+                                  <td className="py-3.5 px-3">
+                                    <div className="font-semibold text-slate-900 dark:text-white">
+                                      {row.name}
+                                    </div>
+                                    <div className="text-xs text-slate-500 dark:text-slate-400">{row.dept}</div>
+                                  </td>
+                                  <td className="py-3.5 px-3 font-mono text-xs text-slate-600 dark:text-slate-300 font-semibold">
+                                    {row.bib}
+                                  </td>
+                                  <td className="py-3.5 px-3 font-mono text-xs text-slate-600 dark:text-slate-300">
+                                    {row.targetName}
+                                  </td>
+                                  <td className="py-3.5 px-3 font-mono text-xs text-slate-600 dark:text-slate-300">
+                                    {row.rawKm} km
+                                  </td>
+                                  <td className="py-3.5 px-3 font-mono font-bold text-slate-900 dark:text-white">
+                                    {row.multipliedKm} km
+                                  </td>
+                                  <td className="py-3.5 px-3">
+                                    {row.isFinisher ? (
+                                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60">
+                                        <CheckCircle2 className="w-3 h-3" />
+                                        Finisher
+                                      </span>
+                                    ) : (
+                                      <span className="inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">
+                                        Đang chạy
+                                      </span>
+                                    )}
+                                  </td>
+                                </tr>
+                              ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        {[
+                          {
+                            rank: 1,
+                            name: 'Khối Công Nghệ & R&D (Engineering)',
+                            members: 18,
+                            totalKm: 418.6,
+                          },
+                          {
+                            rank: 2,
+                            name: 'Khối Vận Hành & Chuỗi Cung Ứng (Operations)',
+                            members: 22,
+                            totalKm: 375.2,
+                          },
+                          {
+                            rank: 3,
+                            name: 'Khối Kinh Doanh & Thương Mại (Commercial)',
+                            members: 16,
+                            totalKm: 290.8,
+                          },
+                        ].map((team) => (
+                          <div
+                            key={team.name}
+                            className="p-5 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200/70 dark:border-slate-800 space-y-3"
+                          >
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs font-bold uppercase text-[#FC4C02]">
+                                Hạng #{team.rank}
+                              </span>
+                              <span className="text-xs text-slate-500">{team.members} thành viên</span>
+                            </div>
+                            <h4 className="font-bold text-slate-900 dark:text-white text-sm">
+                              {team.name}
+                            </h4>
+                            <div className="flex items-baseline justify-between pt-2 border-t border-slate-200/70 dark:border-slate-800">
+                              <span className="text-2xl font-extrabold font-mono text-slate-900 dark:text-white">
+                                {team.totalKm} km
+                              </span>
+                              <span className="text-xs text-slate-500 font-mono">
+                                TB: {roundKm(team.totalKm / team.members)} km/người
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
           )}
-        </div>
-      )}
 
           {/* =================================================================
               VIEW 2: NHẬT KÝ HOẠT ĐỘNG, BẢN ĐỒ TƯƠNG TÁC & BỘ 4 BIỂU ĐỒ CHI TIẾT
@@ -2356,7 +2343,7 @@ export default function TopRunWebApp() {
               onDeleteEvent={handleDeleteEvent}
               onViewRunnerDetail={(id) => {
                 setSelectedEventId(id);
-                setActiveTab('events');
+                setActiveTab('tournaments');
                 setRunnerEventSubTab('detail');
               }}
             />
@@ -2455,7 +2442,7 @@ export default function TopRunWebApp() {
               }
               onGoToExplore={() => {
                 setShowEBibModal(false);
-                setActiveTab('events');
+                setActiveTab('tournaments');
                 setRunnerEventSubTab('explore');
               }}
             />

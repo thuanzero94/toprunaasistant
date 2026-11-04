@@ -1,9 +1,9 @@
 'use client';
 
 import React from 'react';
-import { Trophy, Activity, Flame, UserCheck } from 'lucide-react';
+import { LayoutDashboard, Trophy, Activity, Flame, UserCheck } from 'lucide-react';
 
-export type MobileTab = 'events' | 'tracklogs' | 'trophy' | 'account' | 'admin' | 'clubs';
+export type MobileTab = 'dashboard' | 'tournaments' | 'events' | 'tracklogs' | 'trophy' | 'account' | 'admin' | 'clubs';
 
 interface MobileBottomNavProps {
   activeTab: MobileTab;
@@ -18,7 +18,12 @@ export default function MobileBottomNav({
 }: MobileBottomNavProps) {
   const tabs = [
     {
-      id: 'events' as const,
+      id: 'dashboard' as const,
+      label: 'Tổng quan',
+      icon: LayoutDashboard,
+    },
+    {
+      id: 'tournaments' as const,
       label: 'Giải đấu',
       icon: Trophy,
       badge: myEventsCount > 0 ? myEventsCount : undefined,
@@ -45,10 +50,10 @@ export default function MobileBottomNav({
       aria-label="Điều hướng chính trên di động"
       className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-[#0C101B]/95 backdrop-blur-md border-t border-slate-200/80 dark:border-slate-800/80 px-2 py-1 shadow-2xl safe-area-bottom"
     >
-      <div className="grid grid-cols-4 gap-1 max-w-md mx-auto">
+      <div className="grid grid-cols-5 gap-1 max-w-lg mx-auto">
         {tabs.map((tab) => {
           const Icon = tab.icon;
-          const isActive = activeTab === tab.id;
+          const isActive = activeTab === tab.id || (tab.id === 'tournaments' && activeTab === 'events');
 
           return (
             <button
