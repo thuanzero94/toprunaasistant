@@ -27,6 +27,7 @@ import {
 } from 'lucide-react';
 import { formatPace, parsePaceToSeconds } from '@toprun/shared';
 import { useAuth } from '../context/AuthContext';
+import AthleteAvatar, { AthleteHonorPill } from './AthleteAvatar';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1';
 
@@ -339,30 +340,26 @@ export default function AccountAndStravaPanel({
       <div className="rounded-2xl bg-white dark:bg-[#0F1420] border border-slate-200/80 dark:border-slate-800/80 p-6 shadow-sm">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div className="flex items-center gap-4">
-            <div className="relative shrink-0">
-              <img
-                src={
-                  avatarUrl ||
-                  stravaStatus.profilePicUrl ||
-                  accountData?.user?.avatarUrl ||
-                  `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(authUser?.email || 'Runner')}`
-                }
-                alt="Avatar"
-                className="w-16 h-16 rounded-2xl object-cover ring-2 ring-[#FC4C02]"
-              />
-              <span
-                className={`absolute -bottom-1 -right-1 w-4 h-4 rounded-full border-2 border-white dark:border-[#0F1420] ${
-                  stravaStatus.isConnected ? 'bg-emerald-500' : 'bg-slate-400'
-                }`}
-                title={stravaStatus.isConnected ? 'Đã liên kết Strava' : 'Chưa kết nối Strava'}
+            <div className="relative shrink-0 my-1">
+              <AthleteAvatar
+                user={{
+                  ...authUser,
+                  ...(accountData?.user || {}),
+                  avatarUrl: avatarUrl || stravaStatus.profilePicUrl || accountData?.user?.avatarUrl || authUser?.avatarUrl,
+                }}
+                size="lg"
+                showBadge={true}
+                showWings={true}
+                showSharkCrown={true}
               />
             </div>
 
             <div>
-              <div className="flex flex-wrap items-center gap-2.5">
+              <div className="flex flex-wrap items-center gap-2">
                 <h2 className="text-xl font-bold text-slate-900 dark:text-white tracking-tight">
                   {accountData?.user?.fullName || fullName}
                 </h2>
+                <AthleteHonorPill user={accountData?.user || authUser} />
                 <span className="px-2.5 py-0.5 rounded-md text-[11px] font-semibold bg-[#FC4C02]/10 text-[#FC4C02] border border-[#FC4C02]/20">
                   {accountData?.user?.role === 'ADMIN' ? 'Ban Tổ Chức' : 'Vận Động Viên'}
                 </span>

@@ -8,6 +8,7 @@ export interface AuthUser {
   fullName: string;
   avatarUrl?: string | null;
   role: string;
+  honorBadge?: string | null;
   departmentOrUnit?: string | null;
   phone?: string | null;
   gender?: string | null;

@@ -623,11 +623,37 @@ export class AccountService implements OnModuleInit {
     };
   }
 
+  async updateUserHonorBadge(targetUserId: string, honorBadge: string | null) {
+    const user = await prisma.user.findUnique({ where: { id: targetUserId } });
+    if (!user) throw new NotFoundException('Không tìm thấy tài khoản để cập nhật danh hiệu.');
+
+    const updated = await prisma.user.update({
+      where: { id: targetUserId },
+      data: { honorBadge: honorBadge || null },
+    });
+
+    return {
+      message: `Đã cập nhật danh hiệu của "${updated.fullName}" thành ${honorBadge || 'Mặc định'}.`,
+      user: this.sanitizeUser(updated),
+    };
+  }
+
   async deleteUser(targetUserId: string) {
     const user = await prisma.user.findUnique({ where: { id: targetUserId } });
     if (!user) throw new NotFoundException('Không tìm thấy tài khoản để xoá.');
     if (user.email === 'admin@toprun.vn') {
       throw new BadRequestException('Không thể xoá tài khoản Quản trị viên tối cao.');
+    }
+
+    // Tự động chuyển giao quyền sở hữu giải đấu (creatorId) sang tài khoản Admin khác nếu có
+    const adminUser = await prisma.user.findFirst({
+      where: { role: UserRole.ADMIN, id: { not: targetUserId } },
+    });
+    if (adminUser) {
+      await prisma.event.updateMany({
+        where: { creatorId: targetUserId },
+        data: { creatorId: adminUser.id },
+      });
     }
 
     await prisma.user.delete({ where: { id: targetUserId } });

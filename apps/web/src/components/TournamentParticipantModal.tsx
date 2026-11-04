@@ -15,6 +15,7 @@ import {
   ExternalLink,
 } from 'lucide-react';
 import { formatPace, roundKm } from '@toprun/shared';
+import AthleteAvatar, { AthleteHonorPill } from './AthleteAvatar';
 
 export interface ParticipantDetailData {
   userId: string;
@@ -28,6 +29,8 @@ export interface ParticipantDetailData {
   gender?: string;
   rank?: number;
   challengeTierAchieved?: string;
+  role?: string;
+  honorBadge?: string | null;
   activities?: any[];
 }
 
@@ -58,28 +61,30 @@ export default function TournamentParticipantModal({
           </button>
 
           <div className="flex items-center gap-4">
-            <div className="relative">
-              {participant.avatarUrl ? (
-                <img
-                  src={participant.avatarUrl}
-                  alt={participant.name}
-                  className="w-16 h-16 rounded-2xl object-cover ring-2 ring-[#FC4C02]"
-                />
-              ) : (
-                <div className="w-16 h-16 rounded-2xl bg-[#FC4C02] text-white font-black text-xl flex items-center justify-center shadow-lg">
-                  {participant.name.slice(0, 2).toUpperCase()}
-                </div>
-              )}
-              {participant.rank && participant.rank <= 3 && (
-                <div className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-amber-400 text-slate-950 font-black text-xs flex items-center justify-center shadow-md">
-                  #{participant.rank}
-                </div>
-              )}
+            <div className="shrink-0 my-1">
+              <AthleteAvatar
+                user={{
+                  id: participant.userId,
+                  fullName: participant.name,
+                  avatarUrl: participant.avatarUrl,
+                  role: participant.role,
+                  honorBadge: participant.honorBadge,
+                }}
+                rank={participant.rank}
+                size="lg"
+                showBadge={true}
+                showWings={true}
+                showSharkCrown={true}
+              />
             </div>
 
             <div className="space-y-1">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <h3 className="text-lg font-bold">{participant.name}</h3>
+                <AthleteHonorPill
+                  user={{ role: participant.role, honorBadge: participant.honorBadge }}
+                  rank={participant.rank}
+                />
                 {participant.bibNumber && (
                   <span className="px-2 py-0.5 rounded-md text-[11px] font-mono font-bold bg-[#FC4C02] text-white">
                     BIB {participant.bibNumber}

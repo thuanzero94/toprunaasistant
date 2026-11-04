@@ -10,6 +10,13 @@ export enum UserRole {
   ADMIN = 'ADMIN',
 }
 
+export enum HonorBadge {
+  ANGEL_INVESTOR = 'ANGEL_INVESTOR', // 🦈 Nhà đầu tư thiên thần (Shark VIP Backer)
+  FOUNDER = 'FOUNDER',               // 🚀 Nhà sáng lập & Cố vấn
+  VIP_PATRON = 'VIP_PATRON',         // ⭐ Nhà tài trợ VIP
+  ELITE_ATHLETE = 'ELITE_ATHLETE',   // ⚡ Vận động viên đỉnh cao (Sub-20 5K, Sub-4 42K)
+}
+
 export enum ActivitySource {
   STRAVA = 'STRAVA',
   GPX_UPLOAD = 'GPX_UPLOAD',

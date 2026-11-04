@@ -111,6 +111,9 @@ model User {
   pr42kSec               Int?
   prCertLink             String?
 
+  // Danh hiệu & Huy hiệu danh dự đặc biệt (ANGEL_INVESTOR, FOUNDER, VIP_PATRON, ELITE_ATHLETE)
+  honorBadge             String?
+
   expoPushToken          String?
   createdAt              DateTime        @default(now())
   updatedAt              DateTime        @updatedAt

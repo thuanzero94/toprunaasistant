@@ -42,11 +42,13 @@ import AdminManagementPortal, { AdminEventFormState } from '../components/AdminM
 import RunnerEventModals from '../components/RunnerEventModals';
 import RunnerMyEvents, { MyEventItem } from '../components/RunnerMyEvents';
 import RunnerExploreEvents, { ExploreEventItem } from '../components/RunnerExploreEvents';
+import RunnerLeaderboardAndPrView from '../components/RunnerLeaderboardAndPrView';
 import RunnerTrophyAndEBibView from '../components/RunnerTrophyAndEBibView';
 import TournamentParticipantModal, { ParticipantDetailData } from '../components/TournamentParticipantModal';
 import UserTracklogExplorer, { TracklogActivityItem } from '../components/UserTracklogExplorer';
 import TopRunLogo from '../components/TopRunLogo';
 import MobileBottomNav from '../components/MobileBottomNav';
+import AthleteAvatar, { AthleteHonorPill } from '../components/AthleteAvatar';
 import {
   AntiCheatStatus,
   ChallengeConditionType,
@@ -152,7 +154,7 @@ type NavTab = 'events' | 'tracklogs' | 'trophy' | 'clubs' | 'account' | 'admin';
 
 export default function TopRunWebApp() {
   const router = useRouter();
-  const { user, logout, isLoading: isAuthLoading } = useAuth();
+  const { user, logout, isLoading: isAuthLoading, updateUserSession } = useAuth();
 
   const [activeTab, setActiveTab] = useState<NavTab>('events');
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
@@ -161,6 +163,7 @@ export default function TopRunWebApp() {
   const [selectedActivityId, setSelectedActivityId] = useState<string>('act_01');
   const [showShareModal, setShowShareModal] = useState(false);
   const [showRegisterModal, setShowRegisterModal] = useState(false);
+  const [showEBibModal, setShowEBibModal] = useState(false);
   const [syncBannerMessage, setSyncBannerMessage] = useState<string | null>(null);
   const [isSyncingStrava, setIsSyncingStrava] = useState(false);
 
@@ -346,6 +349,36 @@ export default function TopRunWebApp() {
       }
     } catch (err: any) {
       setAdminUserActionMsg(err.message || 'Lỗi kết nối khi cập nhật vai trò');
+    }
+  };
+
+  const handleUpdateUserHonorBadge = async (targetUserId: string, newHonorBadge: string | null) => {
+    try {
+      const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1';
+      const token = typeof window !== 'undefined' ? localStorage.getItem('toprun_auth_token') : null;
+      const res = await fetch(`${apiBase}/admin/users/${targetUserId}/honor-badge`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ honorBadge: newHonorBadge }),
+      });
+      if (res.ok) {
+        setAdminUsers((prev) =>
+          prev.map((u) => (u.id === targetUserId ? { ...u, honorBadge: newHonorBadge } : u))
+        );
+        setAdminUserActionMsg(`Đã cập nhật danh hiệu VIP thành công!`);
+        if (user && user.id === targetUserId) {
+          updateUserSession({ honorBadge: newHonorBadge });
+        }
+        setTimeout(() => setAdminUserActionMsg(null), 4000);
+      } else {
+        const err = await res.json();
+        setAdminUserActionMsg(err.message || 'Không thể cập nhật danh hiệu');
+      }
+    } catch (err: any) {
+      setAdminUserActionMsg(err.message || 'Lỗi kết nối khi cập nhật danh hiệu');
     }
   };
 
@@ -822,7 +855,32 @@ export default function TopRunWebApp() {
         const part = ev.participants?.find((p: any) => p.userId === user.id);
         const myBib = part?.bibNumber;
         const myTarget = part?.targetDistanceKm || 50;
-        const myValidKm = part?.totalValidKm || 0;
+
+        // Tính toán chính xác km hợp lệ từ activities cho giải đấu này
+        const evStart = ev.startDateIso ? new Date(ev.startDateIso).getTime() : 0;
+        const evEnd = ev.endDateIso ? new Date(ev.endDateIso).getTime() : Infinity;
+        const multiplier = ev.ruleConfig?.weekendMultiplier ?? 1.0;
+
+        const matchingActivities = activities.filter((a) => {
+          const isMine = a.userId === user.id;
+          if (!isMine || a.isHidden || a.validDistanceKm <= 0) return false;
+          const actTime = a.startDateIso ? new Date(a.startDateIso).getTime() : Date.now();
+          return actTime >= evStart && actTime <= evEnd;
+        });
+
+        const calculatedKm = matchingActivities.reduce((acc, a) => {
+          let mult = 1.0;
+          if (a.startDateIso) {
+            const d = new Date(a.startDateIso).getUTCDay();
+            if ((d === 0 || d === 6) && multiplier > 1.0) {
+              mult = multiplier;
+            }
+          }
+          return acc + roundKm(a.validDistanceKm * mult);
+        }, 0);
+
+        const myValidKm = roundKm(calculatedKm > 0 ? calculatedKm : (part?.totalValidKm || 0));
+
         return {
           id: ev.id,
           title: ev.title,
@@ -832,14 +890,14 @@ export default function TopRunWebApp() {
           myBibNumber: myBib,
           myTargetKm: myTarget,
           myTotalValidKm: myValidKm,
-          myProgressPercent: Math.round((myValidKm / (myTarget || 1)) * 100),
+          myProgressPercent: Math.min(100, Math.round((myValidKm / (myTarget || 1)) * 100)),
           myRank: part?.rank,
           myChallengeTier: part?.challengeTier,
           ruleConfig: ev.ruleConfig,
           totalParticipants: ev.participantsCount || (ev.participants ? ev.participants.length : 0),
         };
       });
-  }, [eventsList, user?.id]);
+  }, [eventsList, activities, user?.id]);
 
   // Tự động chuyển sang tab "Khám phá giải mới" nếu User chưa tham gia giải nào
   useEffect(() => {
@@ -1252,7 +1310,7 @@ export default function TopRunWebApp() {
   const navItems: { id: NavTab; label: string; subLabel: string; icon: any }[] = [
     { id: 'events', label: 'Tổng quan & Tiến độ', subLabel: 'Mục tiêu & Thử thách', icon: LayoutDashboard },
     { id: 'tracklogs', label: 'Nhật ký & Tracklog', subLabel: 'Bản đồ GPS & Tốc độ từng km', icon: Activity },
-    { id: 'trophy', label: 'Chứng nhận & E-BIB', subLabel: 'Tủ huy hiệu cá nhân', icon: Award },
+    { id: 'trophy', label: 'Bảng Vàng PR & Xếp Hạng', subLabel: 'Kỷ lục cá nhân & BXH Runner', icon: Flame },
     { id: 'clubs', label: 'Câu lạc bộ & Đội nhóm', subLabel: 'Thi đua liên phòng ban', icon: Users },
     { id: 'account', label: 'Hồ sơ & Kết nối Strava', subLabel: 'Tài khoản & Đồng bộ tự động', icon: UserCheck },
     ...(user?.role === 'ADMIN'
@@ -1376,21 +1434,17 @@ export default function TopRunWebApp() {
               onClick={() => setActiveTab('account')}
               className="w-full p-2.5 rounded-xl bg-slate-50 dark:bg-slate-900/80 border border-slate-200/70 dark:border-slate-800 hover:border-[#FC4C02]/40 flex items-center gap-3 text-left transition cursor-pointer"
             >
-              <img
-                src={
-                  user.avatarUrl ||
-                  `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(user.email)}`
-                }
-                alt={user.fullName}
-                className="w-9 h-9 rounded-lg object-cover ring-1 ring-[#FC4C02]"
-              />
+              <div className="shrink-0 my-0.5">
+                <AthleteAvatar user={user} size="sm" showBadge={true} showWings={true} showSharkCrown={true} />
+              </div>
               <div className="min-w-0 flex-1">
-                <div className="text-xs font-bold text-slate-900 dark:text-white truncate">
-                  {user.fullName}
+                <div className="text-xs font-bold text-slate-900 dark:text-white truncate flex items-center gap-1">
+                  <span>{user.fullName}</span>
                 </div>
-                <div className="text-[11px] text-slate-500 dark:text-slate-400 font-mono flex items-center gap-1.5">
+                <div className="text-[11px] text-slate-500 dark:text-slate-400 font-mono flex items-center gap-1.5 mt-0.5 flex-wrap">
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
                   <span>{myBibNumber}</span>
+                  <AthleteHonorPill user={user} />
                 </div>
               </div>
               <ChevronRight className="w-4 h-4 text-slate-400 shrink-0" />
@@ -1465,16 +1519,9 @@ export default function TopRunWebApp() {
                 type="button"
                 onClick={() => setActiveTab('account')}
                 title="Tài khoản cá nhân"
-                className="w-8 h-8 rounded-xl overflow-hidden ring-1 ring-slate-200 dark:ring-slate-800 hover:ring-[#FC4C02] transition cursor-pointer shrink-0"
+                className="shrink-0 cursor-pointer my-0.5"
               >
-                <img
-                  src={
-                    user.avatarUrl ||
-                    `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(user.email)}`
-                  }
-                  alt={user.fullName}
-                  className="w-full h-full object-cover"
-                />
+                <AthleteAvatar user={user} size="sm" showBadge={true} showWings={false} showSharkCrown={true} />
               </button>
 
               <button
@@ -1668,7 +1715,7 @@ export default function TopRunWebApp() {
                   onGoToExplore={() => setRunnerEventSubTab('explore')}
                   onOpenEBib={(eventId) => {
                     setSelectedEventId(eventId);
-                    setActiveTab('trophy');
+                    setShowEBibModal(true);
                   }}
                 />
               ) : runnerEventSubTab === 'explore' ? (
@@ -1729,7 +1776,7 @@ export default function TopRunWebApp() {
                     </button>
                     <button
                       type="button"
-                      onClick={() => setActiveTab('trophy')}
+                      onClick={() => setShowEBibModal(true)}
                       className="px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-semibold text-xs sm:text-sm flex items-center justify-center gap-2 transition cursor-pointer"
                     >
                       <Award className="w-4 h-4 text-[#FC4C02]" />
@@ -2214,25 +2261,16 @@ export default function TopRunWebApp() {
           )}
 
           {/* =================================================================
-              VIEW 3: TỦ HUY CHƯƠNG, E-BIB & E-CERTIFICATE
+              VIEW 3: BẢNG VÀNG PR & XẾP HẠNG RUNNER
              ================================================================= */}
           {activeTab === 'trophy' && (
-            <RunnerTrophyAndEBibView
-              myEvents={myEventsList}
-              trophyCase={trophyCase}
-              user={user}
-              currentEventData={currentEventData}
-              onOpenEditBib={(eventId, currentBib, eventTitle) =>
-                setEditBibModalState({
-                  show: true,
-                  eventId,
-                  bibNumber: currentBib,
-                  eventTitle,
-                })
-              }
-              onGoToExplore={() => {
-                setActiveTab('events');
-                setRunnerEventSubTab('explore');
+            <RunnerLeaderboardAndPrView
+              currentUser={user}
+              activities={activities}
+              onGoToAccountSettings={() => setActiveTab('account')}
+              onOpenEBibModal={(eventId) => {
+                if (eventId) setSelectedEventId(eventId);
+                setShowEBibModal(true);
               }}
             />
           )}
@@ -2297,6 +2335,7 @@ export default function TopRunWebApp() {
               adminUserActionMsg={adminUserActionMsg}
               onRefreshUsers={fetchAdminUsers}
               onUpdateUserRole={handleUpdateUserRole}
+              onUpdateUserHonorBadge={handleUpdateUserHonorBadge}
               onDeleteUser={handleDeleteUser}
               adminEventSaveMsg={adminEventSaveMsg}
               eventsList={eventsList}
@@ -2373,6 +2412,56 @@ export default function TopRunWebApp() {
           setActiveTab('tracklogs');
         }}
       />
+
+      {/* MODAL: XEM E-BIB & CHỨNG NHẬN ĐI THEO GIẢI ĐẤU */}
+      {showEBibModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/75 backdrop-blur-sm overflow-y-auto">
+          <div className="relative w-full max-w-4xl bg-white dark:bg-[#0F1420] border border-slate-200 dark:border-slate-800 rounded-3xl p-5 sm:p-6 shadow-2xl my-6 space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-[#FC4C02]/10 text-[#FC4C02] flex items-center justify-center">
+                  <Award className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-base text-slate-900 dark:text-white">
+                    Chứng Nhận E-BIB & Tủ Huy Chương Giải Đấu
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    Xem số BIB độc bản, tải SVG chứng nhận hoàn thành và tuỳ chỉnh thông tin
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowEBibModal(false)}
+                className="p-2 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <RunnerTrophyAndEBibView
+              myEvents={myEventsList}
+              trophyCase={trophyCase}
+              user={user}
+              currentEventData={currentEventData}
+              onOpenEditBib={(eventId, currentBib, eventTitle) =>
+                setEditBibModalState({
+                  show: true,
+                  eventId,
+                  bibNumber: currentBib,
+                  eventTitle,
+                })
+              }
+              onGoToExplore={() => {
+                setShowEBibModal(false);
+                setActiveTab('events');
+                setRunnerEventSubTab('explore');
+              }}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

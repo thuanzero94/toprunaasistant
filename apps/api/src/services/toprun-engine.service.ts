@@ -39,6 +39,7 @@ export interface UserProfile {
   gender: 'MALE' | 'FEMALE' | 'OTHER';
   departmentOrUnit: string;
   role: UserRole;
+  honorBadge?: string | null;
   totalDistanceKm: number;
   totalActivities: number;
   pr5kSec: number | null;
@@ -379,29 +380,27 @@ export class TopRunEngineService implements OnModuleInit {
 
   private async syncUsersWithDatabase() {
     try {
-      for (const u of this.users) {
-        try {
-          await prisma.user.upsert({
-            where: { id: u.id },
-            update: {
-              fullName: u.fullName,
-              avatarUrl: u.avatarUrl,
-              departmentOrUnit: u.departmentOrUnit,
-              totalDistanceKm: u.totalDistanceKm,
-              totalActivities: u.totalActivities,
-            },
-            create: {
-              id: u.id,
-              email: u.email || `${u.id}@toprun.vn`,
-              fullName: u.fullName,
-              avatarUrl: u.avatarUrl,
-              departmentOrUnit: u.departmentOrUnit,
-              role: u.role,
-              totalDistanceKm: u.totalDistanceKm,
-              totalActivities: u.totalActivities,
-            },
-          });
-        } catch {}
+      const dbUsersCount = await prisma.user.count();
+      // Chỉ nạp dữ liệu mẫu 1 lần duy nhất khi database PostgreSQL hoàn toàn trống
+      if (dbUsersCount === 0) {
+        for (const u of this.users) {
+          try {
+            await prisma.user.upsert({
+              where: { id: u.id },
+              update: {},
+              create: {
+                id: u.id,
+                email: u.email || `${u.id}@toprun.vn`,
+                fullName: u.fullName,
+                avatarUrl: u.avatarUrl,
+                departmentOrUnit: u.departmentOrUnit,
+                role: u.role,
+                totalDistanceKm: u.totalDistanceKm,
+                totalActivities: u.totalActivities,
+              },
+            });
+          } catch {}
+        }
       }
 
       const dbUsers = await prisma.user.findMany();
@@ -419,6 +418,7 @@ export class TopRunEngineService implements OnModuleInit {
             gender: (dbU.gender as any) || 'MALE',
             departmentOrUnit: dbU.departmentOrUnit || 'Runner Community',
             role: dbU.role as any as UserRole,
+            honorBadge: dbU.honorBadge || null,
             totalDistanceKm: dbU.totalDistanceKm,
             totalActivities: dbU.totalActivities,
             pr5kSec: dbU.pr5kSec,
@@ -440,7 +440,8 @@ export class TopRunEngineService implements OnModuleInit {
   private async syncEventsWithDatabase() {
     try {
       const dbCount = await prisma.event.count();
-      if (dbCount === 0 || dbCount < this.events.length) {
+      // Chỉ nạp giải mẫu 1 lần duy nhất khi DB chưa có bất kỳ giải đấu nào
+      if (dbCount === 0) {
         for (const ev of this.events) {
           await this.persistEventToDb(ev);
         }
@@ -619,7 +620,7 @@ export class TopRunEngineService implements OnModuleInit {
   private async syncParticipationsWithDatabase() {
     try {
       const dbCount = await prisma.eventParticipation.count();
-      if (dbCount === 0 || dbCount < this.participations.length) {
+      if (dbCount === 0) {
         for (const p of this.participations) {
           await this.persistParticipationToDb(p);
         }
@@ -782,7 +783,7 @@ export class TopRunEngineService implements OnModuleInit {
   private async syncActivitiesWithDatabase() {
     try {
       const dbCount = await prisma.activity.count();
-      if (dbCount === 0 || dbCount < this.activities.length) {
+      if (dbCount === 0) {
         for (const act of this.activities) {
           await this.persistActivityToDb(act);
         }
@@ -2063,6 +2064,7 @@ export class TopRunEngineService implements OnModuleInit {
         gender: 'OTHER',
         departmentOrUnit: data.departmentOrUnit || 'Runner Community',
         role: UserRole.RUNNER,
+        honorBadge: null,
         totalDistanceKm: 0,
         totalActivities: 0,
         pr5kSec: null,
@@ -2102,6 +2104,21 @@ export class TopRunEngineService implements OnModuleInit {
 
     this.saveEngineState();
     return user;
+  }
+
+  deleteUser(userId: string) {
+    this.users = this.users.filter((u) => u.id !== userId);
+    this.participations = this.participations.filter((p) => p.userId !== userId);
+    this.activities = this.activities.filter((a) => a.userId !== userId);
+    this.saveEngineState();
+  }
+
+  updateUserHonorBadge(userId: string, honorBadge: string | null) {
+    const user = this.users.find((u) => u.id === userId);
+    if (user) {
+      user.honorBadge = honorBadge;
+      this.saveEngineState();
+    }
   }
 
   getUserProfileAndTrophyCase(userId: string) {

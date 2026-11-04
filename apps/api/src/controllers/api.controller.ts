@@ -150,6 +150,24 @@ export class ApiController {
     return this.accountService.updateUserRole(targetUserId, body.role);
   }
 
+  @Patch('admin/users/:id/honor-badge')
+  @ApiOperation({ summary: 'Cập nhật danh hiệu danh dự đặc biệt (ANGEL_INVESTOR, FOUNDER, VIP_PATRON, ELITE_ATHLETE)' })
+  async updateAdminUserHonorBadge(
+    @Param('id') targetUserId: string,
+    @Body() body: { honorBadge: string | null },
+    @Headers('authorization') authHeader?: string
+  ) {
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const decoded = this.accountService.verifyJwt(authHeader.slice(7));
+      if (!decoded || decoded.role !== 'ADMIN') {
+        throw new UnauthorizedException('Chỉ Quản trị viên (ADMIN) mới có quyền phân bổ danh hiệu danh dự.');
+      }
+    }
+    const result = await this.accountService.updateUserHonorBadge(targetUserId, body.honorBadge);
+    this.engine.updateUserHonorBadge(targetUserId, body.honorBadge);
+    return result;
+  }
+
   @Delete('admin/users/:id')
   @ApiOperation({ summary: 'Xoá tài khoản người dùng (Admin only)' })
   async deleteAdminUser(
@@ -162,7 +180,9 @@ export class ApiController {
         throw new UnauthorizedException('Chỉ Quản trị viên (ADMIN) mới có quyền xoá người dùng.');
       }
     }
-    return this.accountService.deleteUser(targetUserId);
+    const res = await this.accountService.deleteUser(targetUserId);
+    this.engine.deleteUser(targetUserId);
+    return res;
   }
 
   // ==========================================================================

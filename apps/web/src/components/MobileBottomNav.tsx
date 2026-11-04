@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Trophy, Activity, Award, UserCheck } from 'lucide-react';
+import { Trophy, Activity, Flame, UserCheck } from 'lucide-react';
 
 export type MobileTab = 'events' | 'tracklogs' | 'trophy' | 'account' | 'admin' | 'clubs';
 
@@ -30,8 +30,8 @@ export default function MobileBottomNav({
     },
     {
       id: 'trophy' as const,
-      label: 'E-BIB',
-      icon: Award,
+      label: 'Bảng vàng',
+      icon: Flame,
     },
     {
       id: 'account' as const,

@@ -25,6 +25,7 @@ import { AntiCheatStatus } from '@toprun/shared';
 import type { TracklogActivityItem } from './UserTracklogExplorer';
 import AdminTournamentsTable from './AdminTournamentsTable';
 import AdminStravaPoolManagement from './AdminStravaPoolManagement';
+import AthleteAvatar, { AthleteHonorPill } from './AthleteAvatar';
 
 export interface AdminCategoryItem {
   id?: string;
@@ -90,6 +91,7 @@ interface AdminManagementPortalProps {
   adminUserActionMsg: string | null;
   onRefreshUsers: () => void;
   onUpdateUserRole: (userId: string, newRole: string) => void;
+  onUpdateUserHonorBadge?: (userId: string, honorBadge: string | null) => void;
   onDeleteUser: (userId: string, userName: string) => void;
   adminEventSaveMsg: string | null;
   eventsList: any[];
@@ -119,6 +121,7 @@ export default function AdminManagementPortal({
   adminUserActionMsg,
   onRefreshUsers,
   onUpdateUserRole,
+  onUpdateUserHonorBadge,
   onDeleteUser,
   adminEventSaveMsg,
   eventsList,
@@ -287,6 +290,7 @@ export default function AdminManagementPortal({
                     <th className="py-3 px-3">Phòng ban</th>
                     <th className="py-3 px-3">Size áo / Địa chỉ</th>
                     <th className="py-3 px-3">Vai trò hệ thống</th>
+                    <th className="py-3 px-3">Danh hiệu VIP</th>
                     <th className="py-3 px-3">Ngày tạo</th>
                     <th className="py-3 px-3 text-right">Thao tác</th>
                   </tr>
@@ -309,13 +313,20 @@ export default function AdminManagementPortal({
                       return (
                         <tr key={u.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-900/40 transition">
                           <td className="py-3 px-3">
-                            <div className="flex items-center gap-2.5">
-                              <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-[#FC4C02] to-amber-500 text-white font-bold text-xs flex items-center justify-center shrink-0">
-                                {(u.fullName || 'U').charAt(0).toUpperCase()}
+                            <div className="flex items-center gap-3">
+                              <div className="shrink-0 my-1">
+                                <AthleteAvatar
+                                  user={u}
+                                  size="sm"
+                                  showBadge={true}
+                                  showWings={true}
+                                  showSharkCrown={true}
+                                />
                               </div>
                               <div>
-                                <div className="font-semibold text-slate-900 dark:text-white flex items-center gap-1.5">
+                                <div className="font-semibold text-slate-900 dark:text-white flex items-center gap-1.5 flex-wrap">
                                   <span>{u.fullName || 'Chưa cập nhật tên'}</span>
+                                  <AthleteHonorPill user={u} />
                                   {isCurrentAdmin && (
                                     <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300">
                                       Bạn
@@ -356,6 +367,27 @@ export default function AdminManagementPortal({
                               <option value="ADMIN">ADMIN (Quản trị viên)</option>
                               <option value="ORGANIZER">ORGANIZER (Ban tổ chức)</option>
                               <option value="RUNNER">RUNNER (Vận động viên)</option>
+                            </select>
+                          </td>
+                          <td className="py-3 px-3">
+                            <select
+                              value={u.honorBadge || ''}
+                              onChange={(e) => onUpdateUserHonorBadge && onUpdateUserHonorBadge(u.id, e.target.value || null)}
+                              className={`px-2.5 py-1 rounded-lg text-xs font-bold border transition cursor-pointer ${
+                                u.honorBadge === 'ANGEL_INVESTOR'
+                                  ? 'bg-cyan-950/60 border-cyan-400 text-cyan-300 font-black shadow-xs shadow-cyan-500/20'
+                                  : u.honorBadge === 'FOUNDER'
+                                  ? 'bg-amber-950/60 border-amber-400 text-amber-300 font-black'
+                                  : u.honorBadge === 'ELITE_ATHLETE'
+                                  ? 'bg-rose-950/60 border-rose-400 text-rose-300 font-bold'
+                                  : 'bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400'
+                              }`}
+                            >
+                              <option value="">-- Mặc định --</option>
+                              <option value="ANGEL_INVESTOR">🦈 Shark Angel Investor 💎</option>
+                              <option value="FOUNDER">🚀 Founder &amp; Architect</option>
+                              <option value="VIP_PATRON">⭐ Nhà tài trợ VIP</option>
+                              <option value="ELITE_ATHLETE">⚡ VĐV Đỉnh cao (Elite)</option>
                             </select>
                           </td>
                           <td className="py-3 px-3 text-xs font-mono tabular-nums text-slate-500">
