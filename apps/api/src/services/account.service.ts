@@ -131,7 +131,28 @@ export class AccountService implements OnModuleInit {
         },
       });
 
-      // Liên kết Strava App #292007 với Athlete #126278000 (Nguyễn Hữu Thuận)
+      // Khởi tạo Strava App #1 (Primary) từ cấu hình mặc định (292007)
+      const defaultApp = await prisma.stravaApp.upsert({
+        where: { clientId: this.stravaClientId },
+        update: {
+          name: 'Strava App #1 (Primary)',
+          clientSecret: this.stravaClientSecret,
+          maxAthletes: 10,
+          isActive: true,
+          priority: 1,
+        },
+        create: {
+          id: 'strava_app_01',
+          name: 'Strava App #1 (Primary)',
+          clientId: this.stravaClientId,
+          clientSecret: this.stravaClientSecret,
+          maxAthletes: 10,
+          isActive: true,
+          priority: 1,
+        },
+      });
+
+      // Liên kết Strava App #1 với Athlete #126278000 (Nguyễn Hữu Thuận)
       await prisma.stravaConnection.upsert({
         where: { userId: adminUser.id },
         update: {
@@ -144,6 +165,7 @@ export class AccountService implements OnModuleInit {
             'https://dgalywyr863hv.cloudfront.net/pictures/athletes/126278000/57450920/1/large.jpg',
           accessToken: this.defaultStravaAccessToken,
           refreshToken: this.defaultStravaRefreshToken,
+          stravaAppId: defaultApp.id,
         },
         create: {
           userId: adminUser.id,
@@ -161,10 +183,16 @@ export class AccountService implements OnModuleInit {
           scopes: 'read',
           syncStatus: 'REQUIRE_ACTIVITY_SCOPE',
           isActive: true,
+          stravaAppId: defaultApp.id,
           lastSyncAt: new Date(),
           lastErrorMsg:
             'Token mặc định trên trang cài đặt Strava chỉ có quyền "read". Nhấn "Cấp Quyền Đọc Tracklog (activity:read_all)" để đồng bộ toàn bộ bài chạy.',
         },
+      });
+
+      await prisma.stravaConnection.updateMany({
+        where: { stravaAppId: null },
+        data: { stravaAppId: defaultApp.id },
       });
 
       // Thêm 1 bản ghi lịch sử đồng bộ mẫu nếu chưa có
@@ -687,24 +715,142 @@ export class AccountService implements OnModuleInit {
   }
 
   // --------------------------------------------------------------------------
-  // 5. QUẢN LÝ TRẠNG THÁI ĐỒNG BỘ STRAVA (CONNECT, OAUTH CALLBACK, REFRESH, DISCONNECT)
+  // 5. QUẢN LÝ ĐA STRAVA API POOL & LOAD BALANCING (FILL-FIRST)
   // --------------------------------------------------------------------------
 
   /**
+   * Lấy Strava API App khả dụng theo chiến lược Fill-First (Điền đầy lần lượt):
+   * Quét các App đang active, sắp xếp theo priority ASC, createdAt ASC.
+   * Chọn App đầu tiên có số lượng VĐV đang kết nối < maxAthletes.
+   */
+  async getNextAvailableStravaApp(excludeFull = true) {
+    const apps = await prisma.stravaApp.findMany({
+      where: { isActive: true },
+      include: {
+        connections: {
+          where: { isActive: true },
+          select: { id: true, userId: true },
+        },
+      },
+      orderBy: [{ priority: 'asc' }, { createdAt: 'asc' }],
+    });
+
+    if (apps.length === 0) {
+      await this.ensureDefaultAccountsInPostgres();
+      const rechecked = await prisma.stravaApp.findMany({
+        where: { isActive: true },
+        include: {
+          connections: {
+            where: { isActive: true },
+            select: { id: true, userId: true },
+          },
+        },
+        orderBy: [{ priority: 'asc' }, { createdAt: 'asc' }],
+      });
+      if (rechecked.length === 0) return null;
+      for (const app of rechecked) {
+        const activeCount = app.connections.length;
+        if (!excludeFull || activeCount < app.maxAthletes) {
+          return {
+            app,
+            activeCount,
+            availableSlots: Math.max(0, app.maxAthletes - activeCount),
+            isFull: activeCount >= app.maxAthletes,
+          };
+        }
+      }
+      return null;
+    }
+
+    for (const app of apps) {
+      const activeCount = app.connections.length;
+      if (!excludeFull || activeCount < app.maxAthletes) {
+        return {
+          app,
+          activeCount,
+          availableSlots: Math.max(0, app.maxAthletes - activeCount),
+          isFull: activeCount >= app.maxAthletes,
+        };
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Tạo đường dẫn OAuth2 kết nối Strava tự động chọn App còn slot trống theo chiến lược Fill-First.
+   * Tham số state mang dạng: `${userId}:${appId}`
+   */
+  async getStravaAuthUrl(userId = 'usr_admin_01') {
+    const existingConn = await prisma.stravaConnection.findUnique({
+      where: { userId },
+      include: { stravaApp: true },
+    });
+
+    let targetApp: any = null;
+    if (existingConn?.stravaApp && existingConn.stravaApp.isActive) {
+      targetApp = existingConn.stravaApp;
+    } else {
+      const allocated = await this.getNextAvailableStravaApp(true);
+      if (!allocated) {
+        const totalApps = await prisma.stravaApp.count();
+        throw new BadRequestException(
+          `Hệ thống hiện đã sử dụng hết toàn bộ dung lượng kết nối Strava trên ${totalApps} API App khả dụng (10 VĐV/App). Vui lòng liên hệ Quản trị viên (Admin) để bổ sung Strava API App mới.`
+        );
+      }
+      targetApp = allocated.app;
+    }
+
+    const redirectUri = encodeURIComponent(this.stravaRedirectUri);
+    const state = `${userId}:${targetApp.id}`;
+    const oauthUrl = `https://www.strava.com/oauth/authorize?client_id=${targetApp.clientId}&response_type=code&redirect_uri=${redirectUri}&approval_prompt=force&scope=read,activity:read_all&state=${state}`;
+
+    return {
+      appId: targetApp.id,
+      appName: targetApp.name,
+      clientId: targetApp.clientId,
+      oauthUrl,
+      scopes: ['read', 'activity:read_all'],
+      note: 'Người dùng nhấn vào oauthUrl để cấp quyền đọc Tracklog từ Strava.',
+    };
+  }
+
+  /**
    * Xử lý khi người dùng bấm "Ủy quyền (Authorize)" trên Strava và được chuyển về `/api/v1/strava/callback`
-   * Hỗ trợ cả:
-   * - Liên kết Strava cho tài khoản hiện tại (`state = userId`)
-   * - Hoặc Đăng nhập / Tạo tài khoản mới tự động bằng Strava (`state = login_with_strava`)
    */
   async handleStravaOAuthCallbackAndSync(code: string, state = 'usr_admin_01') {
     process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+
+    let userId = state;
+    let appId: string | null = null;
+    if (state.includes(':')) {
+      const parts = state.split(':');
+      userId = parts[0];
+      appId = parts[1];
+    }
+
+    let stravaApp: any = null;
+    if (appId) {
+      stravaApp = await prisma.stravaApp.findUnique({ where: { id: appId } });
+    }
+    if (!stravaApp) {
+      const allocated = await this.getNextAvailableStravaApp(false);
+      stravaApp = allocated?.app;
+    }
+    if (!stravaApp) {
+      stravaApp = {
+        id: 'strava_app_01',
+        clientId: this.stravaClientId,
+        clientSecret: this.stravaClientSecret,
+      };
+    }
 
     const tokenRes = await fetch('https://www.strava.com/oauth/token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        client_id: this.stravaClientId,
-        client_secret: this.stravaClientSecret,
+        client_id: stravaApp.clientId,
+        client_secret: stravaApp.clientSecret,
         code,
         grant_type: 'authorization_code',
       }),
@@ -720,10 +866,9 @@ export class AccountService implements OnModuleInit {
     const athleteIdStr = String(athlete.id || '126278000');
     const fullName = `${athlete.firstname || ''} ${athlete.lastname || ''}`.trim() || 'Strava Runner';
 
-    // Tìm user theo state hoặc theo Strava Athlete ID
     let user =
-      state && state !== 'login_with_strava'
-        ? await prisma.user.findUnique({ where: { id: state } })
+      userId && userId !== 'login_with_strava'
+        ? await prisma.user.findUnique({ where: { id: userId } })
         : null;
 
     if (!user) {
@@ -752,7 +897,6 @@ export class AccountService implements OnModuleInit {
       });
     }
 
-    // Lưu hoặc cập nhật StravaConnection với đầy đủ quyền `read,activity:read_all`
     await prisma.stravaConnection.upsert({
       where: { userId: user.id },
       update: {
@@ -769,6 +913,7 @@ export class AccountService implements OnModuleInit {
         scopes: 'read,activity:read_all',
         syncStatus: 'CONNECTED',
         isActive: true,
+        stravaAppId: stravaApp.id,
         lastSyncAt: new Date(),
         lastErrorMsg: null,
       },
@@ -787,12 +932,12 @@ export class AccountService implements OnModuleInit {
         scopes: 'read,activity:read_all',
         syncStatus: 'CONNECTED',
         isActive: true,
+        stravaAppId: stravaApp.id,
         lastSyncAt: new Date(),
         lastErrorMsg: null,
       },
     });
 
-    // Cập nhật Avatar từ Strava nếu có
     if (athlete.profile) {
       await prisma.user.update({
         where: { id: user.id },
@@ -803,27 +948,38 @@ export class AccountService implements OnModuleInit {
     return {
       userId: user.id,
       athlete,
+      stravaApp: {
+        id: stravaApp.id,
+        name: stravaApp.name,
+        clientId: stravaApp.clientId,
+      },
       redirectUrl: `${this.frontendUrl}/?tab=account&strava=connected&userId=${user.id}`,
     };
   }
 
   /**
-   * Làm mới Access Token chủ động (Refresh Token) & Kiểm tra kết nối tới Strava API
+   * Làm mới Access Token chủ động (Refresh Token) dùng đúng Strava App credentials đã gán
    */
   async refreshStravaTokenAndVerify(userId = 'usr_admin_01') {
     process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 
-    const conn = await prisma.stravaConnection.findUnique({ where: { userId } });
+    const conn = await prisma.stravaConnection.findUnique({
+      where: { userId },
+      include: { stravaApp: true },
+    });
     if (!conn || !conn.isActive) {
       throw new BadRequestException('Tài khoản chưa liên kết với Strava.');
     }
+
+    const clientId = conn.stravaApp?.clientId || this.stravaClientId;
+    const clientSecret = conn.stravaApp?.clientSecret || this.stravaClientSecret;
 
     const refreshRes = await fetch('https://www.strava.com/oauth/token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        client_id: this.stravaClientId,
-        client_secret: this.stravaClientSecret,
+        client_id: clientId,
+        client_secret: clientSecret,
         refresh_token: conn.refreshToken,
         grant_type: 'refresh_token',
       }),
@@ -843,7 +999,6 @@ export class AccountService implements OnModuleInit {
 
     const refreshed: any = await refreshRes.json();
 
-    // Kiểm tra thông tin Athlete & quyền đọc Activity
     const athleteRes = await fetch('https://www.strava.com/api/v3/athlete', {
       headers: { Authorization: `Bearer ${refreshed.access_token}` },
     });
@@ -889,6 +1044,180 @@ export class AccountService implements OnModuleInit {
     });
 
     return this.getAccountDetails(userId);
+  }
+
+  // --------------------------------------------------------------------------
+  // 5B. CRUD STRAVA API POOL CHO QUẢN TRỊ VIÊN (ADMIN)
+  // --------------------------------------------------------------------------
+
+  async getAllStravaApps() {
+    const apps = await prisma.stravaApp.findMany({
+      include: {
+        connections: {
+          where: { isActive: true },
+          include: {
+            user: {
+              select: {
+                id: true,
+                fullName: true,
+                email: true,
+                avatarUrl: true,
+                departmentOrUnit: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: [{ priority: 'asc' }, { createdAt: 'asc' }],
+    });
+
+    const totalCapacity = apps.reduce((sum, a) => sum + (a.isActive ? a.maxAthletes : 0), 0);
+    const totalConnected = apps.reduce((sum, a) => sum + a.connections.length, 0);
+
+    return {
+      summary: {
+        totalApps: apps.length,
+        activeApps: apps.filter((a) => a.isActive).length,
+        totalCapacity,
+        totalConnected,
+        availableSlots: Math.max(0, totalCapacity - totalConnected),
+        usagePercentage: totalCapacity > 0 ? Math.round((totalConnected / totalCapacity) * 100) : 0,
+      },
+      apps: apps.map((a) => {
+        const masked =
+          a.clientSecret.length > 8
+            ? `${a.clientSecret.slice(0, 4)}••••••••${a.clientSecret.slice(-4)}`
+            : '••••••••';
+        return {
+          id: a.id,
+          name: a.name,
+          clientId: a.clientId,
+          clientSecretMasked: masked,
+          maxAthletes: a.maxAthletes,
+          isActive: a.isActive,
+          priority: a.priority,
+          createdAt: a.createdAt,
+          updatedAt: a.updatedAt,
+          connectedCount: a.connections.length,
+          availableSlots: Math.max(0, a.maxAthletes - a.connections.length),
+          isFull: a.connections.length >= a.maxAthletes,
+          athletes: a.connections.map((c) => ({
+            userId: c.userId,
+            fullName: c.user.fullName,
+            email: c.user.email,
+            avatarUrl: c.user.avatarUrl,
+            departmentOrUnit: c.user.departmentOrUnit,
+            stravaAthleteId: c.athleteId,
+            stravaUsername: c.username,
+            connectedAt: c.createdAt,
+            lastSyncAt: c.lastSyncAt,
+            syncStatus: c.syncStatus,
+          })),
+        };
+      }),
+    };
+  }
+
+  async createStravaApp(payload: {
+    name: string;
+    clientId: string;
+    clientSecret: string;
+    maxAthletes?: number;
+    priority?: number;
+  }) {
+    const cleanId = payload.clientId.trim();
+    const existing = await prisma.stravaApp.findUnique({
+      where: { clientId: cleanId },
+    });
+    if (existing) {
+      throw new BadRequestException(`Strava App với Client ID "${cleanId}" đã tồn tại trên hệ thống.`);
+    }
+
+    const app = await prisma.stravaApp.create({
+      data: {
+        name: payload.name.trim(),
+        clientId: cleanId,
+        clientSecret: payload.clientSecret.trim(),
+        maxAthletes: Number(payload.maxAthletes) || 10,
+        priority: Number(payload.priority) || 1,
+        isActive: true,
+      },
+    });
+
+    return app;
+  }
+
+  async updateStravaApp(
+    id: string,
+    payload: {
+      name?: string;
+      clientSecret?: string;
+      maxAthletes?: number;
+      isActive?: boolean;
+      priority?: number;
+    }
+  ) {
+    const app = await prisma.stravaApp.findUnique({ where: { id } });
+    if (!app) throw new NotFoundException('Không tìm thấy Strava App.');
+
+    const updated = await prisma.stravaApp.update({
+      where: { id },
+      data: {
+        ...(payload.name ? { name: payload.name.trim() } : {}),
+        ...(payload.clientSecret ? { clientSecret: payload.clientSecret.trim() } : {}),
+        ...(payload.maxAthletes !== undefined ? { maxAthletes: Number(payload.maxAthletes) } : {}),
+        ...(payload.isActive !== undefined ? { isActive: Boolean(payload.isActive) } : {}),
+        ...(payload.priority !== undefined ? { priority: Number(payload.priority) } : {}),
+      },
+    });
+
+    return updated;
+  }
+
+  async deleteStravaApp(id: string) {
+    const app = await prisma.stravaApp.findUnique({
+      where: { id },
+      include: { connections: { where: { isActive: true } } },
+    });
+    if (!app) throw new NotFoundException('Không tìm thấy Strava App.');
+
+    if (app.connections.length > 0) {
+      throw new BadRequestException(
+        `Không thể xoá App "${app.name}" vì đang có ${app.connections.length} VĐV đang kết nối. Hãy ngắt kết nối VĐV hoặc chuyển trạng thái sang Tạm dừng.`
+      );
+    }
+
+    await prisma.stravaApp.delete({ where: { id } });
+    return { success: true, message: `Đã xoá Strava App "${app.name}" thành công.` };
+  }
+
+  async getStravaAppAthletes(id: string) {
+    const app = await prisma.stravaApp.findUnique({
+      where: { id },
+      include: {
+        connections: {
+          include: { user: true },
+        },
+      },
+    });
+    if (!app) throw new NotFoundException('Không tìm thấy Strava App.');
+    return {
+      appId: app.id,
+      appName: app.name,
+      clientId: app.clientId,
+      athletes: app.connections.map((c) => ({
+        userId: c.userId,
+        fullName: c.user.fullName,
+        email: c.user.email,
+        avatarUrl: c.user.avatarUrl,
+        departmentOrUnit: c.user.departmentOrUnit,
+        stravaAthleteId: c.athleteId,
+        stravaUsername: c.username,
+        isActive: c.isActive,
+        syncStatus: c.syncStatus,
+        lastSyncAt: c.lastSyncAt,
+      })),
+    };
   }
 
   /**

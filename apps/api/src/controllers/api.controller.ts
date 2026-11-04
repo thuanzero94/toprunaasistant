@@ -165,6 +165,97 @@ export class ApiController {
     return this.accountService.deleteUser(targetUserId);
   }
 
+  // ==========================================================================
+  // 1D. ADMIN STRAVA API POOL MANAGEMENT & LOAD BALANCING
+  // ==========================================================================
+
+  @Get('admin/strava-apps')
+  @ApiOperation({ summary: '[Admin] Lấy danh sách Strava API App kèm thống kê slot và danh sách VĐV đã phân bổ' })
+  async getAdminStravaApps(@Headers('authorization') authHeader?: string) {
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const decoded = this.accountService.verifyJwt(authHeader.slice(7));
+      if (!decoded || decoded.role !== 'ADMIN') {
+        throw new UnauthorizedException('Chỉ Quản trị viên (ADMIN) mới có quyền truy cập Strava API Pool.');
+      }
+    }
+    return this.accountService.getAllStravaApps();
+  }
+
+  @Post('admin/strava-apps')
+  @ApiOperation({ summary: '[Admin] Thêm Strava API App mới vào hệ thống' })
+  async createAdminStravaApp(
+    @Body()
+    body: {
+      name: string;
+      clientId: string;
+      clientSecret: string;
+      maxAthletes?: number;
+      priority?: number;
+    },
+    @Headers('authorization') authHeader?: string
+  ) {
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const decoded = this.accountService.verifyJwt(authHeader.slice(7));
+      if (!decoded || decoded.role !== 'ADMIN') {
+        throw new UnauthorizedException('Chỉ Quản trị viên (ADMIN) mới có quyền thêm Strava API App.');
+      }
+    }
+    return this.accountService.createStravaApp(body);
+  }
+
+  @Patch('admin/strava-apps/:id')
+  @ApiOperation({ summary: '[Admin] Cập nhật thông tin Strava API App (Bật/Tắt, đổi Secret, đổi Max VĐV)' })
+  async updateAdminStravaApp(
+    @Param('id') id: string,
+    @Body()
+    body: {
+      name?: string;
+      clientSecret?: string;
+      maxAthletes?: number;
+      isActive?: boolean;
+      priority?: number;
+    },
+    @Headers('authorization') authHeader?: string
+  ) {
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const decoded = this.accountService.verifyJwt(authHeader.slice(7));
+      if (!decoded || decoded.role !== 'ADMIN') {
+        throw new UnauthorizedException('Chỉ Quản trị viên (ADMIN) mới có quyền cập nhật Strava API App.');
+      }
+    }
+    return this.accountService.updateStravaApp(id, body);
+  }
+
+  @Delete('admin/strava-apps/:id')
+  @ApiOperation({ summary: '[Admin] Xoá Strava API App (khi không còn VĐV kết nối)' })
+  async deleteAdminStravaApp(
+    @Param('id') id: string,
+    @Headers('authorization') authHeader?: string
+  ) {
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const decoded = this.accountService.verifyJwt(authHeader.slice(7));
+      if (!decoded || decoded.role !== 'ADMIN') {
+        throw new UnauthorizedException('Chỉ Quản trị viên (ADMIN) mới có quyền xoá Strava API App.');
+      }
+    }
+    return this.accountService.deleteStravaApp(id);
+  }
+
+  @Get('admin/strava-apps/:id/athletes')
+  @ApiOperation({ summary: '[Admin] Xem chi tiết danh sách VĐV đã gán vào một Strava API App cụ thể' })
+  async getAdminStravaAppAthletes(
+    @Param('id') id: string,
+    @Headers('authorization') authHeader?: string
+  ) {
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const decoded = this.accountService.verifyJwt(authHeader.slice(7));
+      if (!decoded || decoded.role !== 'ADMIN') {
+        throw new UnauthorizedException('Chỉ Quản trị viên (ADMIN) mới có quyền xem VĐV Strava API App.');
+      }
+    }
+    return this.accountService.getStravaAppAthletes(id);
+  }
+
   @Get('account/:userId')
   @ApiOperation({
     summary:
@@ -260,17 +351,12 @@ export class ApiController {
   // ==========================================================================
 
   @Get('strava/connect')
-  @ApiOperation({ summary: 'Tạo đường dẫn OAuth2 liên kết tài khoản Strava (scope=read,activity:read_all)' })
-  getStravaAuthUrl(@Query('userId') userId = 'usr_admin_01') {
-    const cfg = this.engine.getStravaConfig();
-    const redirectUri = encodeURIComponent(cfg.redirectUri);
-    const oauthUrl = `https://www.strava.com/oauth/authorize?client_id=${cfg.clientId}&response_type=code&redirect_uri=${redirectUri}&approval_prompt=force&scope=read,activity:read_all&state=${userId}`;
-    return {
-      clientId: cfg.clientId,
-      oauthUrl,
-      scopes: ['read', 'activity:read_all'],
-      note: 'Người dùng nhấn vào oauthUrl để cấp quyền đọc Tracklog từ Strava.',
-    };
+  @ApiOperation({
+    summary:
+      'Tạo đường dẫn OAuth2 liên kết tài khoản Strava với thuật toán tự động phân bổ App còn slot (Fill-First)',
+  })
+  async getStravaAuthUrl(@Query('userId') userId = 'usr_admin_01') {
+    return this.accountService.getStravaAuthUrl(userId);
   }
 
   @Get('strava/callback')

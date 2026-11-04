@@ -1043,27 +1043,37 @@ export class TopRunEngineService implements OnModuleInit {
   async syncLiveStravaActivities(userId = 'usr_admin_01') {
     process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 
-    // 0. Ưu tiên đọc Token mới nhất của User từ bảng strava_connections trong PostgreSQL
+    // 0. Đọc Token & Strava App được gán của User từ bảng strava_connections trong PostgreSQL
+    let clientId = this.stravaConfig.clientId;
+    let clientSecret = this.stravaConfig.clientSecret;
+
     try {
-      const dbConn = await prisma.stravaConnection.findUnique({ where: { userId } });
+      const dbConn = await prisma.stravaConnection.findUnique({
+        where: { userId },
+        include: { stravaApp: true },
+      });
       if (dbConn?.accessToken) {
         this.stravaConfig.accessToken = dbConn.accessToken;
       }
       if (dbConn?.refreshToken) {
         this.stravaConfig.refreshToken = dbConn.refreshToken;
       }
+      if (dbConn?.stravaApp) {
+        clientId = dbConn.stravaApp.clientId;
+        clientSecret = dbConn.stravaApp.clientSecret;
+      }
     } catch {
       // Fallback sang token cấu hình sẵn
     }
 
-    // 1. Làm mới Access Token bằng Refresh Token để đảm bảo luôn còn hạn
+    // 1. Làm mới Access Token bằng Refresh Token với đúng App credentials đã phân bổ
     try {
       const refreshRes = await fetch('https://www.strava.com/oauth/token', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          client_id: this.stravaConfig.clientId,
-          client_secret: this.stravaConfig.clientSecret,
+          client_id: clientId,
+          client_secret: clientSecret,
           refresh_token: this.stravaConfig.refreshToken,
           grant_type: 'refresh_token',
         }),
@@ -1072,6 +1082,17 @@ export class TopRunEngineService implements OnModuleInit {
         const refreshed: any = await refreshRes.json();
         if (refreshed.access_token) this.stravaConfig.accessToken = refreshed.access_token;
         if (refreshed.refresh_token) this.stravaConfig.refreshToken = refreshed.refresh_token;
+
+        await prisma.stravaConnection
+          .update({
+            where: { userId },
+            data: {
+              accessToken: refreshed.access_token,
+              refreshToken: refreshed.refresh_token || undefined,
+              expiresAt: Number(refreshed.expires_at || Math.floor(Date.now() / 1000) + 21600),
+            },
+          })
+          .catch(() => {});
       }
     } catch {
       // Giữ nguyên accessToken hiện tại nếu refresh lỗi

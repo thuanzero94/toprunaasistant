@@ -226,7 +226,7 @@ export default function TopRunWebApp() {
   });
 
   // Admin Management Sub-tabs & State
-  const [adminSubTab, setAdminSubTab] = useState<'users' | 'races' | 'moderation' | 'fulfillment'>('users');
+  const [adminSubTab, setAdminSubTab] = useState<'users' | 'races' | 'moderation' | 'fulfillment' | 'strava-pool'>('users');
   const [adminUsers, setAdminUsers] = useState<any[]>([]);
   const [isAdminUsersLoading, setIsAdminUsersLoading] = useState(false);
   const [adminUserSearch, setAdminUserSearch] = useState('');

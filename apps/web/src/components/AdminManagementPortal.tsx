@@ -8,6 +8,7 @@ import {
   CheckCircle2,
   Compass,
   Download,
+  Layers,
   Plus,
   RefreshCw,
   Save,
@@ -23,6 +24,7 @@ import {
 import { AntiCheatStatus } from '@toprun/shared';
 import type { TracklogActivityItem } from './UserTracklogExplorer';
 import AdminTournamentsTable from './AdminTournamentsTable';
+import AdminStravaPoolManagement from './AdminStravaPoolManagement';
 
 export interface AdminCategoryItem {
   id?: string;
@@ -60,8 +62,8 @@ export interface AdminEventFormState {
 
 interface AdminManagementPortalProps {
   currentUserId: string;
-  adminSubTab: 'users' | 'races' | 'moderation' | 'fulfillment';
-  onChangeSubTab: (tab: 'users' | 'races' | 'moderation' | 'fulfillment') => void;
+  adminSubTab: 'users' | 'races' | 'moderation' | 'fulfillment' | 'strava-pool';
+  onChangeSubTab: (tab: 'users' | 'races' | 'moderation' | 'fulfillment' | 'strava-pool') => void;
   adminUsers: any[];
   isAdminUsersLoading: boolean;
   adminUserSearch: string;
@@ -136,6 +138,7 @@ export default function AdminManagementPortal({
               count: flaggedActivities.length,
             },
             { id: 'fulfillment' as const, label: 'Giao hàng Race-Kit', icon: Truck, count: raceKitOrders.length },
+            { id: 'strava-pool' as const, label: 'Strava API Pool', icon: Layers },
           ].map((tab) => {
             const Icon = tab.icon;
             const isActive = adminSubTab === tab.id;
@@ -1135,6 +1138,9 @@ export default function AdminManagementPortal({
           </div>
         </div>
       )}
+
+      {/* SUB-VIEW 5: QUẢN LÝ STRAVA API POOL & PHÂN BỔ TẢI */}
+      {adminSubTab === 'strava-pool' && <AdminStravaPoolManagement />}
     </div>
   );
 }

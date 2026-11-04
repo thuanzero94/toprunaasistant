@@ -132,10 +132,28 @@ model User {
   @@map("users")
 }
 
+model StravaApp {
+  id                    String             @id @default(cuid())
+  name                  String
+  clientId              String             @unique
+  clientSecret          String
+  maxAthletes           Int                @default(10)
+  isActive              Boolean            @default(true)
+  priority              Int                @default(1)
+  webhookVerifyToken    String?
+  webhookSubscriptionId Int?
+  createdAt             DateTime           @default(now())
+  updatedAt             DateTime           @updatedAt
+
+  connections           StravaConnection[]
+
+  @@map("strava_apps")
+}
+
 model StravaConnection {
-  id             String   @id @default(cuid())
-  userId         String   @unique
-  athleteId      String   @unique // Strava Athlete ID
+  id             String     @id @default(cuid())
+  userId         String     @unique
+  athleteId      String     @unique // Strava Athlete ID
   username       String?
   firstname      String?
   lastname       String?
@@ -150,12 +168,15 @@ model StravaConnection {
   isActive       Boolean  @default(true)
   lastSyncAt     DateTime?
   lastErrorMsg   String?
+  stravaAppId    String?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user           User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  stravaApp      StravaApp? @relation(fields: [stravaAppId], references: [id], onDelete: SetNull)
 
   @@index([athleteId])
+  @@index([stravaAppId])
   @@map("strava_connections")
 }
 
