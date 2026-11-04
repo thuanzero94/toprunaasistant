@@ -938,10 +938,11 @@ export class AccountService implements OnModuleInit {
       },
     });
 
-    if (athlete.profile) {
+    const stravaAvatar = athlete.profile || athlete.profile_medium || null;
+    if (stravaAvatar) {
       await prisma.user.update({
         where: { id: user.id },
-        data: { avatarUrl: athlete.profile },
+        data: { avatarUrl: stravaAvatar },
       });
     }
 

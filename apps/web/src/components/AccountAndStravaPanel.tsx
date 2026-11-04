@@ -1,17 +1,20 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Activity,
   AlertCircle,
   Award,
+  Camera,
   CheckCircle2,
   Clock,
   ExternalLink,
   HeartPulse,
+  Image as ImageIcon,
   KeyRound,
   Link2,
   Lock,
+  LogOut,
   MapPin,
   RefreshCw,
   Save,
@@ -19,6 +22,7 @@ import {
   Shirt,
   Timer,
   Unlink,
+  Upload,
   User,
 } from 'lucide-react';
 import { formatPace, parsePaceToSeconds } from '@toprun/shared';
@@ -39,8 +43,9 @@ export default function AccountAndStravaPanel({
   initialSubTab?: SubTab;
   initialUserId?: string;
 }) {
-  const { user: authUser, updateUserSession } = useAuth();
+  const { user: authUser, updateUserSession, logout } = useAuth();
   const currentUserId = authUser?.id || initialUserId || '';
+  const avatarFileInputRef = useRef<HTMLInputElement>(null);
 
   const [subTab, setSubTab] = useState<SubTab>(initialSubTab);
   const [loading, setLoading] = useState<boolean>(false);
@@ -53,6 +58,7 @@ export default function AccountAndStravaPanel({
 
   // Profile form states
   const [fullName, setFullName] = useState(authUser?.fullName || '');
+  const [avatarUrl, setAvatarUrl] = useState(authUser?.avatarUrl || '');
   const [phone, setPhone] = useState(authUser?.phone || '');
   const [gender, setGender] = useState<'MALE' | 'FEMALE' | 'OTHER'>((authUser?.gender as any) || 'MALE');
   const [departmentOrUnit, setDepartmentOrUnit] = useState(authUser?.departmentOrUnit || 'Runner Community');
@@ -84,6 +90,7 @@ export default function AccountAndStravaPanel({
       const u = data.user;
       if (u) {
         setFullName(u.fullName || '');
+        if (u.avatarUrl) setAvatarUrl(u.avatarUrl);
         setPhone(u.phone || '');
         setGender(u.gender || 'MALE');
         setDepartmentOrUnit(u.departmentOrUnit || '');
@@ -110,6 +117,45 @@ export default function AccountAndStravaPanel({
     fetchAccountFromBackend(currentUserId);
   }, [currentUserId]);
 
+  const handleAvatarFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      setNotification({ type: 'error', text: 'Kích thước ảnh tối đa là 5MB.' });
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === 'string') {
+        setAvatarUrl(reader.result);
+        setNotification({
+          type: 'success',
+          text: 'Đã chọn ảnh đại diện mới. Hãy bấm "Lưu thay đổi hồ sơ" để lưu lại.',
+        });
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleUseStravaAvatar = () => {
+    const stravaPic =
+      stravaStatus?.profilePicUrl ||
+      accountData?.stravaStatus?.profilePicUrl ||
+      accountData?.user?.stravaConnection?.profilePicUrl;
+    if (stravaPic) {
+      setAvatarUrl(stravaPic);
+      setNotification({
+        type: 'success',
+        text: 'Đã chọn ảnh đại diện từ Strava! Hãy bấm "Lưu thay đổi hồ sơ" để cập nhật.',
+      });
+    } else {
+      setNotification({
+        type: 'warning',
+        text: 'Chưa có ảnh hồ sơ Strava. Vui lòng kết nối tài khoản Strava trước.',
+      });
+    }
+  };
+
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
@@ -119,6 +165,7 @@ export default function AccountAndStravaPanel({
         headers: { 'Content-Type': 'application/json; charset=utf-8' },
         body: JSON.stringify({
           fullName,
+          avatarUrl: avatarUrl || undefined,
           phone,
           gender,
           departmentOrUnit,
@@ -295,6 +342,7 @@ export default function AccountAndStravaPanel({
             <div className="relative shrink-0">
               <img
                 src={
+                  avatarUrl ||
                   stravaStatus.profilePicUrl ||
                   accountData?.user?.avatarUrl ||
                   `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(authUser?.email || 'Runner')}`
@@ -436,6 +484,70 @@ export default function AccountAndStravaPanel({
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* ẢNH ĐẠI DIỆN (AVATAR) */}
+                <div className="sm:col-span-2 p-4 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800 space-y-3">
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wide">
+                    Ảnh đại diện hồ sơ (Avatar)
+                  </label>
+
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+                    <div className="relative shrink-0">
+                      <img
+                        src={
+                          avatarUrl ||
+                          stravaStatus.profilePicUrl ||
+                          accountData?.user?.avatarUrl ||
+                          `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(authUser?.email || 'Runner')}`
+                        }
+                        alt="Avatar preview"
+                        className="w-16 h-16 rounded-2xl object-cover ring-2 ring-[#FC4C02] shadow-sm bg-slate-100 dark:bg-slate-800"
+                      />
+                    </div>
+
+                    <div className="flex-1 space-y-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <input
+                          ref={avatarFileInputRef}
+                          type="file"
+                          accept="image/*"
+                          onChange={handleAvatarFileChange}
+                          className="hidden"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => avatarFileInputRef.current?.click()}
+                          className="px-3.5 py-2 rounded-xl bg-[#FC4C02] hover:bg-[#e04402] text-white text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer shadow-sm"
+                        >
+                          <Upload className="w-3.5 h-3.5" />
+                          <span>Tải ảnh từ máy</span>
+                        </button>
+
+                        {(stravaStatus.profilePicUrl || accountData?.stravaStatus?.profilePicUrl) && (
+                          <button
+                            type="button"
+                            onClick={handleUseStravaAvatar}
+                            className="px-3.5 py-2 rounded-xl border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer"
+                          >
+                            <Activity className="w-3.5 h-3.5 text-[#FC4C02]" />
+                            <span>Dùng ảnh từ Strava</span>
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <Link2 className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                        <input
+                          type="text"
+                          value={avatarUrl}
+                          onChange={(e) => setAvatarUrl(e.target.value)}
+                          placeholder="Hoặc dán URL ảnh trực tiếp (https://...)"
+                          className="w-full text-xs px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-[#FC4C02]"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
                 <div className="sm:col-span-2">
                   <label className={labelClass}>Họ và tên vận động viên</label>
                   <input
@@ -975,6 +1087,28 @@ export default function AccountAndStravaPanel({
           </div>
         </div>
       )}
+
+      {/* KHU VỰC ĐĂNG XUẤT TÀI KHOẢN (ĐẶC BIỆT THUẬN TIỆN TRÊN MOBILE) */}
+      <div className="rounded-2xl bg-white dark:bg-[#0F1420] border border-rose-200/80 dark:border-rose-900/40 p-5 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h4 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+            <LogOut className="w-4 h-4 text-rose-500" />
+            <span>Đăng xuất khỏi thiết bị này</span>
+          </h4>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+            Kết thúc phiên làm việc của tài khoản ({accountData?.user?.email || authUser?.email || 'Runner'}).
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={logout}
+          className="px-5 py-2.5 rounded-xl bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/60 border border-rose-200 dark:border-rose-800 text-rose-600 dark:text-rose-300 text-xs font-bold flex items-center justify-center gap-2 transition cursor-pointer shrink-0"
+        >
+          <LogOut className="w-4 h-4" />
+          <span>Đăng xuất tài khoản</span>
+        </button>
+      </div>
     </div>
   );
 }

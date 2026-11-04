@@ -378,6 +378,7 @@ model Event {
   // Cấu hình Quy tắc Chấm điểm & Chống gian lận (EventRuleConfig JSON)
   ruleConfig      Json                 // { allowedSportTypes, minPaceSecPerKm, maxPaceSecPerKm, weekendMultiplier, allowSplitFiltering... }
   ebibConfig      Json?
+  bibPrefix       String               @default("PRO-")
 
   creatorId       String
   participantCount Int                 @default(0)
@@ -420,7 +421,8 @@ model EventChallengeTier {
   tierName           String                 // VD: "Chiến Binh Bạc (100KM)", "Thợ Săn Bình Minh (Streak 7 Ngày)"
   tierLevel          String                 @default("GOLD") // BRONZE, SILVER, GOLD, DIAMOND, SPECIAL
   conditionType      ChallengeConditionType @default(DISTANCE_OVERACHIEVE)
-  thresholdValue     Float                  // 100 (km), 7 (ngày liên tiếp), 15 (km single run)
+  thresholdValue     Float                  // 100 (km), 7 (ngày liên tiếp), 15 (km single run), 34 (phút speed)
+  targetSpeedDistanceKm Float?             // Dùng cho SPEED_TARGET_TIME (VD: 5km, 8km, 10km)
   minDailyDistanceKm Float?                 @default(2.0) // Dùng cho STREAK_DAYS
   awardBadgeUrl      String
   rewardDescription  String

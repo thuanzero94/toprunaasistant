@@ -418,6 +418,7 @@ export function calculateDualGoalProgress(params: {
       tierLevel: tier.tierLevel,
       conditionType: tier.conditionType,
       thresholdValue: tier.thresholdValue,
+      targetSpeedDistanceKm: tier.targetSpeedDistanceKm,
       currentValue,
       progressPercentage,
       isUnlocked,

@@ -112,7 +112,7 @@ export default function RunnerEventModals({
     if (currentEvent?.categories && currentEvent.categories.length > 0) {
       const firstCat = currentEvent.categories[0];
       setRegCategoryId(firstCat.id || firstCat.name);
-      const prefix = firstCat.bibPrefix || 'TOP-';
+      const prefix = currentEvent.bibPrefix || firstCat.bibPrefix || 'PRO-';
       const count = (currentEvent.participantsCount || (currentEvent.participants ? currentEvent.participants.length : 0)) + 101;
       setRegBibNumber(`${prefix}${String(count).padStart(4, '0')}`);
     }
@@ -121,7 +121,7 @@ export default function RunnerEventModals({
   const handleGenerateRandomBib = () => {
     const randomNum = Math.floor(1000 + Math.random() * 9000);
     const cat = currentEvent?.categories?.find((c: any) => (c.id || c.name) === regCategoryId);
-    const prefix = cat?.bibPrefix || 'TOP-';
+    const prefix = currentEvent?.bibPrefix || cat?.bibPrefix || 'PRO-';
     setRegBibNumber(`${prefix}${randomNum}`);
   };
 

@@ -241,6 +241,7 @@ export default function TopRunWebApp() {
     subtitle: '',
     status: 'ACTIVE',
     description: '',
+    bibPrefix: 'PRO-',
     startDateIso: '',
     endDateIso: '',
     minPaceFormatted: '03:00',
@@ -408,6 +409,7 @@ export default function TopRunWebApp() {
           subtitle: ev.subtitle || '',
           status: ev.status || 'ACTIVE',
           description: ev.description || '',
+          bibPrefix: ev.bibPrefix || 'PRO-',
           startDateIso: ev.startDateIso ? ev.startDateIso.slice(0, 10) : '2026-10-01',
           endDateIso: ev.endDateIso ? ev.endDateIso.slice(0, 10) : '2026-11-30',
           minPaceFormatted: formatPace(minPaceSec, false),
@@ -451,6 +453,7 @@ export default function TopRunWebApp() {
         subtitle: eventForm.subtitle,
         description: eventForm.description,
         status: eventForm.status,
+        bibPrefix: eventForm.bibPrefix || 'PRO-',
         startDateIso: new Date(eventForm.startDateIso).toISOString(),
         endDateIso: new Date(eventForm.endDateIso).toISOString(),
         ruleConfig: {
@@ -1473,6 +1476,15 @@ export default function TopRunWebApp() {
                   className="w-full h-full object-cover"
                 />
               </button>
+
+              <button
+                type="button"
+                onClick={logout}
+                title="Đăng xuất tài khoản"
+                className="p-2 rounded-xl border border-slate-200 dark:border-slate-800 text-slate-500 hover:text-rose-500 hover:border-rose-200 dark:hover:border-rose-800 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition cursor-pointer"
+              >
+                <LogOut className="w-4 h-4" />
+              </button>
             </div>
           </div>
 
@@ -1891,29 +1903,64 @@ export default function TopRunWebApp() {
                         </div>
 
                         <div className="space-y-1.5 pt-1">
-                          <div className="flex justify-between text-xs font-mono font-medium">
-                            <span className="text-slate-600 dark:text-slate-300">
-                              {chal.currentValue} / {chal.thresholdValue}{' '}
-                              {chal.conditionType === ChallengeConditionType.STREAK_DAYS ? 'ngày' : 'km'}
-                            </span>
-                            <span
-                              className={
-                                chal.isUnlocked
-                                  ? 'text-amber-600 dark:text-amber-400 font-bold'
-                                  : 'text-slate-400'
-                              }
-                            >
-                              {chal.progressPercentage}%
-                            </span>
-                          </div>
-                          <div className="w-full h-1.5 rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden">
-                            <div
-                              className={`h-full rounded-full transition-all duration-500 ${
-                                chal.isUnlocked ? 'bg-amber-500' : 'bg-slate-400 dark:bg-slate-600'
-                              }`}
-                              style={{ width: `${chal.progressPercentage}%` }}
-                            />
-                          </div>
+                          {chal.conditionType === ChallengeConditionType.SPEED_TARGET_TIME ? (
+                            <div className="space-y-1">
+                              <div className="flex items-center justify-between text-xs font-mono font-medium">
+                                <span className="text-amber-700 dark:text-amber-300 font-semibold text-[11px]">
+                                  {chal.isUnlocked
+                                    ? `Đã đạt: ${chal.currentValue > 0 ? `${chal.currentValue} phút` : 'Đạt chuẩn'}`
+                                    : `Cự ly: ${chal.targetSpeedDistanceKm || 5} km • Thời gian ≤ ${chal.thresholdValue} phút`}
+                                </span>
+                                <span
+                                  className={
+                                    chal.isUnlocked
+                                      ? 'text-amber-600 dark:text-amber-400 font-bold'
+                                      : 'text-slate-400 text-[11px]'
+                                  }
+                                >
+                                  {chal.isUnlocked ? '100%' : 'Chưa đạt'}
+                                </span>
+                              </div>
+                              <div className="w-full h-1.5 rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden">
+                                <div
+                                  className={`h-full rounded-full transition-all duration-500 ${
+                                    chal.isUnlocked ? 'bg-amber-500' : 'bg-slate-400 dark:bg-slate-600'
+                                  }`}
+                                  style={{ width: `${chal.isUnlocked ? 100 : 0}%` }}
+                                />
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="space-y-1.5">
+                              <div className="flex justify-between text-xs font-mono font-medium">
+                                <span className="text-slate-600 dark:text-slate-300">
+                                  {chal.currentValue} / {chal.thresholdValue}{' '}
+                                  {chal.conditionType === ChallengeConditionType.STREAK_DAYS
+                                    ? 'ngày'
+                                    : chal.conditionType === ChallengeConditionType.ELEVATION_GAIN
+                                    ? 'm'
+                                    : 'km'}
+                                </span>
+                                <span
+                                  className={
+                                    chal.isUnlocked
+                                      ? 'text-amber-600 dark:text-amber-400 font-bold'
+                                      : 'text-slate-400'
+                                  }
+                                >
+                                  {chal.progressPercentage}%
+                                </span>
+                              </div>
+                              <div className="w-full h-1.5 rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden">
+                                <div
+                                  className={`h-full rounded-full transition-all duration-500 ${
+                                    chal.isUnlocked ? 'bg-amber-500' : 'bg-slate-400 dark:bg-slate-600'
+                                  }`}
+                                  style={{ width: `${chal.progressPercentage}%` }}
+                                />
+                              </div>
+                            </div>
+                          )}
                         </div>
                       </div>
                     ))}

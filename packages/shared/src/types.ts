@@ -218,6 +218,7 @@ export interface DualGoalProgressSummary {
     tierLevel: string;
     conditionType: ChallengeConditionType;
     thresholdValue: number;
+    targetSpeedDistanceKm?: number;
     currentValue: number;
     progressPercentage: number;
     isUnlocked: boolean;

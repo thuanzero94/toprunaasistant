@@ -30,7 +30,7 @@ export interface AdminCategoryItem {
   id?: string;
   name: string;
   targetDistanceKm: number;
-  bibPrefix: string;
+  bibPrefix?: string;
 }
 
 export interface AdminChallengeTierItem {
@@ -41,6 +41,7 @@ export interface AdminChallengeTierItem {
   conditionType: string;
   thresholdValue: number;
   targetSpeedDistanceKm?: number;
+  targetSpeedPaceFormatted?: string;
   rewardDescription: string;
 }
 
@@ -49,6 +50,7 @@ export interface AdminEventFormState {
   subtitle: string;
   status: string;
   description?: string;
+  bibPrefix?: string;
   startDateIso: string;
   endDateIso: string;
   minPaceFormatted: string;
@@ -58,6 +60,23 @@ export interface AdminEventFormState {
   allowSplitFiltering?: boolean;
   categories?: AdminCategoryItem[];
   challengeTiers?: AdminChallengeTierItem[];
+}
+
+function formatPaceMinSec(sec: number): string {
+  if (!sec || isNaN(sec) || sec <= 0) return '05:00';
+  const m = Math.floor(sec / 60);
+  const s = Math.round(sec % 60);
+  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+}
+
+function parsePaceMinSec(str: string): number {
+  if (!str) return 300;
+  if (str.includes(':')) {
+    const parts = str.split(':');
+    return (parseInt(parts[0], 10) || 0) * 60 + (parseInt(parts[1], 10) || 0);
+  }
+  const val = parseFloat(str) || 5;
+  return Math.round(val * 60);
 }
 
 interface AdminManagementPortalProps {
@@ -494,16 +513,33 @@ export default function AdminManagementPortal({
                   </div>
                 </div>
 
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                    Phụ đề &amp; Thông điệp giải
-                  </label>
-                  <input
-                    type="text"
-                    value={eventForm.subtitle}
-                    onChange={(e) => onChangeEventForm({ ...eventForm, subtitle: e.target.value })}
-                    className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-[#FC4C02]"
-                  />
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="md:col-span-2 space-y-1">
+                    <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                      Phụ đề &amp; Thông điệp giải
+                    </label>
+                    <input
+                      type="text"
+                      value={eventForm.subtitle}
+                      onChange={(e) => onChangeEventForm({ ...eventForm, subtitle: e.target.value })}
+                      className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-[#FC4C02]"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                      Tiền tố số BIB của giải
+                    </label>
+                    <input
+                      type="text"
+                      value={eventForm.bibPrefix || 'PRO-'}
+                      onChange={(e) =>
+                        onChangeEventForm({ ...eventForm, bibPrefix: e.target.value.toUpperCase() })
+                      }
+                      placeholder="PRO-"
+                      className="w-full px-3 py-2 text-xs font-mono font-bold uppercase rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 text-[#FC4C02] focus:outline-none focus:ring-1 focus:ring-[#FC4C02]"
+                    />
+                  </div>
                 </div>
               </div>
 
@@ -614,8 +650,8 @@ export default function AdminManagementPortal({
                     type="button"
                     onClick={() => {
                       const cats = eventForm.categories || [
-                        { name: 'Mốc Target 21KM', targetDistanceKm: 21, bibPrefix: 'VR21-' },
-                        { name: 'Mốc Target 42KM', targetDistanceKm: 42, bibPrefix: 'VR42-' },
+                        { name: 'Mốc Target 21KM', targetDistanceKm: 21 },
+                        { name: 'Mốc Target 42KM', targetDistanceKm: 42 },
                       ];
                       const nextKm = cats.length > 0 ? cats[cats.length - 1].targetDistanceKm + 10 : 21;
                       onChangeEventForm({
@@ -625,7 +661,6 @@ export default function AdminManagementPortal({
                           {
                             name: `Mốc Target ${nextKm}KM`,
                             targetDistanceKm: nextKm,
-                            bibPrefix: `VR${nextKm}-`,
                           },
                         ],
                       });
@@ -640,16 +675,16 @@ export default function AdminManagementPortal({
                 <div className="space-y-2">
                   {(
                     eventForm.categories || [
-                      { name: 'Mốc Target 21KM (Starter)', targetDistanceKm: 21, bibPrefix: 'VR21-' },
-                      { name: 'Mốc Target 42KM (Marathoner)', targetDistanceKm: 42, bibPrefix: 'VR42-' },
-                      { name: 'Mốc Target 50KM (Ultra)', targetDistanceKm: 50, bibPrefix: 'VR50-' },
+                      { name: 'Mốc Target 21KM (Starter)', targetDistanceKm: 21 },
+                      { name: 'Mốc Target 42KM (Marathoner)', targetDistanceKm: 42 },
+                      { name: 'Mốc Target 50KM (Ultra)', targetDistanceKm: 50 },
                     ]
                   ).map((cat, idx) => (
                     <div
                       key={idx}
                       className="p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
                     >
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 flex-1">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 flex-1">
                         <div>
                           <label className="text-[10px] font-semibold text-slate-500 uppercase">Tên hạng mục</label>
                           <input
@@ -672,19 +707,6 @@ export default function AdminManagementPortal({
                             onChange={(e) => {
                               const cats = [...(eventForm.categories || [])];
                               cats[idx] = { ...cats[idx], targetDistanceKm: parseFloat(e.target.value) || 0 };
-                              onChangeEventForm({ ...eventForm, categories: cats });
-                            }}
-                            className="w-full px-2.5 py-1.5 text-xs font-mono font-bold rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100"
-                          />
-                        </div>
-                        <div>
-                          <label className="text-[10px] font-semibold text-slate-500 uppercase">Tiền tố số BIB</label>
-                          <input
-                            type="text"
-                            value={cat.bibPrefix}
-                            onChange={(e) => {
-                              const cats = [...(eventForm.categories || [])];
-                              cats[idx] = { ...cats[idx], bibPrefix: e.target.value };
                               onChangeEventForm({ ...eventForm, categories: cats });
                             }}
                             className="w-full px-2.5 py-1.5 text-xs font-mono font-bold rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100"
@@ -843,13 +865,63 @@ export default function AdminManagementPortal({
                                 <input
                                   type="number"
                                   step="0.5"
+                                  min="0.5"
                                   value={tier.targetSpeedDistanceKm || 5}
                                   onChange={(e) => {
+                                    const dist = parseFloat(e.target.value) || 1;
                                     const tiers = [...(eventForm.challengeTiers || challengeTiers)];
-                                    tiers[idx] = { ...tiers[idx], targetSpeedDistanceKm: parseFloat(e.target.value) || 5 };
+                                    const currentPaceStr =
+                                      tier.targetSpeedPaceFormatted ||
+                                      (tier.thresholdValue && tier.targetSpeedDistanceKm
+                                        ? formatPaceMinSec(Math.round((tier.thresholdValue * 60) / tier.targetSpeedDistanceKm))
+                                        : '05:00');
+                                    const paceSec = parsePaceMinSec(currentPaceStr);
+                                    const totalTimeSec = Math.round(paceSec * dist);
+                                    const totalTimeMin = Math.round((totalTimeSec / 60) * 100) / 100;
+                                    const autoDesc = `Chạy cự ly ${dist}km đạt Pace ≤ ${currentPaceStr}/km (Thời gian ≤ ${formatPaceMinSec(totalTimeSec)})`;
+                                    tiers[idx] = {
+                                      ...tiers[idx],
+                                      targetSpeedDistanceKm: dist,
+                                      targetSpeedPaceFormatted: currentPaceStr,
+                                      thresholdValue: totalTimeMin,
+                                      rewardDescription: autoDesc,
+                                    };
                                     onChangeEventForm({ ...eventForm, challengeTiers: tiers });
                                   }}
                                   className="w-full px-2.5 py-1.5 text-xs font-mono font-bold rounded-lg border border-amber-300 dark:border-amber-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100"
+                                />
+                              </div>
+
+                              <div className="space-y-1">
+                                <label className="text-[10px] font-semibold text-amber-600 dark:text-amber-400 uppercase">
+                                  Pace target (phút/km)
+                                </label>
+                                <input
+                                  type="text"
+                                  placeholder="04:35"
+                                  value={
+                                    tier.targetSpeedPaceFormatted ||
+                                    (tier.thresholdValue && tier.targetSpeedDistanceKm
+                                      ? formatPaceMinSec(Math.round((tier.thresholdValue * 60) / tier.targetSpeedDistanceKm))
+                                      : '05:00')
+                                  }
+                                  onChange={(e) => {
+                                    const newPaceStr = e.target.value;
+                                    const tiers = [...(eventForm.challengeTiers || challengeTiers)];
+                                    const dist = tier.targetSpeedDistanceKm || 5;
+                                    const paceSec = parsePaceMinSec(newPaceStr);
+                                    const totalTimeSec = Math.round(paceSec * dist);
+                                    const totalTimeMin = Math.round((totalTimeSec / 60) * 100) / 100;
+                                    const autoDesc = `Chạy cự ly ${dist}km đạt Pace ≤ ${newPaceStr}/km (Thời gian ≤ ${formatPaceMinSec(totalTimeSec)})`;
+                                    tiers[idx] = {
+                                      ...tiers[idx],
+                                      targetSpeedPaceFormatted: newPaceStr,
+                                      thresholdValue: totalTimeMin,
+                                      rewardDescription: autoDesc,
+                                    };
+                                    onChangeEventForm({ ...eventForm, challengeTiers: tiers });
+                                  }}
+                                  className="w-full px-2.5 py-1.5 text-xs font-mono font-bold rounded-lg border border-amber-300 dark:border-amber-700 bg-white dark:bg-slate-900 text-amber-600 dark:text-amber-400"
                                 />
                               </div>
 
@@ -859,11 +931,22 @@ export default function AdminManagementPortal({
                                 </label>
                                 <input
                                   type="number"
-                                  step="1"
+                                  step="0.1"
                                   value={tier.thresholdValue}
                                   onChange={(e) => {
+                                    const totalTimeMin = parseFloat(e.target.value) || 0;
                                     const tiers = [...(eventForm.challengeTiers || challengeTiers)];
-                                    tiers[idx] = { ...tiers[idx], thresholdValue: parseFloat(e.target.value) || 0 };
+                                    const dist = tier.targetSpeedDistanceKm || 5;
+                                    const totalTimeSec = Math.round(totalTimeMin * 60);
+                                    const paceSec = dist > 0 ? Math.round(totalTimeSec / dist) : 0;
+                                    const newPaceStr = formatPaceMinSec(paceSec);
+                                    const autoDesc = `Chạy cự ly ${dist}km đạt Pace ≤ ${newPaceStr}/km (Thời gian ≤ ${formatPaceMinSec(totalTimeSec)})`;
+                                    tiers[idx] = {
+                                      ...tiers[idx],
+                                      thresholdValue: totalTimeMin,
+                                      targetSpeedPaceFormatted: newPaceStr,
+                                      rewardDescription: autoDesc,
+                                    };
                                     onChangeEventForm({ ...eventForm, challengeTiers: tiers });
                                   }}
                                   className="w-full px-2.5 py-1.5 text-xs font-mono font-bold rounded-lg border border-amber-300 dark:border-amber-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100"
@@ -912,7 +995,31 @@ export default function AdminManagementPortal({
                         </div>
 
                         <div className="pt-2">
-                          <label className="text-[10px] font-semibold text-slate-500 uppercase">Mô tả phần thưởng</label>
+                          <div className="flex items-center justify-between">
+                            <label className="text-[10px] font-semibold text-slate-500 uppercase">
+                              Mô tả thử thách &amp; Phần thưởng
+                            </label>
+                            {isSpeed && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const tiers = [...(eventForm.challengeTiers || challengeTiers)];
+                                  const dist = tier.targetSpeedDistanceKm || 5;
+                                  const totalTimeSec = Math.round(tier.thresholdValue * 60);
+                                  const paceFormatted =
+                                    tier.targetSpeedPaceFormatted ||
+                                    (dist > 0 ? formatPaceMinSec(Math.round(totalTimeSec / dist)) : '05:00');
+                                  const autoDesc = `Chạy cự ly ${dist}km đạt Pace ≤ ${paceFormatted}/km (Thời gian ≤ ${formatPaceMinSec(totalTimeSec)})`;
+                                  tiers[idx] = { ...tiers[idx], rewardDescription: autoDesc };
+                                  onChangeEventForm({ ...eventForm, challengeTiers: tiers });
+                                }}
+                                className="text-[10px] font-semibold text-amber-600 dark:text-amber-400 hover:underline flex items-center gap-1 cursor-pointer"
+                              >
+                                <RefreshCw className="w-3 h-3" />
+                                <span>Tạo lại mô tả tự động</span>
+                              </button>
+                            )}
+                          </div>
                           <input
                             type="text"
                             value={tier.rewardDescription}

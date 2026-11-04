@@ -373,6 +373,10 @@ export class ApiController {
       throw new BadRequestException('Thiếu tham số code từ Strava OAuth2 Callback');
     }
     const callbackData = await this.accountService.handleStravaOAuthCallbackAndSync(code, state);
+    const stravaAvatar = callbackData.athlete?.profile || callbackData.athlete?.profile_medium;
+    if (stravaAvatar) {
+      this.engine.updateUserProfile(callbackData.userId, { avatarUrl: stravaAvatar });
+    }
     const syncRes = await this.engine.exchangeStravaCode(code, callbackData.userId).catch(() => ({
       syncedCount: 0,
       syncedActivities: [],
@@ -618,12 +622,14 @@ export class ApiController {
       maxPaceSecPerKm?: number;
       weekendMultiplier?: number;
       allowSplitFiltering?: boolean;
-      categories: Array<{ name: string; targetDistanceKm: number; bibPrefix: string }>;
+      bibPrefix?: string;
+      categories: Array<{ name: string; targetDistanceKm: number; bibPrefix?: string }>;
       challengeTiers: Array<{
         tierName: string;
         tierLevel: 'BRONZE' | 'SILVER' | 'GOLD' | 'DIAMOND' | 'SPECIAL';
         conditionType: ChallengeConditionType;
         thresholdValue: number;
+        targetSpeedDistanceKm?: number;
         awardBadgeUrl: string;
         rewardDescription: string;
       }>;

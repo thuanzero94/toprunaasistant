@@ -126,6 +126,7 @@ export interface StoredEvent {
   creatorId: string;
   participantCount: number;
   ruleConfig: ReturnType<typeof EventRuleConfigSchema.parse>;
+  bibPrefix?: string;
   categories: Array<{
     id: string;
     name: string;
@@ -138,6 +139,7 @@ export interface StoredEvent {
     tierLevel: 'BRONZE' | 'SILVER' | 'GOLD' | 'DIAMOND' | 'SPECIAL';
     conditionType: ChallengeConditionType;
     thresholdValue: number;
+    targetSpeedDistanceKm?: number;
     minDailyDistanceKm?: number;
     awardBadgeUrl: string;
     rewardDescription: string;
@@ -469,11 +471,12 @@ export class TopRunEngineService implements OnModuleInit {
           participantCount: e.participantCount,
           ruleConfig: e.ruleConfig as any,
           ebibConfig: (e.ebibConfig as any) || undefined,
+          bibPrefix: (e as any).bibPrefix || 'PRO-',
           categories: e.categories.map((c) => ({
             id: c.id,
             name: c.name,
             targetDistanceKm: c.targetDistanceKm,
-            bibPrefix: c.bibPrefix,
+            bibPrefix: (e as any).bibPrefix || c.bibPrefix || 'PRO-',
           })),
           challengeTiers: e.challengeTiers.map((t) => ({
             id: t.id,
@@ -481,6 +484,7 @@ export class TopRunEngineService implements OnModuleInit {
             tierLevel: t.tierLevel as any,
             conditionType: t.conditionType as any,
             thresholdValue: t.thresholdValue,
+            targetSpeedDistanceKm: (t as any).targetSpeedDistanceKm ?? undefined,
             minDailyDistanceKm: t.minDailyDistanceKm ?? 2.0,
             awardBadgeUrl: t.awardBadgeUrl,
             rewardDescription: t.rewardDescription,
@@ -519,6 +523,7 @@ export class TopRunEngineService implements OnModuleInit {
           endDate: new Date(ev.endDateIso),
           ruleConfig: ev.ruleConfig as any,
           ebibConfig: (ev.ebibConfig as any) || null,
+          bibPrefix: (ev as any).bibPrefix || 'PRO-',
           participantCount: ev.participantCount,
         },
         create: {
@@ -535,6 +540,7 @@ export class TopRunEngineService implements OnModuleInit {
           endDate: new Date(ev.endDateIso),
           ruleConfig: ev.ruleConfig as any,
           ebibConfig: (ev.ebibConfig as any) || null,
+          bibPrefix: (ev as any).bibPrefix || 'PRO-',
           creatorId,
           participantCount: ev.participantCount,
         },
@@ -566,6 +572,7 @@ export class TopRunEngineService implements OnModuleInit {
             tierLevel: tier.tierLevel,
             conditionType: tier.conditionType as any,
             thresholdValue: tier.thresholdValue,
+            targetSpeedDistanceKm: tier.targetSpeedDistanceKm ? Number(tier.targetSpeedDistanceKm) : null,
             minDailyDistanceKm: tier.minDailyDistanceKm ?? 2.0,
             awardBadgeUrl: tier.awardBadgeUrl,
             rewardDescription: tier.rewardDescription,
@@ -577,6 +584,7 @@ export class TopRunEngineService implements OnModuleInit {
             tierLevel: tier.tierLevel,
             conditionType: tier.conditionType as any,
             thresholdValue: tier.thresholdValue,
+            targetSpeedDistanceKm: tier.targetSpeedDistanceKm ? Number(tier.targetSpeedDistanceKm) : null,
             minDailyDistanceKm: tier.minDailyDistanceKm ?? 2.0,
             awardBadgeUrl: tier.awardBadgeUrl,
             rewardDescription: tier.rewardDescription,
@@ -2239,12 +2247,14 @@ export class TopRunEngineService implements OnModuleInit {
     maxPaceSecPerKm?: number;
     weekendMultiplier?: number;
     allowSplitFiltering?: boolean;
-    categories: Array<{ name: string; targetDistanceKm: number; bibPrefix: string }>;
+    bibPrefix?: string;
+    categories: Array<{ name: string; targetDistanceKm: number; bibPrefix?: string }>;
     challengeTiers: Array<{
       tierName: string;
       tierLevel: 'BRONZE' | 'SILVER' | 'GOLD' | 'DIAMOND' | 'SPECIAL';
       conditionType: ChallengeConditionType;
       thresholdValue: number;
+      targetSpeedDistanceKm?: number;
       awardBadgeUrl: string;
       rewardDescription: string;
     }>;
@@ -2255,6 +2265,8 @@ export class TopRunEngineService implements OnModuleInit {
       .replace(/[\u0300-\u036f]/g, '')
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/(^-|-$)/g, '');
+
+    const eventBibPrefix = payload.bibPrefix?.trim().toUpperCase() || 'PRO-';
 
     const newEvent: StoredEvent = {
       id: `evt_${Date.now()}`,
@@ -2270,6 +2282,7 @@ export class TopRunEngineService implements OnModuleInit {
       endDateIso: payload.endDateIso,
       creatorId: payload.creatorId || 'usr_admin_01',
       participantCount: 1,
+      bibPrefix: eventBibPrefix,
       ruleConfig: EventRuleConfigSchema.parse({
         allowedSportTypes: [SportType.RUN, SportType.TRAIL_RUN, SportType.VIRTUAL_RUN],
         minPaceSecPerKm: payload.minPaceSecPerKm ?? 180,
@@ -2281,7 +2294,7 @@ export class TopRunEngineService implements OnModuleInit {
         id: `cat_${Date.now()}_${idx}`,
         name: c.name,
         targetDistanceKm: Number(c.targetDistanceKm),
-        bibPrefix: c.bibPrefix || 'TOP-',
+        bibPrefix: eventBibPrefix,
       })),
       challengeTiers: payload.challengeTiers.map((t, idx) => ({
         id: `tier_${Date.now()}_${idx}`,
@@ -2289,6 +2302,7 @@ export class TopRunEngineService implements OnModuleInit {
         tierLevel: t.tierLevel || 'GOLD',
         conditionType: t.conditionType,
         thresholdValue: Number(t.thresholdValue),
+        targetSpeedDistanceKm: t.targetSpeedDistanceKm ? Number(t.targetSpeedDistanceKm) : undefined,
         awardBadgeUrl: t.awardBadgeUrl || '🏅',
         rewardDescription: t.rewardDescription,
       })),
@@ -2403,10 +2417,11 @@ export class TopRunEngineService implements OnModuleInit {
       }
     } else {
       let count = this.participations.filter((p) => p.eventId === event.id).length + 101;
-      let candidate = `${category.bibPrefix}${String(count).padStart(4, '0')}`;
+      const prefix = (event as any).bibPrefix || category.bibPrefix || 'PRO-';
+      let candidate = `${prefix}${String(count).padStart(4, '0')}`;
       while (this.participations.some((p) => p.eventId === event.id && p.bibNumber.toUpperCase() === candidate.toUpperCase())) {
         count++;
-        candidate = `${category.bibPrefix}${String(count).padStart(4, '0')}`;
+        candidate = `${prefix}${String(count).padStart(4, '0')}`;
       }
       finalBib = candidate;
     }
@@ -2468,6 +2483,7 @@ export class TopRunEngineService implements OnModuleInit {
     if (payload.status !== undefined) event.status = payload.status;
     if (payload.startDateIso !== undefined) event.startDateIso = payload.startDateIso;
     if (payload.endDateIso !== undefined) event.endDateIso = payload.endDateIso;
+    if (payload.bibPrefix !== undefined) event.bibPrefix = payload.bibPrefix;
     if (payload.ruleConfig !== undefined) {
       event.ruleConfig = {
         ...event.ruleConfig,
