@@ -344,10 +344,23 @@ export default function TracklogDetailView({
             className="px-3.5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-[#FC4C02] text-slate-700 dark:text-slate-200 hover:text-white font-bold text-xs sm:text-sm flex items-center gap-2 transition cursor-pointer shadow-xs shrink-0"
           >
             <ArrowLeft className="w-4 h-4" />
-            <span>Quay lại danh sách nhật ký</span>
+            <span>Quay lại</span>
           </button>
 
           <div className="min-w-0">
+            <div className="flex items-center gap-1.5 text-xs text-slate-400 mb-1">
+              <button
+                type="button"
+                onClick={onBackToList}
+                className="hover:text-slate-900 dark:hover:text-white transition font-medium"
+              >
+                Nhật ký tracklog
+              </button>
+              <ChevronRight className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+              <span className="text-slate-600 dark:text-slate-300 font-semibold truncate max-w-[200px] sm:max-w-[280px]">
+                Chi tiết bài tập
+              </span>
+            </div>
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-[11px] font-mono text-slate-400 flex items-center gap-1">
                 <Calendar className="w-3 h-3" />

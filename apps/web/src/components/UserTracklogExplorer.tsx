@@ -80,6 +80,8 @@ interface Props {
   selectedActivityId: string;
   currentUserId?: string;
   currentUserRole?: string;
+  viewMode?: 'list' | 'detail';
+  onViewModeChange?: (mode: 'list' | 'detail') => void;
   onSelectActivity: (id: string) => void;
   onToggleHideActivity: (id: string) => Promise<void> | void;
   onDeleteActivity: (id: string) => Promise<void> | void;
@@ -95,6 +97,8 @@ export default function UserTracklogExplorer({
   selectedActivityId,
   currentUserId,
   currentUserRole,
+  viewMode: controlledViewMode,
+  onViewModeChange,
   onSelectActivity,
   onToggleHideActivity,
   onDeleteActivity,
@@ -105,7 +109,13 @@ export default function UserTracklogExplorer({
   theme,
 }: Props) {
   const isAdmin = currentUserRole === 'ADMIN';
-  const [viewMode, setViewMode] = useState<'list' | 'detail'>('list');
+  const [internalViewMode, setInternalViewMode] = useState<'list' | 'detail'>('list');
+  const viewMode = controlledViewMode ?? internalViewMode;
+
+  const setViewMode = (mode: 'list' | 'detail') => {
+    setInternalViewMode(mode);
+    onViewModeChange?.(mode);
+  };
   const [ownerFilter, setOwnerFilter] = useState<'mine' | 'all'>('mine');
   const [statusFilter, setStatusFilter] = useState<'all' | 'valid' | 'flagged' | 'hidden'>('all');
   const [sportListFilter, setSportListFilter] = useState<'all' | 'Run' | 'Ride' | 'Swim' | 'Other'>('all');
