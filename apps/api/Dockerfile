@@ -23,6 +23,7 @@ RUN cp tsconfig.base.json /tsconfig.base.json || true
 COPY packages/shared ./packages/shared
 COPY packages/database ./packages/database
 COPY apps/api ./apps/api
+COPY scripts ./scripts
 
 # Build libraries and API
 RUN npm run build --workspace=@toprun/shared
@@ -57,6 +58,7 @@ COPY --from=builder /app/packages/database/prisma ./packages/database/prisma
 COPY --from=builder /app/packages/database/dist ./packages/database/dist
 COPY --from=builder /app/packages/shared/dist ./packages/shared/dist
 COPY --from=builder /app/apps/api/dist ./apps/api/dist
+COPY --from=builder /app/scripts ./scripts
 
 ENV PATH="/app/node_modules/.bin:${PATH}"
 
