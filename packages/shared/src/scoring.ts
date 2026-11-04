@@ -3,6 +3,7 @@ import {
   AntiCheatStatus,
   ChallengeConditionType,
   ChallengeTierInfo,
+  ConvertedSportBreakdown,
   DualGoalProgressSummary,
   EvaluatedSplitResult,
   EventRuleConfig,
@@ -10,6 +11,8 @@ import {
   RunMode,
   SplitInvalidReason,
   TargetCategoryInfo,
+  normalizeSportCategory,
+  SportCategory,
 } from './types';
 import { calculatePaceSecPerKm, formatPace, roundKm } from './pace';
 
@@ -52,12 +55,15 @@ export function evaluateActivitySplits(
     };
   }
 
-  // 2. Kiểm tra loại hình thể thao hợp lệ (Run, TrailRun, VirtualRun...)
-  const allowedTypes = rules.allowedSportTypes.map((t) => t.toLowerCase());
-  if (!allowedTypes.includes(String(activity.sportType).toLowerCase())) {
+  // 2. Phân loại và kiểm tra loại hình thể thao hợp lệ (Run, Ride, Swim, Other)
+  const sportCat = normalizeSportCategory(activity.sportType);
+  const isCrossTrainingAllowed = Boolean(rules.enableCrossTrainingConversion);
+
+  // Môn khác (Pickleball, Tennis, Golf, Gym...) -> Không tính KM giải chạy
+  if (sportCat === 'Other') {
     return {
       antiCheatStatus: AntiCheatStatus.REJECTED,
-      rejectionReason: `Loại hình hoạt động "${activity.sportType}" không nằm trong danh sách cho phép (${rules.allowedSportTypes.join(', ')}).`,
+      rejectionReason: `Bộ môn "${activity.sportType}" không nằm trong danh mục tính giải chạy.`,
       rawDistanceKm,
       validDistanceKm: 0,
       invalidDistanceKm: rawDistanceKm,
@@ -67,8 +73,29 @@ export function evaluateActivitySplits(
       multiplierReason: null,
       finalCountedDistanceKm: 0,
       evaluatedSplits: [],
-      flagReasons: ['INVALID_SPORT_TYPE'],
+      flagReasons: ['OTHER_SPORT'],
     };
+  }
+
+  // Đạp xe hoặc Bơi lội: Nếu giải không cho phép quy đổi chéo bộ môn
+  if ((sportCat === 'Ride' || sportCat === 'Swim') && !isCrossTrainingAllowed) {
+    const allowedTypes = rules.allowedSportTypes.map((t) => t.toLowerCase());
+    if (!allowedTypes.includes(String(activity.sportType).toLowerCase())) {
+      return {
+        antiCheatStatus: AntiCheatStatus.REJECTED,
+        rejectionReason: `Giải đấu không bật tính năng quy đổi cho bộ môn "${activity.sportType}".`,
+        rawDistanceKm,
+        validDistanceKm: 0,
+        invalidDistanceKm: rawDistanceKm,
+        validMovingTimeSec: 0,
+        validAvgPaceSecPerKm: 0,
+        appliedMultiplier: 1,
+        multiplierReason: null,
+        finalCountedDistanceKm: 0,
+        evaluatedSplits: [],
+        flagReasons: ['SPORT_CONVERSION_DISABLED'],
+      };
+    }
   }
 
   // 3. Kiểm tra yêu cầu bắt buộc có Nhịp tim (Heart Rate) nếu giải đấu cấu hình
@@ -115,7 +142,17 @@ export function evaluateActivitySplits(
           },
         ];
 
-  // 6. Duyệt từng Split (từng km) để lọc Pace hợp lệ
+  // 6. Duyệt từng Split (từng km) để lọc Pace hợp lệ theo từng môn
+  let effectiveMinPace = rules.minPaceSecPerKm;
+  let effectiveMaxPace = rules.maxPaceSecPerKm;
+  if (sportCat === 'Ride') {
+    effectiveMinPace = 80;  // 45 km/h
+    effectiveMaxPace = 360; // 10 km/h
+  } else if (sportCat === 'Swim') {
+    effectiveMinPace = 700;  // ~1:10 /100m
+    effectiveMaxPace = 2400; // ~4:00 /100m
+  }
+
   const evaluatedSplits: EvaluatedSplitResult[] = [];
   let validDistanceMeters = 0;
   let invalidDistanceMeters = 0;
@@ -129,11 +166,11 @@ export function evaluateActivitySplits(
 
     // Chỉ kiểm tra chặt các split có độ dài >= 200m (tránh sai số GPS ở vài chục mét lẻ cuối cùng)
     if (split.distanceMeters >= 200) {
-      if (paceSecPerKm < rules.minPaceSecPerKm) {
+      if (paceSecPerKm < effectiveMinPace) {
         isValid = false;
         invalidReason = SplitInvalidReason.PACE_TOO_FAST;
         fastSplitCount++;
-      } else if (paceSecPerKm > rules.maxPaceSecPerKm) {
+      } else if (paceSecPerKm > effectiveMaxPace) {
         isValid = false;
         invalidReason = SplitInvalidReason.PACE_TOO_SLOW;
       }
@@ -218,9 +255,21 @@ export function evaluateActivitySplits(
     antiCheatStatus = AntiCheatStatus.FLAGGED;
   }
 
-  // 10. Tính hệ số nhân (Multiplier: Ngày cuối tuần hoặc ngày sự kiện đặc biệt)
-  let appliedMultiplier = 1.0;
-  let multiplierReason: string | null = null;
+  // 10. Tính hệ số nhân (Cross-training ratio + Cuối tuần / Sự kiện đặc biệt)
+  let sportRatio = 1.0;
+  let sportRatioReason = '';
+  if (isCrossTrainingAllowed) {
+    if (sportCat === 'Ride') {
+      sportRatio = rules.rideToRunRatio ?? 0.25;
+      sportRatioReason = `Quy đổi Đạp xe (x${sportRatio})`;
+    } else if (sportCat === 'Swim') {
+      sportRatio = rules.swimToRunRatio ?? 5.0;
+      sportRatioReason = `Quy đổi Bơi lội (x${sportRatio})`;
+    }
+  }
+
+  let appliedMultiplier = sportRatio;
+  let multiplierReason: string | null = sportRatioReason || null;
 
   const actDate = new Date(activity.startDateIso);
   const dateStr = activity.startDateIso.slice(0, 10); // YYYY-MM-DD
@@ -228,11 +277,15 @@ export function evaluateActivitySplits(
 
   const specialDay = rules.specialMultiplierDates?.find((d) => d.date === dateStr);
   if (specialDay && specialDay.multiplier > 1) {
-    appliedMultiplier = specialDay.multiplier;
-    multiplierReason = `${specialDay.label} (x${specialDay.multiplier})`;
+    appliedMultiplier *= specialDay.multiplier;
+    multiplierReason = multiplierReason
+      ? `${multiplierReason} • ${specialDay.label} (x${specialDay.multiplier})`
+      : `${specialDay.label} (x${specialDay.multiplier})`;
   } else if ((dayOfWeek === 0 || dayOfWeek === 6) && rules.weekendMultiplier > 1) {
-    appliedMultiplier = rules.weekendMultiplier;
-    multiplierReason = `Ngày cuối tuần x${rules.weekendMultiplier}`;
+    appliedMultiplier *= rules.weekendMultiplier;
+    multiplierReason = multiplierReason
+      ? `${multiplierReason} • Cuối tuần x${rules.weekendMultiplier}`
+      : `Ngày cuối tuần x${rules.weekendMultiplier}`;
   }
 
   const finalCountedDistanceKm = roundKm(validDistanceKm * appliedMultiplier);
@@ -266,6 +319,7 @@ export interface ActivityLogForProgress {
   elevationGainMeters: number;
   movingTimeSec?: number;
   validAvgPaceSecPerKm?: number;
+  sportType?: string;
 }
 
 export function calculateDualGoalProgress(params: {
@@ -296,10 +350,27 @@ export function calculateDualGoalProgress(params: {
   let maxSingleRunRawKm = 0;
   let totalElevationGain = 0;
 
+  let runKm = 0;
+  let rideRawKm = 0;
+  let rideConvertedKm = 0;
+  let swimRawKm = 0;
+  let swimConvertedKm = 0;
+
   // Map lưu tổng km theo từng ngày (YYYY-MM-DD) để tính chuỗi ngày chạy liên tục (Streak)
   const dailyDistanceMap = new Map<string, number>();
 
   for (const log of activityLogs) {
+    const cat = normalizeSportCategory(log.sportType);
+    if (cat === 'Ride') {
+      rideRawKm += log.validRawDistanceKm;
+      rideConvertedKm += log.finalMultipliedDistanceKm;
+    } else if (cat === 'Swim') {
+      swimRawKm += log.validRawDistanceKm;
+      swimConvertedKm += log.finalMultipliedDistanceKm;
+    } else {
+      runKm += log.finalMultipliedDistanceKm;
+    }
+
     totalRawKm += log.validRawDistanceKm;
     totalMultipliedKm += log.finalMultipliedDistanceKm;
     totalElevationGain += log.elevationGainMeters || 0;
@@ -429,6 +500,13 @@ export function calculateDualGoalProgress(params: {
   });
 
   return {
+    sportBreakdown: {
+      runKm: roundKm(runKm),
+      rideRawKm: roundKm(rideRawKm),
+      rideConvertedKm: roundKm(rideConvertedKm),
+      swimRawKm: roundKm(swimRawKm),
+      swimConvertedKm: roundKm(swimConvertedKm),
+    },
     target: {
       categoryName: targetCategory.name,
       targetDistanceKm: targetCategory.targetDistanceKm,

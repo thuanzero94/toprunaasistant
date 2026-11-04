@@ -19,6 +19,7 @@ import {
   formatPace,
   polylineToSvgPath,
   roundKm,
+  normalizeSportCategory,
 } from '@toprun/shared';
 import type { TracklogActivityItem } from '../UserTracklogExplorer';
 
@@ -62,6 +63,21 @@ export default function TracklogActivityCard({
               <Calendar className="w-3 h-3" />
               <span>{activity.dateStr}</span>
             </span>
+
+            {/* Sport Category Badge */}
+            {normalizeSportCategory(activity.sportType) === 'Other' ? (
+              <span className="px-1.5 py-0.5 rounded-md text-[9px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+                🎾 {activity.sportType || 'Môn khác'}
+              </span>
+            ) : normalizeSportCategory(activity.sportType) === 'Ride' ? (
+              <span className="px-1.5 py-0.5 rounded-md text-[9px] font-bold bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">
+                🚴 Đạp xe
+              </span>
+            ) : normalizeSportCategory(activity.sportType) === 'Swim' ? (
+              <span className="px-1.5 py-0.5 rounded-md text-[9px] font-bold bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
+                🏊 Bơi lội
+              </span>
+            ) : null}
 
             {activity.source === 'STRAVA' && (
               <span className="px-1.5 py-0.2 rounded-md text-[9px] font-bold bg-[#FC4C02]/10 text-[#FC4C02] border border-[#FC4C02]/20">

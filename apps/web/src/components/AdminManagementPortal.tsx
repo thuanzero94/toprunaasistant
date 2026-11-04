@@ -58,6 +58,9 @@ export interface AdminEventFormState {
   maxPaceFormatted: string;
   minActivityDistanceKm: number;
   weekendMultiplier: number;
+  enableCrossTrainingConversion?: boolean;
+  rideToRunRatio?: number;
+  swimToRunRatio?: number;
   allowSplitFiltering?: boolean;
   categories?: AdminCategoryItem[];
   challengeTiers?: AdminChallengeTierItem[];
@@ -664,6 +667,89 @@ export default function AdminManagementPortal({
                       className="w-full px-3 py-2 text-xs font-mono tabular-nums rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-[#FC4C02]"
                     />
                   </div>
+                </div>
+
+                {/* 2B. CẤU HÌNH QUY ĐỔI CHÉO BỘ MÔN (ĐẠP XE / BƠI -> CHẠY) */}
+                <div className="pt-3 border-t border-slate-100 dark:border-slate-800 space-y-3">
+                  <div className="flex items-center justify-between gap-4">
+                    <div>
+                      <label className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-2">
+                        <span>Quy đổi chéo bộ môn (Đạp xe / Bơi lội sang KM Chạy)</span>
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-cyan-500/10 text-cyan-500 border border-cyan-500/20">
+                          Tuỳ chọn giải
+                        </span>
+                      </label>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                        Cho phép vận động viên đạp xe hoặc bơi lội quy đổi sang cự ly Target của giải chạy.
+                      </p>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                      <input
+                        type="checkbox"
+                        checked={Boolean(eventForm.enableCrossTrainingConversion)}
+                        onChange={(e) =>
+                          onChangeEventForm({
+                            ...eventForm,
+                            enableCrossTrainingConversion: e.target.checked,
+                            rideToRunRatio: eventForm.rideToRunRatio ?? 0.25,
+                            swimToRunRatio: eventForm.swimToRunRatio ?? 5.0,
+                          })
+                        }
+                        className="sr-only peer"
+                      />
+                      <div className="w-10 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-[#FC4C02]" />
+                    </label>
+                  </div>
+
+                  {eventForm.enableCrossTrainingConversion && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3.5 rounded-2xl bg-cyan-50/50 dark:bg-cyan-950/20 border border-cyan-200/60 dark:border-cyan-800/40 animate-in fade-in duration-200">
+                      <div className="space-y-1">
+                        <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                          🚴 Hệ số Đạp xe sang Chạy (Mặc định: 0.25)
+                        </label>
+                        <input
+                          type="number"
+                          step="0.05"
+                          min="0.01"
+                          max="2.0"
+                          value={eventForm.rideToRunRatio ?? 0.25}
+                          onChange={(e) =>
+                            onChangeEventForm({
+                              ...eventForm,
+                              rideToRunRatio: parseFloat(e.target.value) || 0.25,
+                            })
+                          }
+                          className="w-full px-3 py-2 text-xs font-mono tabular-nums rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-[#FC4C02]"
+                        />
+                        <span className="text-[10px] text-slate-400 block">
+                          Tỷ lệ: 1 km đạp = {eventForm.rideToRunRatio ?? 0.25} km chạy (hoặc {(1 / (eventForm.rideToRunRatio || 0.25)).toFixed(0)} km đạp = 1 km chạy)
+                        </span>
+                      </div>
+
+                      <div className="space-y-1">
+                        <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                          🏊 Hệ số Bơi lội sang Chạy (Mặc định: 5.0)
+                        </label>
+                        <input
+                          type="number"
+                          step="0.5"
+                          min="0.5"
+                          max="20.0"
+                          value={eventForm.swimToRunRatio ?? 5.0}
+                          onChange={(e) =>
+                            onChangeEventForm({
+                              ...eventForm,
+                              swimToRunRatio: parseFloat(e.target.value) || 5.0,
+                            })
+                          }
+                          className="w-full px-3 py-2 text-xs font-mono tabular-nums rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-[#FC4C02]"
+                        />
+                        <span className="text-[10px] text-slate-400 block">
+                          Tỷ lệ: 1 km bơi = {eventForm.swimToRunRatio ?? 5.0} km chạy
+                        </span>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
 

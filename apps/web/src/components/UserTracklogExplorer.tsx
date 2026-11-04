@@ -21,6 +21,7 @@ import {
   formatDuration,
   formatPace,
   roundKm,
+  normalizeSportCategory,
 } from '@toprun/shared';
 import TracklogDistanceChart from './tracklog/TracklogDistanceChart';
 import TracklogActivityCard from './tracklog/TracklogActivityCard';
@@ -107,6 +108,7 @@ export default function UserTracklogExplorer({
   const [viewMode, setViewMode] = useState<'list' | 'detail'>('list');
   const [ownerFilter, setOwnerFilter] = useState<'mine' | 'all'>('mine');
   const [statusFilter, setStatusFilter] = useState<'all' | 'valid' | 'flagged' | 'hidden'>('all');
+  const [sportListFilter, setSportListFilter] = useState<'all' | 'Run' | 'Ride' | 'Swim' | 'Other'>('all');
   const [searchQuery, setSearchQuery] = useState('');
 
   // Helper to determine if an activity belongs to current user
@@ -133,6 +135,10 @@ export default function UserTracklogExplorer({
       } else if (statusFilter === 'flagged') {
         if (act.isHidden || act.antiCheatStatus === AntiCheatStatus.VALID) return false;
       }
+      if (sportListFilter !== 'all') {
+        const cat = normalizeSportCategory(act.sportType);
+        if (cat !== sportListFilter) return false;
+      }
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
         const match =
@@ -144,7 +150,7 @@ export default function UserTracklogExplorer({
       }
       return true;
     });
-  }, [activities, ownerFilter, statusFilter, searchQuery, isAdmin, currentUserId]);
+  }, [activities, ownerFilter, statusFilter, sportListFilter, searchQuery, isAdmin, currentUserId]);
 
   const selectedActivity = useMemo(() => {
     if (filteredActivities.length === 0) return null;
@@ -366,6 +372,30 @@ export default function UserTracklogExplorer({
                 }`}
               >
                 {st.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Sport List Filter */}
+          <div className="inline-flex p-1 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-200/70 dark:border-slate-800">
+            {[
+              { id: 'all', label: 'Tất cả môn' },
+              { id: 'Run', label: '🏃 Chạy' },
+              { id: 'Ride', label: '🚴 Đạp' },
+              { id: 'Swim', label: '🏊 Bơi' },
+              { id: 'Other', label: '🎾 Môn khác' },
+            ].map((sp) => (
+              <button
+                key={sp.id}
+                type="button"
+                onClick={() => setSportListFilter(sp.id as any)}
+                className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
+                  sportListFilter === sp.id
+                    ? 'bg-white dark:bg-slate-800 text-[#FC4C02] font-bold shadow-xs'
+                    : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
+                }`}
+              >
+                {sp.label}
               </button>
             ))}
           </div>

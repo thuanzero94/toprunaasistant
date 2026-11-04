@@ -21,7 +21,7 @@ import {
   Timer,
   Footprints,
 } from 'lucide-react';
-import { formatDuration, formatPace, roundKm } from '@toprun/shared';
+import { formatDuration, formatPace, roundKm, normalizeSportCategory } from '@toprun/shared';
 import type { TracklogActivityItem } from '../UserTracklogExplorer';
 import AthleteAvatar from '../AthleteAvatar';
 
@@ -46,9 +46,9 @@ export default function AthleteDeepDashboard({
 }: Props) {
   const [timeRange, setTimeRange] = useState<TimeRangeFilter>('all');
 
-  // Filter valid user activities
+  // Filter valid user running activities (excl. non-running sports from running metrics)
   const userActivities = useMemo(() => {
-    return activities.filter((a) => !a.isHidden && a.validDistanceKm > 0);
+    return activities.filter((a) => !a.isHidden && a.validDistanceKm > 0 && normalizeSportCategory(a.sportType) === 'Run');
   }, [activities]);
 
   // Date filtering

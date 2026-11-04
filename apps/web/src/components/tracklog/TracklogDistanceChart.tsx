@@ -11,7 +11,7 @@ import {
   Activity,
   Zap,
 } from 'lucide-react';
-import { formatDuration, formatPace, roundKm } from '@toprun/shared';
+import { formatDuration, formatPace, roundKm, normalizeSportCategory } from '@toprun/shared';
 import type { TracklogActivityItem } from '../UserTracklogExplorer';
 
 type SportTypeFilter = 'Run' | 'Ride' | 'Swim';
@@ -43,19 +43,10 @@ export default function TracklogDistanceChart({
   const [offset, setOffset] = useState<number>(0);
   const [hoveredBucket, setHoveredBucket] = useState<BucketData | null>(null);
 
-  // Helper to normalize sport type
+  // Helper to normalize sport type strictly
   const matchSport = (act: TracklogActivityItem, filter: SportTypeFilter) => {
-    const rawType = (act.sportType || 'Run').toLowerCase();
-    if (filter === 'Run') {
-      return rawType.includes('run') || rawType.includes('walk') || rawType === 'hike';
-    }
-    if (filter === 'Ride') {
-      return rawType.includes('ride') || rawType.includes('cycle') || rawType.includes('bike');
-    }
-    if (filter === 'Swim') {
-      return rawType.includes('swim');
-    }
-    return true;
+    const cat = normalizeSportCategory(act.sportType);
+    return cat === filter;
   };
 
   // Base date anchoring
@@ -390,8 +381,7 @@ export default function TracklogDistanceChart({
             <span>Pace Trung Bình</span>
           </div>
           <div className="text-xl sm:text-2xl font-black text-slate-900 dark:text-white mt-1 font-mono tracking-tight">
-            {summary.avgPaceSec > 0 ? formatPace(summary.avgPaceSec) : '--:--'}{' '}
-            <span className="text-xs font-bold text-slate-400">/km</span>
+            {summary.avgPaceSec > 0 ? formatPace(summary.avgPaceSec) : '--:--'}
           </div>
         </div>
 

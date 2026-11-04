@@ -29,6 +29,55 @@ export enum SportType {
   VIRTUAL_RUN = 'VirtualRun',
   WALK = 'Walk',
   HIKE = 'Hike',
+  RIDE = 'Ride',
+  SWIM = 'Swim',
+  OTHER = 'Other',
+}
+
+export type SportCategory = 'Run' | 'Ride' | 'Swim' | 'Other';
+
+/**
+ * Chuẩn hóa loại hình thể thao thành 4 nhóm chính: Chạy (Run), Đạp (Ride), Bơi (Swim), Khác (Other)
+ */
+export function normalizeSportCategory(sportType?: string | null): SportCategory {
+  if (!sportType) return 'Run';
+  const s = String(sportType).trim().toLowerCase();
+
+  // 1. Chạy bộ & Đi bộ
+  if (
+    s === 'run' ||
+    s === 'trailrun' ||
+    s === 'virtualrun' ||
+    s === 'walk' ||
+    s === 'hike' ||
+    s === 'treadmill' ||
+    s.includes('running')
+  ) {
+    return 'Run';
+  }
+
+  // 2. Đạp xe
+  if (
+    s === 'ride' ||
+    s === 'cycling' ||
+    s === 'virtualride' ||
+    s === 'mountainbikeride' ||
+    s === 'gravelride' ||
+    s === 'ebikeride' ||
+    s === 'handcycle' ||
+    s.includes('bike') ||
+    s.includes('cycle')
+  ) {
+    return 'Ride';
+  }
+
+  // 3. Bơi lội
+  if (s === 'swim' || s === 'openwaterswim' || s === 'poolswim' || s.includes('swimming')) {
+    return 'Swim';
+  }
+
+  // 4. Các môn khác (Pickleball, Tennis, Badminton, Gym, Yoga, Golf...)
+  return 'Other';
 }
 
 export enum AntiCheatStatus {
@@ -113,6 +162,9 @@ export const EventRuleConfigSchema = z.object({
   requireHeartRate: z.boolean().default(false),          // Bắt buộc có nhịp tim từ đồng hồ
   allowSplitFiltering: z.boolean().default(true),        // True: Cắt bỏ km vi phạm, giữ lại km hợp lệ. False: Hủy cả bài chạy.
   weekendMultiplier: z.number().min(1).max(5).default(1.0), // Hệ số nhân ngày Thứ 7 & Chủ Nhật (VD: x2)
+  enableCrossTrainingConversion: z.boolean().default(false), // Cho phép quy đổi Đạp xe / Bơi lội sang KM Target chạy bộ
+  rideToRunRatio: z.number().min(0.01).max(10).default(0.25), // Tỷ lệ quy đổi Đạp xe -> Chạy (mặc định 4km đạp = 1km chạy: 0.25)
+  swimToRunRatio: z.number().min(0.1).max(50).default(5.0),   // Tỷ lệ quy đổi Bơi lội -> Chạy (mặc định 1km bơi = 5km chạy: 5.0)
   specialMultiplierDates: z
     .array(
       z.object({
@@ -204,7 +256,16 @@ export interface ChallengeTierInfo {
   rewardDescription: string;
 }
 
+export interface ConvertedSportBreakdown {
+  runKm: number;
+  rideRawKm: number;
+  rideConvertedKm: number;
+  swimRawKm: number;
+  swimConvertedKm: number;
+}
+
 export interface DualGoalProgressSummary {
+  sportBreakdown?: ConvertedSportBreakdown;
   // 1. Tầng TARGET (Mục tiêu cơ bản nhận Finisher Medal & E-Cert)
   target: {
     categoryName: string;

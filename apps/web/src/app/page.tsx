@@ -65,6 +65,7 @@ import {
   polylineToSvgPath,
   roundKm,
   RunMode,
+  normalizeSportCategory,
 } from '@toprun/shared';
 
 const SAMPLE_POLYLINE_SALA = encodePolyline([
@@ -223,6 +224,9 @@ export default function TopRunWebApp() {
     maxPaceFormatted: '15:00',
     minActivityDistanceKm: 1.0,
     weekendMultiplier: 1.0,
+    enableCrossTrainingConversion: false,
+    rideToRunRatio: 0.25,
+    swimToRunRatio: 5.0,
     categories: [
       { name: 'Mốc Target 21KM (Starter)', targetDistanceKm: 21, bibPrefix: 'VR21-' },
       { name: 'Mốc Target 42KM (Marathoner)', targetDistanceKm: 42, bibPrefix: 'VR42-' },
@@ -542,6 +546,9 @@ export default function TopRunWebApp() {
         maxPaceSecPerKm: parsePaceToSeconds(newEventForm.maxPaceFormatted) || 900,
         minActivityDistanceKm: Number(newEventForm.minActivityDistanceKm) || 1.0,
         weekendMultiplier: Number(newEventForm.weekendMultiplier) || 1.0,
+        enableCrossTrainingConversion: Boolean(newEventForm.enableCrossTrainingConversion),
+        rideToRunRatio: Number(newEventForm.rideToRunRatio) || 0.25,
+        swimToRunRatio: Number(newEventForm.swimToRunRatio) || 5.0,
         allowSplitFiltering: true,
         categories: newEventForm.categories,
         challengeTiers: [
@@ -704,6 +711,7 @@ export default function TopRunWebApp() {
       source: sa.source || 'STRAVA SYNC',
       externalId: sa.externalId,
       name: sa.name,
+      sportType: sa.sportType || 'Run',
       startDateIso: sa.startDateIso || new Date().toISOString(),
       dateStr: sa.startDateIso
         ? new Date(sa.startDateIso).toLocaleString('vi-VN', {
@@ -1507,15 +1515,6 @@ export default function TopRunWebApp() {
               >
                 <AthleteAvatar user={user} size="sm" showBadge={true} showWings={false} showSharkCrown={true} />
               </button>
-
-              <button
-                type="button"
-                onClick={logout}
-                title="Đăng xuất tài khoản"
-                className="p-2 rounded-xl border border-slate-200 dark:border-slate-800 text-slate-500 hover:text-rose-500 hover:border-rose-200 dark:hover:border-rose-800 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition cursor-pointer"
-              >
-                <LogOut className="w-4 h-4" />
-              </button>
             </div>
           </div>
 
@@ -1755,6 +1754,16 @@ export default function TopRunWebApp() {
                           <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
                             Min: {currentEventData?.ruleConfig?.minActivityDistanceKm ?? 1.0}km/bài
                           </span>
+                          {currentEventData?.ruleConfig?.enableCrossTrainingConversion && (
+                            <span
+                              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold bg-cyan-50 dark:bg-cyan-950/50 text-cyan-700 dark:text-cyan-300 border border-cyan-200 dark:border-cyan-800/60"
+                              title={`Quy đổi: 1km bơi = ${currentEventData.ruleConfig.swimToRunRatio ?? 5}km chạy • ${(1 / (currentEventData.ruleConfig.rideToRunRatio ?? 0.25))}km đạp = 1km chạy`}
+                            >
+                              <span>🏊 1km bơi = {currentEventData.ruleConfig.swimToRunRatio ?? 5}km</span>
+                              <span>•</span>
+                              <span>🚴 4km đạp = 1km</span>
+                            </span>
+                          )}
                         </div>
 
                         <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white">
@@ -2154,8 +2163,48 @@ export default function TopRunWebApp() {
                                   <td className="py-3.5 px-3 font-mono text-xs text-slate-600 dark:text-slate-300">
                                     {row.rawKm} km
                                   </td>
-                                  <td className="py-3.5 px-3 font-mono font-bold text-slate-900 dark:text-white">
-                                    {row.multipliedKm} km
+                                  <td className="py-3.5 px-3">
+                                    <div className="font-mono font-bold text-slate-900 dark:text-white">
+                                      {row.multipliedKm} km
+                                    </div>
+                                    {(() => {
+                                      const userActs = activities.filter(
+                                        (a) => a.userId === row.userId && !a.isHidden && a.validDistanceKm > 0
+                                      );
+                                      const runDist = userActs
+                                        .filter((a) => normalizeSportCategory(a.sportType) === 'Run')
+                                        .reduce((s, a) => s + (a.finalCountedDistanceKm || a.validDistanceKm), 0);
+                                      const rideRaw = userActs
+                                        .filter((a) => normalizeSportCategory(a.sportType) === 'Ride')
+                                        .reduce((s, a) => s + a.validDistanceKm, 0);
+                                      const rideConv = userActs
+                                        .filter((a) => normalizeSportCategory(a.sportType) === 'Ride')
+                                        .reduce((s, a) => s + (a.finalCountedDistanceKm || a.validDistanceKm), 0);
+                                      const swimRaw = userActs
+                                        .filter((a) => normalizeSportCategory(a.sportType) === 'Swim')
+                                        .reduce((s, a) => s + a.validDistanceKm, 0);
+                                      const swimConv = userActs
+                                        .filter((a) => normalizeSportCategory(a.sportType) === 'Swim')
+                                        .reduce((s, a) => s + (a.finalCountedDistanceKm || a.validDistanceKm), 0);
+
+                                      if (rideConv === 0 && swimConv === 0) return null;
+
+                                      return (
+                                        <div className="flex items-center gap-1.5 flex-wrap text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
+                                          {runDist > 0 && <span>🏃 {roundKm(runDist)}km</span>}
+                                          {rideConv > 0 && (
+                                            <span className="text-emerald-600 dark:text-emerald-400 font-medium">
+                                              🚴 +{roundKm(rideConv)}km <span className="opacity-75">({roundKm(rideRaw)}km đạp)</span>
+                                            </span>
+                                          )}
+                                          {swimConv > 0 && (
+                                            <span className="text-cyan-600 dark:text-cyan-400 font-medium">
+                                              🏊 +{roundKm(swimConv)}km <span className="opacity-75">({roundKm(swimRaw)}km bơi)</span>
+                                            </span>
+                                          )}
+                                        </div>
+                                      );
+                                    })()}
                                   </td>
                                   <td className="py-3.5 px-3">
                                     {row.isFinisher ? (

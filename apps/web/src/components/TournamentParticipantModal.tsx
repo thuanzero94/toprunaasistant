@@ -14,7 +14,7 @@ import {
   Clock,
   ExternalLink,
 } from 'lucide-react';
-import { formatPace, roundKm } from '@toprun/shared';
+import { formatPace, roundKm, normalizeSportCategory } from '@toprun/shared';
 import AthleteAvatar, { AthleteHonorPill } from './AthleteAvatar';
 
 export interface ParticipantDetailData {
@@ -147,6 +147,48 @@ export default function TournamentParticipantModal({
               />
             </div>
           </div>
+
+          {/* Cross-training converted breakdown if any */}
+          {(() => {
+            const acts = participant.activities || [];
+            const runKm = roundKm(acts.filter((a) => normalizeSportCategory(a.sportType) === 'Run').reduce((s, a) => s + (a.finalCountedDistanceKm || a.validDistanceKm), 0));
+            const rideRaw = roundKm(acts.filter((a) => normalizeSportCategory(a.sportType) === 'Ride').reduce((s, a) => s + a.validDistanceKm, 0));
+            const rideConv = roundKm(acts.filter((a) => normalizeSportCategory(a.sportType) === 'Ride').reduce((s, a) => s + (a.finalCountedDistanceKm || a.validDistanceKm), 0));
+            const swimRaw = roundKm(acts.filter((a) => normalizeSportCategory(a.sportType) === 'Swim').reduce((s, a) => s + a.validDistanceKm, 0));
+            const swimConv = roundKm(acts.filter((a) => normalizeSportCategory(a.sportType) === 'Swim').reduce((s, a) => s + (a.finalCountedDistanceKm || a.validDistanceKm), 0));
+
+            if (rideConv === 0 && swimConv === 0) return null;
+
+            return (
+              <div className="p-3.5 rounded-2xl bg-orange-50/80 dark:bg-[#FC4C02]/10 border border-orange-200/80 dark:border-[#FC4C02]/25 space-y-1.5">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-bold text-slate-800 dark:text-slate-200">
+                    Quy đổi cự ly chéo bộ môn:
+                  </span>
+                  <span className="text-[11px] font-mono font-bold text-[#FC4C02]">
+                    Tổng {roundKm(participant.totalValidKm)} km
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 flex-wrap text-xs font-mono">
+                  {runKm > 0 && (
+                    <span className="px-2 py-0.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-200">
+                      🏃 {runKm} km chạy
+                    </span>
+                  )}
+                  {rideConv > 0 && (
+                    <span className="px-2 py-0.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 font-bold">
+                      🚴 +{rideConv} km <span className="font-normal text-[10px]">({rideRaw} km đạp)</span>
+                    </span>
+                  )}
+                  {swimConv > 0 && (
+                    <span className="px-2 py-0.5 rounded-lg bg-cyan-50 dark:bg-cyan-950/40 border border-cyan-200 dark:border-cyan-800 text-cyan-700 dark:text-cyan-300 font-bold">
+                      🏊 +{swimConv} km <span className="font-normal text-[10px]">({swimRaw} km bơi)</span>
+                    </span>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
 
           {/* Activities List contributed to this race */}
           <div className="space-y-3">
