@@ -45,6 +45,8 @@ TOPRunAssistant/
 - 🏛️ [**Kiến Trúc Chi Tiết & Thuật Toán Chấm Điểm (`docs/ARCHITECTURE.md`)**](file:///c:/Users/thuang/OneDrive%20-%20ASSA%20ABLOY%20Group/alan/TOPRunAssistant/docs/ARCHITECTURE.md)
 - 📡 [**Đặc Tả REST API & Strava Webhook (`docs/API_REFERENCE.md`)**](file:///c:/Users/thuang/OneDrive%20-%20ASSA%20ABLOY%20Group/alan/TOPRunAssistant/docs/API_REFERENCE.md)
 - 🚀 [**Hướng Dẫn Cài Đặt, Cấu Hình Strava & Sử Dụng (`docs/DEPLOYMENT_AND_USER_GUIDE.md`)**](file:///c:/Users/thuang/OneDrive%20-%20ASSA%20ABLOY%20Group/alan/TOPRunAssistant/docs/DEPLOYMENT_AND_USER_GUIDE.md)
+- 🏷️ [**Quy Trình Quản Lý Phiên Bản & Release Tự Động Với `agy` CLI (`docs/RELEASE_WORKFLOW_GUIDE.md`)**](file:///c:/Users/thuang/OneDrive%20-%20ASSA%20ABLOY%20Group/alan/TOPRunAssistant/docs/RELEASE_WORKFLOW_GUIDE.md)
+- 🛡️ [**Chiến Lược Sao Lưu & Phục Hồi Thảm Họa DR (`docs/DISASTER_RECOVERY_AND_BACKUP_GUIDE.md`)**](file:///c:/Users/thuang/OneDrive%20-%20ASSA%20ABLOY%20Group/alan/TOPRunAssistant/docs/DISASTER_RECOVERY_AND_BACKUP_GUIDE.md)
 
 ---
 
@@ -61,6 +63,7 @@ TOPRunAssistant/
 | **Restart** | **Chạy lại thay đổi lớn (Rebuild + Sync DB + Prune)** | `./manage.sh restart` | `.\manage.ps1 restart` | `npm run prod:restart` |
 | **Status** | Xem trạng thái các container | `./manage.sh status` | `.\manage.ps1 status` | `npm run prod:status` |
 | **Logs** | Xem logs hệ thống theo thời gian thực | `./manage.sh logs` | `.\manage.ps1 logs` | `npm run prod:logs` |
+| **Release** | **Tự động bump CalVer & sinh AI Changelog (`agy`)** | `./scripts/release.sh` | `.\scripts\release.ps1` | `npm run release` |
 
 > 💡 Thêm cờ `--pull` (Linux) hoặc `-Pull` (Windows) để kéo code Git mới nhất trước khi reload/restart. Thêm cờ `--dev` hoặc `-Dev` nếu muốn thao tác trên môi trường local compose.
 

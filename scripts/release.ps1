@@ -10,3 +10,4 @@ $rootDir = Split-Path -Parent $scriptDir
 
 Set-Location $rootDir
 npx tsx scripts/release.ts @ArgsList
+

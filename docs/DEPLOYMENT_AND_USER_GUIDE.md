@@ -309,3 +309,23 @@ Khi cần sao lưu định kỳ, di chuyển sang Server mới hoặc chuẩn b�
   ./manage.sh restore backups/toprun_backup_YYYYMMDD_HHMMSS.tar.gz
   ```
 - **Lịch cronjob định kỳ:** Tự động chạy 2 lần/ngày (12:00 trưa & 00:00 đêm) và tự động đồng bộ lên Cloud Storage / NAS Synology.
+
+---
+
+## 9. QUY TRÌNH PHÁT HÀNH PHIÊN BẢN (RELEASE WORKFLOW VỚI AGY CLI)
+
+Khi chuẩn bị đóng gói một cột mốc tính năng mới hoặc phát hành bản vá:
+- **Tài liệu chi tiết:** Xem hướng dẫn hoàn chỉnh tại [RELEASE_WORKFLOW_GUIDE.md](./RELEASE_WORKFLOW_GUIDE.md).
+- **Quy chuẩn đánh số:** Calendar Versioning `YY.MM.Ver` (Ví dụ: `26.11.0`, `26.11.1`).
+- **Tổng hợp Changelog:** Tự động gọi `agy` CLI để nhóm commit theo `Features`, `Bug Fixes`, `Performance`, `Refactor`, `Chores`.
+- **Lệnh chạy thử nghiệm (Dry run):**
+  ```bash
+  npm run release -- --dry-run
+  ```
+- **Lệnh phát hành chính thức:**
+  ```bash
+  npm run release
+  # Hoặc chỉ định cụ thể version:
+  npm run release -- 26.11.1
+  ```
+- **Hành động tự động:** Cập nhật `CHANGELOG.md`, đồng bộ version trong 6 file `package.json` của monorepo, tạo commit `chore(release): vYY.MM.Ver`, tạo tag `vYY.MM.Ver` và đẩy lên GitHub remote.
