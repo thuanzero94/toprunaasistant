@@ -1,0 +1,88 @@
+# ==============================================================================
+# TOPRunAssistant - Rclone Cloud Storage Configuration Template
+# Place this file or configure via `rclone config`
+# Default location on Linux: ~/.config/rclone/rclone.conf
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# 1. Cloudflare R2 (Khuyên dùng: Chuẩn S3, Miễn phí băng thông tải về Egress)
+# ------------------------------------------------------------------------------
+[r2]
+type = s3
+provider = Cloudflare
+access_key_id = <YOUR_R2_ACCESS_KEY_ID>
+secret_access_key = <YOUR_R2_SECRET_ACCESS_KEY>
+endpoint = https://<ACCOUNT_ID>.r2.cloudflarestorage.com
+acl = private
+
+# Sử dụng trong .env:
+# RCLONE_REMOTE=r2:toprun-backups
+
+
+# ------------------------------------------------------------------------------
+# 2. Amazon Web Services (AWS S3)
+# ------------------------------------------------------------------------------
+[aws_s3]
+type = s3
+provider = AWS
+access_key_id = <YOUR_AWS_ACCESS_KEY_ID>
+secret_access_key = <YOUR_AWS_SECRET_ACCESS_KEY>
+region = ap-southeast-1
+location_constraint = ap-southeast-1
+acl = private
+storage_class = STANDARD_IA
+
+# Sử dụng trong .env:
+# RCLONE_REMOTE=aws_s3:toprun-production-backups
+
+
+# ------------------------------------------------------------------------------
+# 3. NAS Synology (Qua WebDAV hoặc SFTP hoặc MinIO S3 trên Synology)
+# ------------------------------------------------------------------------------
+# Phương án 3A: Synology WebDAV (Cài gói WebDAV Server trên Synology Package Center)
+[synology_webdav]
+type = webdav
+url = https://nas.yourdomain.com:5006/Backups/TOPRunAssistant
+vendor = other
+user = <SYNOLOGY_USER>
+pass = <RCLONE_OBFUSCATED_PASSWORD>
+
+# Phương án 3B: Synology SFTP / SSH
+[synology_sftp]
+type = sftp
+host = nas.yourdomain.com
+user = <SYNOLOGY_USER>
+port = 22
+key_file = ~/.ssh/id_rsa
+
+# Sử dụng trong .env:
+# RCLONE_REMOTE=synology_webdav:
+# hoặc:
+# RCLONE_REMOTE=synology_sftp:/volume1/Backups/TOPRunAssistant
+
+
+# ------------------------------------------------------------------------------
+# 4. Google Drive
+# ------------------------------------------------------------------------------
+[gdrive]
+type = drive
+client_id = <YOUR_GOOGLE_CLIENT_ID>
+client_secret = <YOUR_GOOGLE_CLIENT_SECRET>
+scope = drive.file
+root_folder_id = <OPTIONAL_FOLDER_ID>
+
+# Sử dụng trong .env:
+# RCLONE_REMOTE=gdrive:TOPRunAssistant_Backups
+
+
+# ------------------------------------------------------------------------------
+# 5. Backblaze B2 (Chi phí lưu trữ cực rẻ)
+# ------------------------------------------------------------------------------
+[b2]
+type = b2
+account = <KEY_ID>
+key = <APPLICATION_KEY>
+
+# Sử dụng trong .env:
+# RCLONE_REMOTE=b2:toprun-backups-bucket
+

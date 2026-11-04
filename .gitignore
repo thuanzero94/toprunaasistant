@@ -37,4 +37,12 @@ data/*.json
 .strava-activities-cache.json
 apps/api/.strava-activities-cache.json
 
+# Backups & Disaster Recovery
+backups/
+logs/
+temp_restore_*
+*.dump
+*.tar.gz
+rclone.conf
+
 *.code-workspace

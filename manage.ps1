@@ -13,7 +13,7 @@
 
 param(
   [Parameter(Position = 0)]
-  [ValidateSet("build", "start", "stop", "reload", "restart", "status", "logs", "help")]
+  [ValidateSet("build", "start", "stop", "reload", "restart", "status", "logs", "backup", "restore", "help")]
   [string]$Action = "help",
 
   [Parameter(Position = 1)]
@@ -22,10 +22,12 @@ param(
   [switch]$Dev,
   [switch]$Local,
   [switch]$Prod,
-  [switch]$Pull
+  [switch]$Pull,
+  [switch]$Force
 )
 
 $ErrorActionPreference = "Stop"
+$ScriptDir = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Parent $MyInvocation.MyCommand.Path }
 
 # File Compose muc tieu
 $ComposeFile = "docker-compose.prod.yml"
@@ -51,13 +53,20 @@ function Show-HelpMessage {
   Write-Host "  reload            Cap nhat code Giao dien (Web) khong gay downtime"
   Write-Host "  restart           Khoi dong lai voi thay doi lon (Rebuild + Sync DB + Prune)"
   Write-Host "  status            Kiem tra trang thai cac container"
-  Write-Host "  logs [service]    Theo doi logs thoi gian thuc`n"
+  Write-Host "  logs [service]    Theo doi logs thoi gian thuc"
+  Write-Host "  backup            Sao luu tron goi Database, .env va ./data"
+  Write-Host "  restore <file>    Khoi phuc toan dien du lieu tu ban backup`n"
   Write-Host "THAM SO BO SUNG:" -ForegroundColor Yellow
-  Write-Host "  -Dev              Su dung docker-compose.yml (Moi truong Local)"
-  Write-Host "  -Pull             Keo ma nguon moi nhat tu Git truoc khi thuc hien`n"
+  Write-Host "  -Dev              Su dung docker-compose.dev.yml (Hot-Reload)"
+  Write-Host "  -Local            Su dung docker-compose.yml (Local Standard)"
+  Write-Host "  -Prod             Su dung docker-compose.prod.yml (Production)"
+  Write-Host "  -Pull             Keo ma nguon moi nhat tu Git truoc khi thuc hien"
+  Write-Host "  -Force            Bo qua xac nhan khi Restore`n"
   Write-Host "VI DU:" -ForegroundColor Yellow
   Write-Host "  .\manage.ps1 reload              # Reload code giao dien Web khong downtime"
   Write-Host "  .\manage.ps1 restart             # Rebuild toan bo, cap nhat DB Schema an toan"
+  Write-Host "  .\manage.ps1 backup              # Tao ban backup ngay lap tuc"
+  Write-Host "  .\manage.ps1 restore backups\xxx.tar.gz"
   Write-Host "  .\manage.ps1 -Dev start          # Khoi dong moi truong local"
   Write-Host "  .\manage.ps1 status              # Xem danh sach container dang chay"
   Write-Host "========================================================================" -ForegroundColor Cyan
@@ -175,5 +184,33 @@ switch ($Action) {
       Write-Host "Theo doi logs cho toan bo dich vu..." -ForegroundColor Cyan
       docker compose -f $ComposeFile logs -f
     }
+  }
+
+  "backup" {
+    Write-Host "[BACKUP] Dang tien hanh sao luu he thong..." -ForegroundColor Cyan
+    $backupScript = Join-Path $ScriptDir "scripts\backup.ps1"
+    if ($Dev) {
+      & $backupScript -Dev
+    } elseif ($Local) {
+      & $backupScript -Local
+    } else {
+      & $backupScript -Prod
+    }
+  }
+
+  "restore" {
+    if (-not $Service) {
+      Write-Host "[ERROR] Vui long truyen duong dan file backup! Vi du: .\manage.ps1 restore backups\xxx.tar.gz" -ForegroundColor Red
+      exit 1
+    }
+    Write-Host "[RESTORE] Dang chuan bi khoi phuc he thong..." -ForegroundColor Cyan
+    $restoreScript = Join-Path $ScriptDir "scripts\restore.ps1"
+    $restoreArgs = @($Service)
+    if ($Dev) { $restoreArgs += "-Dev" }
+    elseif ($Local) { $restoreArgs += "-Local" }
+    else { $restoreArgs += "-Prod" }
+    if ($Force) { $restoreArgs += "-Force" }
+
+    & $restoreScript @restoreArgs
   }
 }

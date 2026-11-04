@@ -15,9 +15,10 @@ COMMAND=""
 TARGET_SERVICE=""
 
 # Parse arguments
+EXTRA_ARG=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    build|start|stop|reload|restart|status|logs)
+    build|start|stop|reload|restart|status|logs|backup|restore)
       COMMAND="$1"
       shift
       ;;
@@ -40,6 +41,10 @@ while [[ $# -gt 0 ]]; do
       DO_GIT_PULL=true
       shift
       ;;
+    -y|--yes|--force)
+      EXTRA_ARG="$1"
+      shift
+      ;;
     api|web|postgres|redis|nginx)
       TARGET_SERVICE="$1"
       shift
@@ -49,7 +54,11 @@ while [[ $# -gt 0 ]]; do
       shift
       ;;
     *)
-      echo "⚠️ Tham số không xác định: $1"
+      if [ -z "$EXTRA_ARG" ]; then
+        EXTRA_ARG="$1"
+      else
+        echo "⚠️ Tham số không xác định: $1"
+      fi
       shift
       ;;
   esac
@@ -69,18 +78,21 @@ show_help() {
   echo "  restart           Khởi động lại với thay đổi lớn (Rebuild + Sync DB + Prune)"
   echo "  status            Kiểm tra trạng thái các container"
   echo "  logs [service]    Theo dõi logs thời gian thực"
+  echo "  backup            Sao lưu trọn gói Database, .env và thư mục ./data"
+  echo "  restore <file>    Khôi phục toàn diện dữ liệu từ bản backup .tar.gz"
   echo ""
   echo "⚙️ TÙY CHỌN BỔ SUNG:"
-  echo "  --dev             Sử dụng docker-compose.yml (Môi trường Local)"
+  echo "  --dev             Sử dụng docker-compose.dev.yml (Môi trường Local/Hot-Reload)"
+  echo "  --local           Sử dụng docker-compose.yml (Môi trường Local/Standard)"
   echo "  --prod            Sử dụng docker-compose.prod.yml (Mặc định: Production)"
   echo "  --pull            Kéo mã nguồn mới nhất từ Git trước khi thực hiện"
+  echo "  -y, --force       Tự động xác nhận khôi phục không cần hỏi (cho restore)"
   echo ""
   echo "💡 VÍ DỤ:"
   echo "  ./manage.sh reload               # Build & swap code Web không downtime"
-  echo "  ./manage.sh reload --pull        # Git pull và reload Web không downtime"
   echo "  ./manage.sh restart              # Rebuild toàn bộ, cập nhật DB Schema an toàn"
-  echo "  ./manage.sh build web            # Chỉ build lại image Web"
-  echo "  ./manage.sh stop                 # Dừng toàn bộ hệ thống"
+  echo "  ./manage.sh backup               # Tạo bản backup đóng gói ngay lập tức"
+  echo "  ./manage.sh restore backups/toprun_backup_xxx.tar.gz"
   echo "  ./manage.sh status               # Xem danh sách container đang chạy"
   echo "========================================================================"
 }
@@ -195,6 +207,43 @@ case "$COMMAND" in
     echo "🎉 Restart và đồng bộ hoàn tất thành công!"
     docker compose -f "$COMPOSE_FILE" ps
     echo "========================================================================"
+    ;;
+
+  # ----------------------------------------------------------------------------
+  # BACKUP: Sao lưu cơ sở dữ liệu và thư mục dữ liệu
+  # ----------------------------------------------------------------------------
+  backup)
+    echo "📦 Đang thực hiện tiến trình sao lưu hệ thống..."
+    chmod +x ./scripts/backup.sh 2>/dev/null || true
+    if [ "$COMPOSE_FILE" = "docker-compose.dev.yml" ]; then
+      ./scripts/backup.sh --dev
+    elif [ "$COMPOSE_FILE" = "docker-compose.yml" ]; then
+      ./scripts/backup.sh --local
+    else
+      ./scripts/backup.sh --prod
+    fi
+    ;;
+
+  # ----------------------------------------------------------------------------
+  # RESTORE: Khôi phục dữ liệu từ bản backup
+  # ----------------------------------------------------------------------------
+  restore)
+    echo "♻️ Đang chuẩn bị khôi phục hệ thống..."
+    chmod +x ./scripts/restore.sh 2>/dev/null || true
+    RESTORE_FLAGS=""
+    if [ "$COMPOSE_FILE" = "docker-compose.dev.yml" ]; then
+      RESTORE_FLAGS="--dev"
+    elif [ "$COMPOSE_FILE" = "docker-compose.yml" ]; then
+      RESTORE_FLAGS="--local"
+    else
+      RESTORE_FLAGS="--prod"
+    fi
+
+    if [ "$EXTRA_ARG" = "-y" ] || [ "$EXTRA_ARG" = "--yes" ] || [ "$EXTRA_ARG" = "--force" ]; then
+      ./scripts/restore.sh "$TARGET_SERVICE" $RESTORE_FLAGS --force
+    else
+      ./scripts/restore.sh "$TARGET_SERVICE" $RESTORE_FLAGS
+    fi
     ;;
 
   # ----------------------------------------------------------------------------

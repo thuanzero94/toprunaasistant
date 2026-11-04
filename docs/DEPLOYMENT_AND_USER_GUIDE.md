@@ -293,3 +293,19 @@ Toàn bộ hệ thống áp dụng cơ chế bảo toàn dữ liệu 2 lớp:
 2. **Lớp Engine Data (Giải đấu mới tạo, BXH, Cấu hình Thử thách, Tracklogs Strava)**: Nằm trong file vật lý `./data/toprun-engine-state.json` trên ổ cứng của VPS.
 
 > 🛡️ **Bảo đảm an toàn**: Kể cả khi bạn khởi động lại VPS (`sudo reboot`), nâng cấp Docker Engine hoặc tắt container bằng `./manage.sh stop`, toàn bộ dữ liệu giải đấu, thành tích chạy và tài khoản người dùng được tự động nạp lại 100% nguyên vẹn ngay khi hệ thống bật lên.
+
+---
+
+## 8. SAO LƯU & PHỤC HỒI THẢM HỌA (DISASTER RECOVERY)
+
+Khi cần sao lưu định kỳ, di chuyển sang Server mới hoặc chuẩn bị cho tình huống Server bị sập:
+- **Tài liệu chi tiết:** Xem hướng dẫn hoàn chỉnh tại [DISASTER_RECOVERY_AND_BACKUP_GUIDE.md](./DISASTER_RECOVERY_AND_BACKUP_GUIDE.md).
+- **Lệnh tạo bản backup nhanh:**
+  ```bash
+  ./manage.sh backup
+  ```
+- **Lệnh khôi phục sang máy chủ mới:**
+  ```bash
+  ./manage.sh restore backups/toprun_backup_YYYYMMDD_HHMMSS.tar.gz
+  ```
+- **Lịch cronjob định kỳ:** Tự động chạy 2 lần/ngày (12:00 trưa & 00:00 đêm) và tự động đồng bộ lên Cloud Storage / NAS Synology.
