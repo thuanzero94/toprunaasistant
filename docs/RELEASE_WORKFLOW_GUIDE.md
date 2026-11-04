@@ -164,3 +164,4 @@ git pull origin main
 ### 3. Lỗi: `agy CLI execution returned empty or non-zero exit code`
 - **Nguyên nhân**: CLI `agy` bị quá tải hoặc chưa được nạp vào PATH hệ thống.
 - **Hành vi hệ thống**: Script tự động kích hoạt bộ **Conventional Commits fallback**, không làm ngắt quãng phiên bản release. Changelog vẫn được nhóm đầy đủ theo các mục Features, Bug Fixes, Chores.
+
