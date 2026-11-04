@@ -2,8 +2,6 @@
 
 ## [v26.11.0] - 2026-11-04
 
-## v26.11.0
-
 ### 🚀 Features
 - **Runner Web Dashboard & Tracklog Explorer**: Delivered the web dashboard layout, runner telemetry components, and interactive tracklog explorer architecture for analyzing activity splits and routes (`b0d2459`, `2698d36`, `d929664`).
 - **Event Management & Admin Portals**: Implemented tournament and event management modules alongside administrative portals for configuring challenges, categories, and race kits (`d929664`, `5cd3dae`).

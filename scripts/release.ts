@@ -264,8 +264,8 @@ function generateChangelogWithAgy(
 
 function cleanReleaseNotes(raw: string): string {
   let cleaned = raw.trim();
-  // Strip redundant top-level # Release ... heading if generated
-  cleaned = cleaned.replace(/^#\s+(?:Release\s+)?v?\d+(?:\.\d+)*\s*\n+/i, '');
+  // Strip redundant top-level # / ## Release ... heading if generated
+  cleaned = cleaned.replace(/^#{1,3}\s+(?:Release\s+)?v?\d+(?:\.\d+)*\s*\n+/i, '');
   return cleaned.trim();
 }
 
