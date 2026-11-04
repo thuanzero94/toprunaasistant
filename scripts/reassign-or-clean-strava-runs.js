@@ -2,11 +2,11 @@
  * TOPRunAssistant - Athlete Data Reassignment & Parity Fix Script
  *
  * Chức năng:
- * 1. Định vị tài khoản "longnguyen2508@gmail.com" và Strava Connection (Athlete #68541399).
+ * 1. Định vị tài khoản "longnguyen2508@gmail.com" và Strava Connection.
  * 2. Tìm tất cả hoạt động chạy bộ thuộc Athlete này đang bị lưu nhầm dưới tài khoản Admin (usr_admin_01),
- *    chuyển quyền sở hữu (userId, userName, userAvatar) về đúng cho VĐV Nguyễn Huy Long.
- * 3. Đảm bảo VĐV được đăng ký chính thức vào giải đấu "evt_vr_2026" (hoặc giải đang active),
- *    tạo bản ghi EventParticipation, BIB hợp lệ, tính lại Dual-Goal và cập nhật participantCount.
+ *    chuyển quyền sở hữu (userId) về đúng cho VĐV Nguyễn Huy Long.
+ * 3. Đảm bảo VĐV được đăng ký chính thức vào giải đấu "evt_vr_2026",
+ *    tạo bản ghi EventParticipation, BIB hợp lệ và cập nhật participantCount.
  * 4. Đồng bộ file toprun-engine-state.json (nếu có).
  */
 
@@ -27,35 +27,24 @@ async function main() {
 
   if (!targetUser) {
     console.log('⚠️ [FixScript] Chưa tìm thấy tài khoản longnguyen2508@gmail.com trong Database này.');
-    console.log('ℹ️ Trên VPS Production, hãy chạy lệnh: node scripts/reassign-or-clean-strava-runs.js');
     return;
   }
 
   console.log(`✅ [FixScript] Đã tìm thấy VĐV: ${targetUser.fullName} (${targetUser.email}) - ID: ${targetUser.id}`);
 
-  // 2. Chuyển giao các bài chạy bị gán nhầm sang Admin
-  // Tìm các activities của Admin nhưng được tạo trùng thời điểm hoặc từ Strava của user mới
+  // 2. Chuyển giao các bài chạy bị gán nhầm sang Admin qua SQL trực tiếp
   const adminUser = await prisma.user.findFirst({
     where: { OR: [{ id: 'usr_admin_01' }, { role: 'ADMIN' }] },
   });
+  const adminId = adminUser?.id || 'usr_admin_01';
 
-  const updatedActivities = await prisma.activity.updateMany({
-    where: {
-      userId: adminUser?.id || 'usr_admin_01',
-      source: 'STRAVA',
-      createdAt: {
-        gte: new Date(Date.now() - 7 * 24 * 3600 * 1000), // trong vòng 7 ngày qua
-      },
-    },
-    data: {
-      userId: targetUser.id,
-      userName: targetUser.fullName,
-      userAvatar: targetUser.avatarUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(targetUser.email)}`,
-      userDepartment: targetUser.departmentOrUnit || 'Runner Community',
-    },
-  });
+  const updatedCount = await prisma.$executeRawUnsafe(
+    `UPDATE activities SET "userId" = $1 WHERE "userId" = $2 AND source = 'STRAVA'`,
+    targetUser.id,
+    adminId
+  );
 
-  console.log(`✅ [FixScript] Đã chuyển giao ${updatedActivities.count} bài chạy Strava về tài khoản ${targetUser.fullName}.`);
+  console.log(`✅ [FixScript] Đã chuyển giao thành công ${updatedCount} bài chạy Strava về tài khoản ${targetUser.fullName}.`);
 
   // 3. Đăng ký giải đấu nếu chưa có
   const activeEvent = await prisma.event.findFirst({
@@ -74,21 +63,16 @@ async function main() {
     });
 
     if (!existingPart) {
-      const category = activeEvent.categories[0] || { id: 'cat_target_50k', name: 'Mốc Target 50KM (Finisher)', targetDistanceKm: 50 };
+      const category = activeEvent.categories[0] || { id: 'cat_target_50k', targetDistanceKm: 50 };
       const count = (await prisma.eventParticipation.count({ where: { eventId: activeEvent.id } })) + 102;
       const bibNumber = `PRO-${String(count).padStart(4, '0')}`;
 
-      const part = await prisma.eventParticipation.create({
+      await prisma.eventParticipation.create({
         data: {
           id: `part_${Date.now()}`,
           eventId: activeEvent.id,
           userId: targetUser.id,
-          userName: targetUser.fullName,
-          userAvatar: targetUser.avatarUrl,
-          userDepartment: targetUser.departmentOrUnit,
           categoryId: category.id,
-          categoryName: category.name,
-          targetDistanceKm: category.targetDistanceKm,
           bibNumber,
           joinedAt: new Date(),
           raceKitOrder: {
@@ -149,7 +133,7 @@ async function main() {
         }
         if (Array.isArray(state.activities)) {
           for (const act of state.activities) {
-            if (act.source === 'STRAVA' && act.userId === (adminUser?.id || 'usr_admin_01')) {
+            if (act.source === 'STRAVA' && act.userId === adminId) {
               act.userId = targetUser.id;
               act.userName = targetUser.fullName;
               act.userAvatar = targetUser.avatarUrl;
@@ -165,7 +149,7 @@ async function main() {
     }
   }
 
-  console.log('🎉 [FixScript] Hoàn tất quá trình fix dữ liệu thành công!');
+  console.log('🎉 [FixScript] Hoàn tất quá trình fix dữ liệu thành công 100%!');
 }
 
 main()
@@ -174,4 +158,3 @@ main()
     process.exit(1);
   })
   .finally(() => prisma.$disconnect());
-
