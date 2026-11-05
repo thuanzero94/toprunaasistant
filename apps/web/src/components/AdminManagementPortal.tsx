@@ -709,7 +709,7 @@ export default function AdminManagementPortal({
                         </label>
                         <input
                           type="number"
-                          step="0.05"
+                          step="0.01"
                           min="0.01"
                           max="2.0"
                           value={eventForm.rideToRunRatio ?? 0.25}
@@ -732,8 +732,8 @@ export default function AdminManagementPortal({
                         </label>
                         <input
                           type="number"
-                          step="0.5"
-                          min="0.5"
+                          step="0.1"
+                          min="0.1"
                           max="20.0"
                           value={eventForm.swimToRunRatio ?? 5.0}
                           onChange={(e) =>
