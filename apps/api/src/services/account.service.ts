@@ -906,10 +906,6 @@ export class AccountService implements OnModuleInit {
     }
 
     if (!user) {
-      user = await prisma.user.findFirst({ where: { email: 'admin@toprun.vn' } });
-    }
-
-    if (!user) {
       user = await prisma.user.create({
         data: {
           email: `strava_${athleteIdStr}@toprun.vn`,

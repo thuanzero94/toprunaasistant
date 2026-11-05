@@ -1070,8 +1070,6 @@ export class TopRunEngineService implements OnModuleInit {
     }
 
     const tokenData: any = await response.json();
-    this.stravaConfig.accessToken = tokenData.access_token;
-    this.stravaConfig.refreshToken = tokenData.refresh_token;
 
     const user = await this.ensureUser(userId);
     if (tokenData.athlete) {
@@ -1081,7 +1079,7 @@ export class TopRunEngineService implements OnModuleInit {
       this.saveEngineState();
     }
 
-    // Tự động đồng bộ ngay các hoạt động gần nhất sau khi cấp quyền thành công
+    // Tự động đồng bộ ngay các hoạt động gần nhất sau khi cấp quyền thành công bằng token của chính VĐV
     const syncRes = await this.syncLiveStravaActivities(user.id, 30);
     return {
       athlete: tokenData.athlete,
@@ -1102,8 +1100,8 @@ export class TopRunEngineService implements OnModuleInit {
     // 0. Đọc Token & Strava App được gán của User từ bảng strava_connections trong PostgreSQL
     let clientId = this.stravaConfig.clientId;
     let clientSecret = this.stravaConfig.clientSecret;
-    let userAccessToken = this.stravaConfig.accessToken;
-    let userRefreshToken = this.stravaConfig.refreshToken;
+    let userAccessToken: string | null = null;
+    let userRefreshToken: string | null = null;
 
     try {
       const dbConn = await prisma.stravaConnection.findUnique({
@@ -1112,16 +1110,30 @@ export class TopRunEngineService implements OnModuleInit {
       });
       if (dbConn?.accessToken) {
         userAccessToken = dbConn.accessToken;
-      }
-      if (dbConn?.refreshToken) {
-        userRefreshToken = dbConn.refreshToken;
-      }
-      if (dbConn?.stravaApp) {
-        clientId = dbConn.stravaApp.clientId;
-        clientSecret = dbConn.stravaApp.clientSecret;
+        userRefreshToken = dbConn.refreshToken || null;
+        if (dbConn.stravaApp) {
+          clientId = dbConn.stravaApp.clientId;
+          clientSecret = dbConn.stravaApp.clientSecret;
+        }
+      } else if (user.role === 'ADMIN' && (user.id === 'usr_admin_01' || user.email === 'admin@toprun.vn')) {
+        // Chỉ duy nhất Admin tài khoản gốc trong môi trường dev/demo mới được fallback về env config
+        userAccessToken = this.stravaConfig.accessToken;
+        userRefreshToken = this.stravaConfig.refreshToken;
       }
     } catch {
-      // Fallback sang token cấu hình sẵn
+      if (user.role === 'ADMIN' && (user.id === 'usr_admin_01' || user.email === 'admin@toprun.vn')) {
+        userAccessToken = this.stravaConfig.accessToken;
+        userRefreshToken = this.stravaConfig.refreshToken;
+      }
+    }
+
+    if (!userAccessToken) {
+      return {
+        status: 'NOT_CONNECTED',
+        athlete: null,
+        message: 'Tài khoản chưa được kết nối với Strava. Vui lòng bấm "Kết nối Strava" trước khi đồng bộ tracklog.',
+        syncedActivities: [],
+      };
     }
 
     // 1. Làm mới Access Token bằng Refresh Token với đúng App credentials đã phân bổ
@@ -2490,6 +2502,36 @@ export class TopRunEngineService implements OnModuleInit {
 
     const existing = this.participations.find((p) => p.eventId === event.id && p.userId === user.id);
     if (existing) {
+      if (payload.categoryId && payload.categoryId !== existing.categoryId) {
+        existing.categoryId = category.id;
+        existing.categoryName = category.name;
+        existing.targetDistanceKm = category.targetDistanceKm;
+      }
+      if (payload.shirtSize && existing.raceKitOrder) {
+        existing.raceKitOrder.shirtSize = payload.shirtSize;
+      }
+      if (payload.recipientName && existing.raceKitOrder) {
+        existing.raceKitOrder.recipientName = payload.recipientName;
+      }
+      if (payload.phone && existing.raceKitOrder) {
+        existing.raceKitOrder.phone = payload.phone;
+      }
+      if (payload.shippingAddress && existing.raceKitOrder) {
+        existing.raceKitOrder.shippingAddress = payload.shippingAddress;
+      }
+      if (payload.medalEngravingName && existing.raceKitOrder) {
+        existing.raceKitOrder.medalEngravingName = payload.medalEngravingName;
+      }
+      if (payload.teamId !== undefined) {
+        existing.teamId = team?.id || null;
+        existing.teamName = team?.name || null;
+      }
+      if (payload.selectedChallengeTierIds) {
+        existing.selectedChallengeTierIds = payload.selectedChallengeTierIds;
+      }
+      this.recalculateUserParticipation(user.id);
+      this.saveEngineState();
+      this.persistParticipationToDb(existing).catch(() => {});
       return existing;
     }
 
@@ -2649,6 +2691,12 @@ export class TopRunEngineService implements OnModuleInit {
     if (user) {
       user.totalDistanceKm = roundKm(activeRuns.reduce((sum, a) => sum + a.validDistanceKm, 0));
       user.totalActivities = activeRuns.length;
+      prisma.user
+        .update({
+          where: { id: user.id },
+          data: { totalDistanceKm: user.totalDistanceKm, totalActivities: user.totalActivities },
+        })
+        .catch(() => {});
     }
 
     const userParts = this.participations.filter((p) => p.userId === userId);
@@ -2704,6 +2752,8 @@ export class TopRunEngineService implements OnModuleInit {
       ) {
         part.raceKitOrder.fulfillmentStatus = FulfillmentStatus.QUALIFIED_FINISHER;
       }
+
+      this.persistParticipationToDb(part).catch(() => {});
     }
   }
 

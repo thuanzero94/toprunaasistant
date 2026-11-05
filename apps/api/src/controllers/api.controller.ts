@@ -409,26 +409,29 @@ export class ApiController {
     if (stravaAvatar) {
       await this.engine.updateUserProfile(callbackData.userId, { avatarUrl: stravaAvatar });
     }
-    const syncRes = await this.engine.exchangeStravaCode(code, callbackData.userId).catch(() => ({
-      syncedCount: 0,
+    const syncRes = await this.engine.syncLiveStravaActivities(callbackData.userId, 30).catch(() => ({
       syncedActivities: [],
+      totalFetchedFromStrava: 0,
+      status: 'ERROR',
     }));
+    const syncedCount = (syncRes as any).syncedActivities?.length || 0;
+    const validCount = (syncRes as any).syncedActivities?.filter((a: any) => a.antiCheatStatus === 'VALID')?.length || syncedCount;
 
     await this.accountService.recordSyncLog({
       userId: callbackData.userId,
       triggerType: 'OAUTH_CALLBACK_30D',
       windowDays: 30,
       status: 'SUCCESS',
-      fetchedCount: syncRes.syncedCount,
-      newlySyncedCount: syncRes.syncedCount,
-      validCount: syncRes.syncedCount,
-      flaggedOrCutCount: 0,
-      summaryMessage: `Liên kết OAuth2 Strava (scope: read,activity:read_all) thành công! Đã tự động đồng bộ ${syncRes.syncedCount} hoạt động chạy bộ trong 30 ngày gần nhất.`,
+      fetchedCount: (syncRes as any).totalFetchedFromStrava || syncedCount,
+      newlySyncedCount: syncedCount,
+      validCount,
+      flaggedOrCutCount: syncedCount - validCount,
+      summaryMessage: `Liên kết OAuth2 Strava (scope: read,activity:read_all) thành công! Đã tự động đồng bộ ${syncedCount} hoạt động chạy bộ trong 30 ngày gần nhất.`,
     });
 
     const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3005';
     return res.redirect(
-      `${frontendUrl}/?tab=account&strava=connected&synced=${syncRes.syncedCount}&userId=${callbackData.userId}`
+      `${frontendUrl}/?tab=account&strava=connected&synced=${syncedCount}&userId=${callbackData.userId}`
     );
   }
 
@@ -546,7 +549,7 @@ export class ApiController {
       const decoded = this.accountService.verifyJwt(authHeader.slice(7));
       if (decoded) {
         callerRole = decoded.role;
-        callerUserId = callerRole === 'ADMIN' ? (queryUserId || decoded.userId) : decoded.userId;
+        callerUserId = callerRole === 'ADMIN' ? queryUserId : decoded.userId;
       }
     }
     return this.engine.getActivities(callerUserId, callerRole);
