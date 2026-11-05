@@ -30,6 +30,7 @@ import {
   roundKm,
 } from '@toprun/shared';
 import type { TracklogActivityItem, TracklogSplitItem } from '../UserTracklogExplorer';
+import AthleteAvatar, { AthleteHonorPill } from '../AthleteAvatar';
 
 interface TracklogDetailViewProps {
   activity: TracklogActivityItem;
@@ -380,6 +381,32 @@ export default function TracklogDetailView({
                 </span>
               )}
             </div>
+
+            <div className="flex items-center gap-2 pt-0.5">
+              <div className="shrink-0 my-0.5">
+                <AthleteAvatar
+                  user={{
+                    id: activity.userId,
+                    fullName: activity.userName,
+                    avatarUrl: (activity as any).userAvatar,
+                  }}
+                  size="sm"
+                  showBadge={true}
+                  showWings={true}
+                  showSharkCrown={true}
+                />
+              </div>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="font-bold text-xs text-slate-800 dark:text-slate-200">
+                  {activity.userName}
+                </span>
+                <AthleteHonorPill user={{ id: activity.userId, fullName: activity.userName }} />
+                {activity.department && (
+                  <span className="text-[11px] text-slate-400">• {activity.department}</span>
+                )}
+              </div>
+            </div>
+
             <h2 className="text-base sm:text-lg font-black text-slate-900 dark:text-white truncate">
               {activity.name}
             </h2>

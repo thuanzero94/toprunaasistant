@@ -427,9 +427,9 @@ export default function AthleteAvatar({
     user?.avatarUrl ||
     `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(user?.fullName || user?.id || 'runner')}`;
 
-  const showWingsActual = showWings && cfg.hasWings && (size === 'md' || size === 'lg' || size === 'xl' || size === '2xl');
-  const showSharkActual = showSharkCrown && cfg.hasSharkCrown && (size === 'md' || size === 'lg' || size === 'xl' || size === '2xl');
-  const showFounderActual = showSharkCrown && Boolean(cfg.hasFounderCrown) && (size === 'md' || size === 'lg' || size === 'xl' || size === '2xl');
+  const showWingsActual = Boolean(showWings && cfg.hasWings);
+  const showSharkActual = Boolean(showSharkCrown && cfg.hasSharkCrown);
+  const showFounderActual = Boolean(showSharkCrown && cfg.hasFounderCrown);
 
   return (
     <div

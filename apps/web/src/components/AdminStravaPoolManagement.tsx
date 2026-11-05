@@ -20,6 +20,7 @@ import {
   X,
   Zap,
 } from 'lucide-react';
+import AthleteAvatar, { AthleteHonorPill } from './AthleteAvatar';
 
 export interface StravaAppSummary {
   totalApps: number;
@@ -891,17 +892,24 @@ export default function AdminStravaPoolManagement() {
                       <span className="text-xs font-mono font-bold text-slate-400 w-5 text-center">
                         #{idx + 1}
                       </span>
-                      <img
-                        src={
-                          ath.avatarUrl ||
-                          `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(ath.email)}`
-                        }
-                        alt={ath.fullName}
-                        className="w-9 h-9 rounded-xl object-cover ring-1 ring-slate-200 dark:ring-slate-800 shrink-0"
-                      />
+                      <div className="shrink-0 my-1">
+                        <AthleteAvatar
+                          user={{
+                            id: ath.userId,
+                            fullName: ath.fullName,
+                            avatarUrl: ath.avatarUrl,
+                            departmentOrUnit: ath.departmentOrUnit,
+                          }}
+                          size="sm"
+                          showBadge={true}
+                          showWings={true}
+                          showSharkCrown={true}
+                        />
+                      </div>
                       <div className="min-w-0">
-                        <div className="font-bold text-slate-900 dark:text-white truncate">
-                          {ath.fullName}
+                        <div className="font-bold text-slate-900 dark:text-white truncate flex items-center gap-1.5 flex-wrap">
+                          <span>{ath.fullName}</span>
+                          <AthleteHonorPill user={{ id: ath.userId, fullName: ath.fullName }} />
                         </div>
                         <div className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
                           {ath.email} • {ath.departmentOrUnit || 'Runner'}

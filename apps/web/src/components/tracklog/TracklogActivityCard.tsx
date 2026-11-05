@@ -22,6 +22,7 @@ import {
   normalizeSportCategory,
 } from '@toprun/shared';
 import type { TracklogActivityItem } from '../UserTracklogExplorer';
+import AthleteAvatar, { AthleteHonorPill } from '../AthleteAvatar';
 
 interface TracklogActivityCardProps {
   activity: TracklogActivityItem;
@@ -93,9 +94,25 @@ export default function TracklogActivityCard({
             )}
           </div>
 
-          <h3 className="font-bold text-sm sm:text-base text-slate-900 dark:text-white truncate group-hover:text-[#FC4C02] transition">
-            {activity.name}
-          </h3>
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="shrink-0 my-0.5">
+              <AthleteAvatar
+                user={{
+                  id: activity.userId,
+                  fullName: activity.userName,
+                  avatarUrl: (activity as any).userAvatar,
+                }}
+                size="xs"
+                showBadge={true}
+                showWings={true}
+                showSharkCrown={true}
+              />
+            </div>
+            <h3 className="font-bold text-sm sm:text-base text-slate-900 dark:text-white truncate group-hover:text-[#FC4C02] transition">
+              {activity.name}
+            </h3>
+            <AthleteHonorPill user={{ id: activity.userId, fullName: activity.userName }} />
+          </div>
         </div>
 
         {/* Anti-cheat status pill */}

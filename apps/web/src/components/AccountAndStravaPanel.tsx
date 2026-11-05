@@ -488,16 +488,21 @@ export default function AccountAndStravaPanel({
                   </label>
 
                   <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-                    <div className="relative shrink-0">
-                      <img
-                        src={
-                          avatarUrl ||
-                          stravaStatus.profilePicUrl ||
-                          accountData?.user?.avatarUrl ||
-                          `https://api.dicebear.com/7.x/avataaars/svg?seed=${encodeURIComponent(authUser?.email || 'Runner')}`
-                        }
-                        alt="Avatar preview"
-                        className="w-16 h-16 rounded-2xl object-cover ring-2 ring-[#FC4C02] shadow-sm bg-slate-100 dark:bg-slate-800"
+                    <div className="relative shrink-0 my-2">
+                      <AthleteAvatar
+                        user={{
+                          ...authUser,
+                          ...(accountData?.user || {}),
+                          avatarUrl:
+                            avatarUrl ||
+                            stravaStatus.profilePicUrl ||
+                            accountData?.user?.avatarUrl ||
+                            authUser?.avatarUrl,
+                        }}
+                        size="xl"
+                        showBadge={true}
+                        showWings={true}
+                        showSharkCrown={true}
                       />
                     </div>
 

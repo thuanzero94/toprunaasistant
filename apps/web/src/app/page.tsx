@@ -1728,7 +1728,7 @@ export default function TopRunWebApp() {
                 title="Tài khoản cá nhân"
                 className="shrink-0 cursor-pointer my-0.5"
               >
-                <AthleteAvatar user={user} size="sm" showBadge={true} showWings={false} showSharkCrown={true} />
+                <AthleteAvatar user={user} size="sm" showBadge={true} showWings={true} showSharkCrown={true} />
               </button>
             </div>
           </div>
@@ -2442,13 +2442,15 @@ export default function TopRunWebApp() {
                                       {/* Runner Info with Avatar */}
                                       <td className="py-3 px-3">
                                         <div className="flex items-center gap-3">
-                                          <div className="shrink-0">
+                                          <div className="shrink-0 my-1">
                                             <AthleteAvatar
                                               user={{
                                                 id: p.userId,
                                                 fullName: p.userName,
                                                 avatarUrl: p.userAvatar,
                                                 departmentOrUnit: p.department,
+                                                role: p.role,
+                                                honorBadge: p.honorBadge,
                                               }}
                                               rank={rank}
                                               size="sm"
@@ -2468,6 +2470,8 @@ export default function TopRunWebApp() {
                                                   fullName: p.userName,
                                                   avatarUrl: p.userAvatar,
                                                   departmentOrUnit: p.department,
+                                                  role: p.role,
+                                                  honorBadge: p.honorBadge,
                                                 }}
                                                 rank={rank}
                                               />
@@ -2922,12 +2926,14 @@ export default function TopRunWebApp() {
                             </div>
 
                             {/* Avatar */}
-                            <div className="shrink-0">
+                            <div className="shrink-0 my-1">
                               <AthleteAvatar
                                 user={{ id: item.userId, fullName: item.userName, avatarUrl: item.userAvatar }}
                                 rank={rank}
                                 size="sm"
                                 showBadge={true}
+                                showWings={true}
+                                showSharkCrown={true}
                               />
                             </div>
 
@@ -2937,6 +2943,7 @@ export default function TopRunWebApp() {
                                 <span className="font-bold text-xs text-slate-900 dark:text-white truncate">
                                   {item.userName}
                                 </span>
+                                <AthleteHonorPill user={{ id: item.userId, fullName: item.userName }} rank={rank} />
                                 {item.bibNumber && (
                                   <span className="font-mono text-[10px] font-bold px-1.5 py-0.2 rounded bg-slate-100 dark:bg-slate-800 text-[#FC4C02]">
                                     {item.bibNumber}
@@ -2988,11 +2995,13 @@ export default function TopRunWebApp() {
                           }`}
                         >
                           <div className="flex items-center gap-3 min-w-0">
-                            <div className="shrink-0">
+                            <div className="shrink-0 my-1">
                               <AthleteAvatar
                                 user={{ id: item.userId, fullName: item.userName, avatarUrl: item.userAvatar }}
                                 size="sm"
-                                showBadge={false}
+                                showBadge={true}
+                                showWings={true}
+                                showSharkCrown={true}
                               />
                             </div>
                             <div className="min-w-0">
@@ -3000,6 +3009,7 @@ export default function TopRunWebApp() {
                                 <span className="font-bold text-xs text-slate-900 dark:text-white truncate">
                                   {item.userName}
                                 </span>
+                                <AthleteHonorPill user={{ id: item.userId, fullName: item.userName }} />
                                 {item.bibNumber && (
                                   <span className="font-mono text-[10px] font-bold px-1.5 py-0.2 rounded bg-slate-100 dark:bg-slate-800 text-[#FC4C02]">
                                     {item.bibNumber}

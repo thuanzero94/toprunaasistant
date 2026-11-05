@@ -16,6 +16,9 @@ export interface AthleteBadgeConfig {
 
 export function getAthleteBadgeConfig(
   user?: {
+    id?: string;
+    fullName?: string;
+    name?: string;
     role?: UserRole | string;
     honorBadge?: string | null;
     pr5kSec?: number | null;
@@ -23,8 +26,19 @@ export function getAthleteBadgeConfig(
   } | null,
   rank?: number
 ): AthleteBadgeConfig {
+  const userName = user?.fullName || user?.name || '';
+  const userId = user?.id || '';
+
   // 1. Shark Angel Investor (Ưu tiên cao nhất)
-  if (user?.honorBadge === HonorBadge.ANGEL_INVESTOR || user?.honorBadge === 'ANGEL_INVESTOR') {
+  const isSharkAngel =
+    user?.honorBadge === HonorBadge.ANGEL_INVESTOR ||
+    user?.honorBadge === 'ANGEL_INVESTOR' ||
+    userId === 'usr_shark_01' ||
+    userId === 'usr_shark_vip' ||
+    userName.includes('Huy Long') ||
+    userName.includes('Nguyễn Huy Long');
+
+  if (isSharkAngel) {
     return {
       badgeType: 'ANGEL_INVESTOR',
       title: 'Nhà Đầu Tư Thiên Thần (Shark VIP Backer)',
@@ -41,7 +55,14 @@ export function getAthleteBadgeConfig(
   }
 
   // 2. Founder / Sáng lập
-  if (user?.honorBadge === HonorBadge.FOUNDER || user?.honorBadge === 'FOUNDER') {
+  const isFounder =
+    user?.honorBadge === HonorBadge.FOUNDER ||
+    user?.honorBadge === 'FOUNDER' ||
+    userId === 'usr_admin_01' ||
+    (user?.role === UserRole.ADMIN && (userName.includes('Alan') || userName.includes('Thuận') || userName.includes('Hoàng'))) ||
+    (user?.role === 'ADMIN' && (userName.includes('Alan') || userName.includes('Thuận') || userName.includes('Hoàng')));
+
+  if (isFounder) {
     return {
       badgeType: 'ANGEL_INVESTOR',
       title: 'Nhà Sáng Lập Hệ Thống',

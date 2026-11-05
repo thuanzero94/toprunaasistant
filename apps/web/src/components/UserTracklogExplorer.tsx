@@ -26,6 +26,7 @@ import {
 import TracklogDistanceChart from './tracklog/TracklogDistanceChart';
 import TracklogActivityCard from './tracklog/TracklogActivityCard';
 import TracklogDetailView from './tracklog/TracklogDetailView';
+import AthleteAvatar, { AthleteHonorPill } from './AthleteAvatar';
 
 export interface TracklogSplitItem {
   splitIndex: number;
@@ -373,8 +374,17 @@ export default function UserTracklogExplorer({
           {/* Owner Filter (Cho phép cả Runner & Admin xem bài của mình hoặc cộng đồng) */}
           {viewingUser ? (
             <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[#FC4C02]/10 border border-[#FC4C02]/30 text-xs font-bold text-[#FC4C02]">
-              <User className="w-3.5 h-3.5" />
+              <div className="shrink-0 my-0.5">
+                <AthleteAvatar
+                  user={{ id: viewingUser.id, fullName: viewingUser.name }}
+                  size="xs"
+                  showBadge={true}
+                  showWings={true}
+                  showSharkCrown={true}
+                />
+              </div>
               <span>VĐV: {viewingUser.name}</span>
+              <AthleteHonorPill user={{ id: viewingUser.id, fullName: viewingUser.name }} />
               {onClearViewingUser && (
                 <button
                   type="button"

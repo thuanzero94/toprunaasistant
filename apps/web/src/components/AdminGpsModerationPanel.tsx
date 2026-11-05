@@ -27,7 +27,7 @@ import {
   normalizeSportCategory,
 } from '@toprun/shared';
 import type { TracklogActivityItem } from './UserTracklogExplorer';
-import AthleteAvatar from './AthleteAvatar';
+import AthleteAvatar, { AthleteHonorPill } from './AthleteAvatar';
 
 export interface AdminGpsModerationPanelProps {
   activities: TracklogActivityItem[];
@@ -394,19 +394,25 @@ export default function AdminGpsModerationPanel({
                     </span>
                   )}
 
-                  {/* Athlete Info */}
+                  {/* Athlete Info with Avatar Effects & Honor Badge */}
                   <div className="flex items-center gap-2">
-                    <AthleteAvatar
-                      user={{
-                        id: act.userId || 'runner',
-                        fullName: act.userName,
-                        avatarUrl: (act as any).userAvatar,
-                      }}
-                      size="sm"
-                    />
+                    <div className="shrink-0 my-1">
+                      <AthleteAvatar
+                        user={{
+                          id: act.userId || 'runner',
+                          fullName: act.userName,
+                          avatarUrl: (act as any).userAvatar,
+                        }}
+                        size="sm"
+                        showBadge={true}
+                        showWings={true}
+                        showSharkCrown={true}
+                      />
+                    </div>
                     <span className="font-bold text-slate-900 dark:text-white text-sm hover:text-[#FC4C02] transition">
                       {act.userName}
                     </span>
+                    <AthleteHonorPill user={{ id: act.userId, fullName: act.userName }} />
                   </div>
 
                   {/* Activity Name */}
