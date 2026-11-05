@@ -370,6 +370,11 @@ export class TopRunEngineService implements OnModuleInit {
       // 5. Đồng bộ bảng Clubs
       await this.syncClubsWithDatabase();
 
+      // 6. Tính toán lại tiến độ giải đấu cho toàn bộ VĐV dựa trên Activities thực tế trong DB
+      for (const u of this.users) {
+        this.recalculateUserParticipation(u.id);
+      }
+
       console.log(
         `✅ [TopRunEngine] Đồng bộ PostgreSQL hoàn tất! (${this.events.length} giải đấu, ${this.participations.length} lượt tham gia, ${this.activities.length} tracklogs, ${this.users.length} vận động viên).`
       );
@@ -609,9 +614,24 @@ export class TopRunEngineService implements OnModuleInit {
         });
       }
 
+      // Xoá các challenge tiers cũ không còn nằm trong danh sách cấu hình mới
+      const activeTierIds = ev.challengeTiers
+        .map((t: any) => t.id || t.tierCode)
+        .filter(Boolean);
+      if (activeTierIds.length > 0) {
+        await prisma.eventChallengeTier.deleteMany({
+          where: {
+            eventId: ev.id,
+            id: { notIn: activeTierIds },
+          },
+        }).catch(() => {});
+      }
+
       for (const tier of ev.challengeTiers) {
+        const tierId = tier.id || (tier as any).tierCode || `tier_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+        tier.id = tierId;
         await prisma.eventChallengeTier.upsert({
-          where: { id: tier.id },
+          where: { id: tierId },
           update: {
             tierName: tier.tierName,
             tierLevel: tier.tierLevel,
@@ -623,7 +643,7 @@ export class TopRunEngineService implements OnModuleInit {
             rewardDescription: tier.rewardDescription,
           },
           create: {
-            id: tier.id,
+            id: tierId,
             eventId: ev.id,
             tierName: tier.tierName,
             tierLevel: tier.tierLevel,
@@ -915,6 +935,7 @@ export class TopRunEngineService implements OnModuleInit {
           },
         },
         update: {
+          user: { connect: { id: act.userId } },
           name: act.name,
           sportType: String(act.sportType),
           validDistanceKm: act.validDistanceKm,
@@ -1295,7 +1316,7 @@ export class TopRunEngineService implements OnModuleInit {
     this.users = [
       {
         id: 'usr_admin_01',
-        email: 'admin@toprun.vn',
+        email: 'thuanzero94@gmail.com',
         fullName: 'Alan Hoàng (Admin & Runner)',
         avatarUrl: 'https://api.dicebear.com/7.x/avataaars/svg?seed=AlanHoang',
         gender: 'MALE',
@@ -2325,10 +2346,116 @@ export class TopRunEngineService implements OnModuleInit {
         avgDistancePerMemberKm: t.memberCount > 0 ? roundKm(t.totalMultipliedDistanceKm / t.memberCount) : 0,
       }));
 
+    const challengeLeaderboards = event.challengeTiers.map((tier) => {
+      const participants = eventParticipations
+        .filter((p) => (p.selectedChallengeTierIds || []).includes(tier.id) || p.dualGoalProgress.challenges.some((c) => c.tierId === tier.id))
+        .map((p) => {
+          const chStatus = p.dualGoalProgress.challenges.find((c) => c.tierId === tier.id);
+          const u = this.users.find((user) => user.id === p.userId);
+          return {
+            userId: p.userId,
+            userName: u?.fullName || p.userName,
+            userAvatar: u?.avatarUrl || p.userAvatar,
+            department: u?.departmentOrUnit || p.userDepartment,
+            bibNumber: p.bibNumber,
+            isUnlocked: Boolean(chStatus?.isUnlocked),
+            unlockedAtIso: chStatus?.unlockedAtIso || null,
+            currentValue: chStatus?.currentValue || 0,
+            thresholdValue: tier.thresholdValue,
+          };
+        });
+
+      const completed = participants
+        .filter((p) => p.isUnlocked)
+        .sort((a, b) => {
+          if (a.unlockedAtIso && b.unlockedAtIso) {
+            return new Date(a.unlockedAtIso).getTime() - new Date(b.unlockedAtIso).getTime();
+          }
+          return b.currentValue - a.currentValue;
+        })
+        .map((p, idx) => ({ rank: idx + 1, ...p }));
+
+      return {
+        tierId: tier.id,
+        tierName: tier.tierName,
+        tierLevel: tier.tierLevel,
+        awardBadgeUrl: tier.awardBadgeUrl,
+        rewardDescription: tier.rewardDescription,
+        totalParticipants: participants.length,
+        totalCompleted: completed.length,
+        completedLeaderboard: completed,
+        allParticipants: participants,
+      };
+    });
+
     return {
       ...event,
       individualLeaderboard,
       teamLeaderboard,
+      challengeLeaderboards,
+    };
+  }
+
+  async getGlobalMonthlyLeaderboard(month?: number, year?: number) {
+    const now = new Date();
+    const targetMonth = month !== undefined ? month : now.getMonth();
+    const targetYear = year !== undefined ? year : now.getFullYear();
+
+    const startOfMonth = new Date(Date.UTC(targetYear, targetMonth, 1, 0, 0, 0));
+    const endOfMonth = new Date(Date.UTC(targetYear, targetMonth + 1, 0, 23, 59, 59));
+
+    const monthlyActs = await prisma.activity.findMany({
+      where: {
+        antiCheatStatus: 'VALID',
+        isHidden: false,
+        startDate: { gte: startOfMonth, lte: endOfMonth },
+      },
+      select: {
+        userId: true,
+        validDistanceKm: true,
+        movingTimeSec: true,
+      },
+    });
+
+    const userStatsMap: Record<string, { totalKm: number; runCount: number; totalSec: number }> = {};
+    for (const a of monthlyActs) {
+      if (!userStatsMap[a.userId]) {
+        userStatsMap[a.userId] = { totalKm: 0, runCount: 0, totalSec: 0 };
+      }
+      userStatsMap[a.userId].totalKm += a.validDistanceKm;
+      userStatsMap[a.userId].runCount += 1;
+      userStatsMap[a.userId].totalSec += a.movingTimeSec;
+    }
+
+    const leaderboard = this.users
+      .map((u) => {
+        const stats = userStatsMap[u.id] || { totalKm: 0, runCount: 0, totalSec: 0 };
+        const avgPace = stats.totalKm > 0 ? Math.round(stats.totalSec / stats.totalKm) : 0;
+        return {
+          id: u.id,
+          fullName: u.fullName,
+          email: u.email,
+          avatarUrl: u.avatarUrl,
+          departmentOrUnit: u.departmentOrUnit,
+          role: u.role,
+          monthlyDistanceKm: roundKm(stats.totalKm),
+          monthlyRunCount: stats.runCount,
+          monthlyAvgPaceSec: avgPace,
+          totalDistanceKm: u.totalDistanceKm,
+          totalActivities: u.totalActivities,
+          pr5kSec: u.pr5kSec,
+          pr10kSec: u.pr10kSec,
+          pr21kSec: u.pr21kSec,
+          pr42kSec: u.pr42kSec,
+        };
+      })
+      .sort((a, b) => b.monthlyDistanceKm - a.monthlyDistanceKm)
+      .map((item, idx) => ({ rank: idx + 1, ...item }));
+
+    return {
+      month: targetMonth + 1,
+      year: targetYear,
+      leaderboard,
     };
   }
 
@@ -2602,7 +2729,7 @@ export class TopRunEngineService implements OnModuleInit {
     return newPart;
   }
 
-  updateEvent(eventId: string, payload: any) {
+  async updateEvent(eventId: string, payload: any) {
     const event = this.events.find((e) => e.id === eventId || e.slug === eventId);
     if (!event) throw new NotFoundException('Không tìm thấy giải đấu');
     if (payload.title !== undefined) event.title = payload.title;
@@ -2625,7 +2752,7 @@ export class TopRunEngineService implements OnModuleInit {
       event.challengeTiers = payload.challengeTiers;
     }
     this.saveEngineState();
-    this.persistEventToDb(event).catch(() => {});
+    await this.persistEventToDb(event);
     return event;
   }
 

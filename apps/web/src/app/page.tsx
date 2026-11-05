@@ -201,6 +201,8 @@ export default function TopRunWebApp() {
   const setShowCreateEventModal = (show: boolean) => (show ? openModal('create-event') : closeModal('create-event'));
 
   const [selectedParticipantDetailData, setSelectedParticipantDetailData] = useState<ParticipantDetailData | null>(null);
+  const [selectedChallengeModalData, setSelectedChallengeModalData] = useState<any | null>(null);
+  const [challengeModalTab, setChallengeModalTab] = useState<'completed' | 'all'>('completed');
   const selectedParticipantDetail = activeModal === 'participant' ? selectedParticipantDetailData : null;
   const setSelectedParticipantDetail = (data: ParticipantDetailData | null) => {
     if (data) {
@@ -2100,6 +2102,63 @@ export default function TopRunWebApp() {
                                 </div>
                               )}
                             </div>
+
+                            {/* Nút Xem BXH & Danh sách VĐV tham gia Thử Thách Mở Rộng */}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const chInfo = currentEventData?.challengeLeaderboards?.find(
+                                  (cl: any) => cl.tierId === chal.tierId
+                                ) || {
+                                  tierId: chal.tierId,
+                                  tierName: chal.tierName,
+                                  tierLevel: chal.tierLevel,
+                                  awardBadgeUrl: chal.awardBadgeUrl,
+                                  thresholdValue: chal.thresholdValue,
+                                  totalParticipants: 0,
+                                  completedCount: chal.isUnlocked ? 1 : 0,
+                                  completedLeaderboard: chal.isUnlocked
+                                    ? [
+                                        {
+                                          rank: 1,
+                                          userId: user?.id,
+                                          userName: user?.fullName || 'Bạn',
+                                          userAvatar: user?.avatarUrl,
+                                          department: user?.departmentOrUnit || 'Runner',
+                                          bibNumber: myBibNumber,
+                                          isUnlocked: true,
+                                          currentValue: chal.currentValue,
+                                          thresholdValue: chal.thresholdValue,
+                                        },
+                                      ]
+                                    : [],
+                                  allParticipants: [
+                                    {
+                                      userId: user?.id,
+                                      userName: user?.fullName || 'Bạn',
+                                      userAvatar: user?.avatarUrl,
+                                      department: user?.departmentOrUnit || 'Runner',
+                                      bibNumber: myBibNumber,
+                                      isUnlocked: chal.isUnlocked,
+                                      currentValue: chal.currentValue,
+                                      thresholdValue: chal.thresholdValue,
+                                    },
+                                  ],
+                                };
+                                setSelectedChallengeModalData(chInfo);
+                                setChallengeModalTab('completed');
+                              }}
+                              className="w-full mt-2 py-1.5 px-3 rounded-lg text-xs font-semibold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 flex items-center justify-center gap-1.5 transition cursor-pointer"
+                            >
+                              <Users className="w-3.5 h-3.5 text-[#FC4C02]" />
+                              <span>
+                                Xem BXH &amp; VĐV ({
+                                  currentEventData?.challengeLeaderboards?.find(
+                                    (cl: any) => cl.tierId === chal.tierId
+                                  )?.totalParticipants ?? 1
+                                })
+                              </span>
+                            </button>
                           </div>
                         ))}
                       </div>
@@ -2147,170 +2206,230 @@ export default function TopRunWebApp() {
                         <table className="w-full text-left border-collapse">
                           <thead>
                             <tr className="border-b border-slate-200/70 dark:border-slate-800 text-[11px] font-semibold uppercase text-slate-400">
-                              <th className="py-3 px-3">Hạng</th>
+                              <th className="py-3 px-3 text-center w-12">Hạng</th>
                               <th className="py-3 px-3">Vận động viên</th>
                               <th className="py-3 px-3">Mã BIB</th>
                               <th className="py-3 px-3">Mục tiêu</th>
                               <th className="py-3 px-3">Thực chạy</th>
-                              <th className="py-3 px-3">Tổng km tính giải</th>
+                              <th className="py-3 px-3">Điểm tính giải</th>
+                              <th className="py-3 px-3">Tiến độ</th>
                               <th className="py-3 px-3">Trạng thái</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 text-sm">
-                            {(currentEventData?.individualLeaderboard?.length > 0
-                              ? currentEventData.individualLeaderboard.map((p: any) => ({
-                                userId: p.userId,
-                                name: p.userName,
-                                dept: p.department || 'VĐV Tự do',
-                                bib: p.bibNumber,
-                                targetName: `${p.targetDistanceKm} KM`,
-                                rawKm: p.rawDistanceKm,
-                                multipliedKm: p.multipliedDistanceKm,
-                                isFinisher: p.isTargetCompleted,
-                                isMe: user?.id ? p.userId === user.id : false,
-                                avatarUrl: p.avatarUrl,
-                                gender: p.gender,
-                              }))
-                              : [
-                                {
-                                  userId: 'usr_tuan_minh',
-                                  name: 'Nguyễn Tuấn Minh',
-                                  dept: 'Khối Công Nghệ & R&D',
-                                  bib: 'TOP100-0005',
-                                  targetName: '100 KM',
-                                  rawKm: 93.5,
-                                  multipliedKm: 93.5,
-                                  isFinisher: false,
-                                  avatarUrl: '',
-                                  gender: 'M',
-                                },
-                                {
-                                  userId: user?.id || 'usr_alan',
-                                  name: 'Nguyễn Hữu Thuận (Alan Hoàng)',
-                                  dept: 'ASSA ABLOY Engineering',
-                                  bib: myBibNumber,
-                                  targetName: `${myTargetKm} KM`,
-                                  rawKm: dualGoalProgress.target.currentRawDistanceKm,
-                                  multipliedKm: dualGoalProgress.target.currentMultipliedDistanceKm,
-                                  isFinisher: dualGoalProgress.target.isCompleted,
-                                  isMe: true,
-                                  avatarUrl: '',
-                                  gender: 'M',
-                                },
-                              ]
-                            )
-                              .sort((a: any, b: any) => b.multipliedKm - a.multipliedKm)
-                              .map((row: any, index: number) => (
-                                <tr
-                                  key={row.bib}
-                                  onClick={() => {
-                                    setSelectedParticipantDetail({
-                                      userId: row.userId || '',
-                                      name: row.name,
-                                      avatarUrl: row.avatarUrl,
-                                      clubName: row.dept,
-                                      bibNumber: row.bib,
-                                      targetDistanceKm: parseInt(row.targetName, 10) || 50,
-                                      totalValidKm: row.multipliedKm,
-                                      progressPercent: Math.round((row.multipliedKm / (parseInt(row.targetName, 10) || 1)) * 100),
-                                      rank: index + 1,
-                                      gender: row.gender,
-                                      activities: activities.filter(
-                                        (a) => a.userId === row.userId && !a.isHidden && a.validDistanceKm > 0
-                                      ),
-                                    });
-                                  }}
-                                  className={`transition cursor-pointer ${(row as any).isMe
-                                    ? 'bg-[#FC4C02]/5 dark:bg-[#FC4C02]/10 hover:bg-[#FC4C02]/15'
-                                    : 'hover:bg-slate-50 dark:hover:bg-slate-800/40'
-                                    }`}
-                                >
-                                  <td className="py-3.5 px-3 font-mono font-bold text-sm">
-                                    <span
-                                      className={`inline-flex items-center justify-center w-6 h-6 rounded-md text-xs ${index === 0
-                                        ? 'bg-amber-500/20 text-amber-600 dark:text-amber-400 font-extrabold'
-                                        : index === 1
-                                          ? 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-extrabold'
-                                          : index === 2
-                                            ? 'bg-orange-500/15 text-orange-600 dark:text-orange-400 font-extrabold'
-                                            : 'text-slate-400'
-                                        }`}
+                            {(!currentEventData?.individualLeaderboard || currentEventData.individualLeaderboard.length === 0) ? (
+                              <tr>
+                                <td colSpan={8} className="py-10 text-center text-slate-400">
+                                  <Award className="w-8 h-8 mx-auto text-slate-300 dark:text-slate-600 mb-2" />
+                                  <div className="text-xs font-semibold">Chưa có vận động viên nào tham gia giải đấu này</div>
+                                  <div className="text-[11px] text-slate-500 mt-0.5">Hãy là người đầu tiên đăng ký chinh phục mục tiêu!</div>
+                                </td>
+                              </tr>
+                            ) : (
+                              currentEventData.individualLeaderboard
+                                .slice()
+                                .sort((a: any, b: any) => (b.multipliedDistanceKm ?? 0) - (a.multipliedDistanceKm ?? 0))
+                                .map((p: any, index: number) => {
+                                  const rank = index + 1;
+                                  const isGold = rank === 1;
+                                  const isSilver = rank === 2;
+                                  const isBronze = rank === 3;
+                                  const isMe = user?.id ? p.userId === user.id : false;
+                                  const targetKm = Number(p.targetDistanceKm || 50);
+                                  const rawKm = Number(p.rawDistanceKm || 0);
+                                  const multipliedKm = Number(p.multipliedDistanceKm || 0);
+                                  const pct = targetKm > 0 ? Math.min(100, Math.round((multipliedKm / targetKm) * 100)) : 0;
+                                  const isFinisher = Boolean(p.isTargetCompleted || pct >= 100);
+
+                                  return (
+                                    <tr
+                                      key={p.participationId || p.bibNumber || index}
+                                      onClick={() => {
+                                        setSelectedParticipantDetail({
+                                          userId: p.userId || '',
+                                          name: p.userName || 'Vận động viên',
+                                          avatarUrl: p.userAvatar || '',
+                                          clubName: p.department || 'ASSA ABLOY Vietnam',
+                                          bibNumber: p.bibNumber || 'TOP-0001',
+                                          targetDistanceKm: targetKm,
+                                          totalValidKm: multipliedKm,
+                                          progressPercent: pct,
+                                          rank: rank,
+                                          gender: p.gender,
+                                          activities: activities.filter(
+                                            (a) => a.userId === p.userId && !a.isHidden && a.validDistanceKm > 0
+                                          ),
+                                        });
+                                      }}
+                                      className={`transition cursor-pointer ${
+                                        isMe
+                                          ? 'bg-[#FC4C02]/10 dark:bg-[#FC4C02]/15 hover:bg-[#FC4C02]/20'
+                                          : 'hover:bg-slate-50 dark:hover:bg-slate-800/40'
+                                      }`}
                                     >
-                                      {index + 1}
-                                    </span>
-                                  </td>
-                                  <td className="py-3.5 px-3">
-                                    <div className="font-semibold text-slate-900 dark:text-white">
-                                      {row.name}
-                                    </div>
-                                    <div className="text-xs text-slate-500 dark:text-slate-400">{row.dept}</div>
-                                  </td>
-                                  <td className="py-3.5 px-3 font-mono text-xs text-slate-600 dark:text-slate-300 font-semibold">
-                                    {row.bib}
-                                  </td>
-                                  <td className="py-3.5 px-3 font-mono text-xs text-slate-600 dark:text-slate-300">
-                                    {row.targetName}
-                                  </td>
-                                  <td className="py-3.5 px-3 font-mono text-xs text-slate-600 dark:text-slate-300">
-                                    {row.rawKm} km
-                                  </td>
-                                  <td className="py-3.5 px-3">
-                                    <div className="font-mono font-bold text-slate-900 dark:text-white">
-                                      {row.multipliedKm} km
-                                    </div>
-                                    {(() => {
-                                      const userActs = activities.filter(
-                                        (a) => a.userId === row.userId && !a.isHidden && a.validDistanceKm > 0
-                                      );
-                                      const runDist = userActs
-                                        .filter((a) => normalizeSportCategory(a.sportType) === 'Run')
-                                        .reduce((s, a) => s + (a.finalCountedDistanceKm || a.validDistanceKm), 0);
-                                      const rideRaw = userActs
-                                        .filter((a) => normalizeSportCategory(a.sportType) === 'Ride')
-                                        .reduce((s, a) => s + a.validDistanceKm, 0);
-                                      const rideConv = userActs
-                                        .filter((a) => normalizeSportCategory(a.sportType) === 'Ride')
-                                        .reduce((s, a) => s + (a.finalCountedDistanceKm || a.validDistanceKm), 0);
-                                      const swimRaw = userActs
-                                        .filter((a) => normalizeSportCategory(a.sportType) === 'Swim')
-                                        .reduce((s, a) => s + a.validDistanceKm, 0);
-                                      const swimConv = userActs
-                                        .filter((a) => normalizeSportCategory(a.sportType) === 'Swim')
-                                        .reduce((s, a) => s + (a.finalCountedDistanceKm || a.validDistanceKm), 0);
+                                      {/* Rank Medal */}
+                                      <td className="py-3 px-3 text-center font-mono font-bold">
+                                        {isGold ? (
+                                          <span className="w-7 h-7 rounded-xl bg-amber-400 text-slate-950 font-black font-mono text-xs flex items-center justify-center shadow-md shadow-amber-400/20 mx-auto">
+                                            1
+                                          </span>
+                                        ) : isSilver ? (
+                                          <span className="w-7 h-7 rounded-xl bg-slate-300 text-slate-900 font-black font-mono text-xs flex items-center justify-center shadow-xs mx-auto">
+                                            2
+                                          </span>
+                                        ) : isBronze ? (
+                                          <span className="w-7 h-7 rounded-xl bg-amber-700 text-white font-black font-mono text-xs flex items-center justify-center shadow-xs mx-auto">
+                                            3
+                                          </span>
+                                        ) : (
+                                          <span className="text-xs font-bold font-mono text-slate-400">
+                                            #{rank}
+                                          </span>
+                                        )}
+                                      </td>
 
-                                      if (rideConv === 0 && swimConv === 0) return null;
-
-                                      return (
-                                        <div className="flex items-center gap-1.5 flex-wrap text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
-                                          {runDist > 0 && <span>🏃 {roundKm(runDist)}km</span>}
-                                          {rideConv > 0 && (
-                                            <span className="text-emerald-600 dark:text-emerald-400 font-medium">
-                                              🚴 +{roundKm(rideConv)}km <span className="opacity-75">({roundKm(rideRaw)}km đạp)</span>
-                                            </span>
-                                          )}
-                                          {swimConv > 0 && (
-                                            <span className="text-cyan-600 dark:text-cyan-400 font-medium">
-                                              🏊 +{roundKm(swimConv)}km <span className="opacity-75">({roundKm(swimRaw)}km bơi)</span>
-                                            </span>
-                                          )}
+                                      {/* Runner Info with Avatar */}
+                                      <td className="py-3 px-3">
+                                        <div className="flex items-center gap-3">
+                                          <div className="shrink-0">
+                                            <AthleteAvatar
+                                              user={{
+                                                id: p.userId,
+                                                fullName: p.userName,
+                                                avatarUrl: p.userAvatar,
+                                                departmentOrUnit: p.department,
+                                              }}
+                                              rank={rank}
+                                              size="sm"
+                                              showBadge={true}
+                                              showWings={true}
+                                              showSharkCrown={true}
+                                            />
+                                          </div>
+                                          <div className="min-w-0">
+                                            <div className="flex items-center gap-1.5 flex-wrap">
+                                              <span className="font-bold text-slate-900 dark:text-white truncate">
+                                                {p.userName}
+                                              </span>
+                                              <AthleteHonorPill
+                                                user={{
+                                                  id: p.userId,
+                                                  fullName: p.userName,
+                                                  avatarUrl: p.userAvatar,
+                                                  departmentOrUnit: p.department,
+                                                }}
+                                                rank={rank}
+                                              />
+                                              {isMe && (
+                                                <span className="px-1.5 py-0.2 rounded-md text-[9px] font-black bg-[#FC4C02] text-white">
+                                                  BẠN
+                                                </span>
+                                              )}
+                                            </div>
+                                            <div className="text-[11px] text-slate-400 truncate">
+                                              {p.department || 'Runner Community'}
+                                            </div>
+                                          </div>
                                         </div>
-                                      );
-                                    })()}
-                                  </td>
-                                  <td className="py-3.5 px-3">
-                                    {row.isFinisher ? (
-                                      <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60">
-                                        <CheckCircle2 className="w-3 h-3" />
-                                        Finisher
-                                      </span>
-                                    ) : (
-                                      <span className="inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">
-                                        Đang chạy
-                                      </span>
-                                    )}
-                                  </td>
-                                </tr>
-                              ))}
+                                      </td>
+
+                                      {/* BIB */}
+                                      <td className="py-3 px-3">
+                                        <span className="font-mono text-xs font-bold px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-[#FC4C02] border border-slate-200/60 dark:border-slate-700/60">
+                                          {p.bibNumber}
+                                        </span>
+                                      </td>
+
+                                      {/* Target */}
+                                      <td className="py-3 px-3 font-mono text-xs font-semibold text-slate-700 dark:text-slate-300">
+                                        {targetKm} KM
+                                      </td>
+
+                                      {/* Raw Km */}
+                                      <td className="py-3 px-3 font-mono text-xs text-slate-500 dark:text-slate-400">
+                                        {rawKm} km
+                                      </td>
+
+                                      {/* Multiplied Km */}
+                                      <td className="py-3 px-3">
+                                        <div className="font-mono font-black text-slate-900 dark:text-white text-sm">
+                                          {multipliedKm} <span className="text-[11px] font-normal text-slate-400">km</span>
+                                        </div>
+                                        {(() => {
+                                          const userActs = activities.filter(
+                                            (a) => a.userId === p.userId && !a.isHidden && a.validDistanceKm > 0
+                                          );
+                                          const runDist = userActs
+                                            .filter((a) => normalizeSportCategory(a.sportType) === 'Run')
+                                            .reduce((s, a) => s + (a.finalCountedDistanceKm || a.validDistanceKm), 0);
+                                          const rideRaw = userActs
+                                            .filter((a) => normalizeSportCategory(a.sportType) === 'Ride')
+                                            .reduce((s, a) => s + a.validDistanceKm, 0);
+                                          const rideConv = userActs
+                                            .filter((a) => normalizeSportCategory(a.sportType) === 'Ride')
+                                            .reduce((s, a) => s + (a.finalCountedDistanceKm || a.validDistanceKm), 0);
+                                          const swimRaw = userActs
+                                            .filter((a) => normalizeSportCategory(a.sportType) === 'Swim')
+                                            .reduce((s, a) => s + a.validDistanceKm, 0);
+                                          const swimConv = userActs
+                                            .filter((a) => normalizeSportCategory(a.sportType) === 'Swim')
+                                            .reduce((s, a) => s + (a.finalCountedDistanceKm || a.validDistanceKm), 0);
+
+                                          if (rideConv === 0 && swimConv === 0) return null;
+
+                                          return (
+                                            <div className="flex items-center gap-1.5 flex-wrap text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
+                                              {runDist > 0 && <span>🏃 {roundKm(runDist)}km</span>}
+                                              {rideConv > 0 && (
+                                                <span className="text-emerald-600 dark:text-emerald-400 font-medium">
+                                                  🚴 +{roundKm(rideConv)}km <span className="opacity-75">({roundKm(rideRaw)}km đạp)</span>
+                                                </span>
+                                              )}
+                                              {swimConv > 0 && (
+                                                <span className="text-cyan-600 dark:text-cyan-400 font-medium">
+                                                  🏊 +{roundKm(swimConv)}km <span className="opacity-75">({roundKm(swimRaw)}km bơi)</span>
+                                                </span>
+                                              )}
+                                            </div>
+                                          );
+                                        })()}
+                                      </td>
+
+                                      {/* Progress Bar */}
+                                      <td className="py-3 px-3 min-w-[120px]">
+                                        <div className="space-y-1">
+                                          <div className="flex items-center justify-between text-[11px] font-mono">
+                                            <span className="text-slate-500 dark:text-slate-400">{multipliedKm}/{targetKm}km</span>
+                                            <span className="font-bold text-[#FC4C02]">{pct}%</span>
+                                          </div>
+                                          <div className="w-full h-1.5 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+                                            <div
+                                              className={`h-full rounded-full transition-all duration-300 ${
+                                                isFinisher ? 'bg-emerald-500' : 'bg-[#FC4C02]'
+                                              }`}
+                                              style={{ width: `${pct}%` }}
+                                            />
+                                          </div>
+                                        </div>
+                                      </td>
+
+                                      {/* Status */}
+                                      <td className="py-3 px-3">
+                                        {isFinisher ? (
+                                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60">
+                                            <CheckCircle2 className="w-3 h-3" />
+                                            Finisher 🏆
+                                          </span>
+                                        ) : (
+                                          <span className="inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">
+                                            Còn {Math.max(0, roundKm(targetKm - multipliedKm))} km
+                                          </span>
+                                        )}
+                                      </td>
+                                    </tr>
+                                  );
+                                })
+                            )}
                           </tbody>
                         </table>
                       </div>
@@ -2540,6 +2659,240 @@ export default function TopRunWebApp() {
           navigateToTracklogDetail(actId, 'tournaments');
         }}
       />
+
+      {/* MODAL: CHI TIẾT THỬ THÁCH MỞ RỘNG (CHALLENGE AWARDS & DANH SÁCH VĐV) */}
+      {selectedChallengeModalData && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/75 backdrop-blur-sm overflow-y-auto">
+          <div className="relative w-full max-w-2xl bg-white dark:bg-[#0F1420] border border-slate-200 dark:border-slate-800 rounded-3xl p-5 sm:p-6 shadow-2xl my-6 space-y-5 max-h-[85vh] flex flex-col">
+            {/* Modal Header */}
+            <div className="flex items-start justify-between pb-4 border-b border-slate-100 dark:border-slate-800 shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-amber-400 to-[#FC4C02] text-white flex items-center justify-center text-xl shadow-md shadow-[#FC4C02]/20">
+                  {selectedChallengeModalData.awardBadgeUrl || '🏅'}
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-bold text-base text-slate-900 dark:text-white">
+                      {selectedChallengeModalData.tierName}
+                    </h3>
+                    <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-800">
+                      {selectedChallengeModalData.tierLevel}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Mục tiêu thử thách: {selectedChallengeModalData.thresholdValue} • Thưởng huy hiệu độc bản
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedChallengeModalData(null)}
+                className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Sub-tabs: Finishers vs All Participants */}
+            <div className="inline-flex p-1 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-200/70 dark:border-slate-800 shrink-0 self-start">
+              <button
+                type="button"
+                onClick={() => setChallengeModalTab('completed')}
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer flex items-center gap-1.5 ${
+                  challengeModalTab === 'completed'
+                    ? 'bg-white dark:bg-slate-800 text-[#FC4C02] shadow-xs'
+                    : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
+                }`}
+              >
+                <Trophy className="w-3.5 h-3.5" />
+                <span>
+                  BXH Đã Hoàn Thành ({selectedChallengeModalData.completedLeaderboard?.length || 0})
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setChallengeModalTab('all')}
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer flex items-center gap-1.5 ${
+                  challengeModalTab === 'all'
+                    ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-xs'
+                    : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
+                }`}
+              >
+                <Users className="w-3.5 h-3.5" />
+                <span>
+                  Tất cả VĐV tham gia ({selectedChallengeModalData.allParticipants?.length || 0})
+                </span>
+              </button>
+            </div>
+
+            {/* Content List */}
+            <div className="flex-1 overflow-y-auto space-y-2 pr-1">
+              {challengeModalTab === 'completed' ? (
+                (!selectedChallengeModalData.completedLeaderboard || selectedChallengeModalData.completedLeaderboard.length === 0) ? (
+                  <div className="py-12 text-center text-slate-400 space-y-2">
+                    <Trophy className="w-10 h-10 mx-auto text-slate-300 dark:text-slate-600" />
+                    <p className="text-xs font-semibold">Chưa có vận động viên nào hoàn thành thử thách này</p>
+                    <p className="text-[11px] text-slate-500">Hãy tăng tốc bài chạy tiếp theo để ghi danh lên đầu bảng vàng!</p>
+                  </div>
+                ) : (
+                  <div className="divide-y divide-slate-100 dark:divide-slate-800/60">
+                    {selectedChallengeModalData.completedLeaderboard.map((item: any, idx: number) => {
+                      const rank = idx + 1;
+                      const isGold = rank === 1;
+                      const isSilver = rank === 2;
+                      const isBronze = rank === 3;
+                      const isMe = user?.id ? item.userId === user.id : false;
+
+                      return (
+                        <div
+                          key={item.userId || idx}
+                          className={`flex items-center justify-between py-3 px-3 rounded-xl transition ${
+                            isMe ? 'bg-[#FC4C02]/10 border border-[#FC4C02]/20' : 'hover:bg-slate-50 dark:hover:bg-slate-800/40'
+                          }`}
+                        >
+                          <div className="flex items-center gap-3 min-w-0">
+                            {/* Rank */}
+                            <div className="w-7 text-center shrink-0">
+                              {isGold ? (
+                                <span className="w-6 h-6 rounded-lg bg-amber-400 text-slate-950 font-black text-xs flex items-center justify-center shadow-xs mx-auto">1</span>
+                              ) : isSilver ? (
+                                <span className="w-6 h-6 rounded-lg bg-slate-300 text-slate-900 font-black text-xs flex items-center justify-center mx-auto">2</span>
+                              ) : isBronze ? (
+                                <span className="w-6 h-6 rounded-lg bg-amber-700 text-white font-black text-xs flex items-center justify-center mx-auto">3</span>
+                              ) : (
+                                <span className="text-xs font-bold font-mono text-slate-400">#{rank}</span>
+                              )}
+                            </div>
+
+                            {/* Avatar */}
+                            <div className="shrink-0">
+                              <AthleteAvatar
+                                user={{ id: item.userId, fullName: item.userName, avatarUrl: item.userAvatar }}
+                                rank={rank}
+                                size="sm"
+                                showBadge={true}
+                              />
+                            </div>
+
+                            {/* Info */}
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="font-bold text-xs text-slate-900 dark:text-white truncate">
+                                  {item.userName}
+                                </span>
+                                {item.bibNumber && (
+                                  <span className="font-mono text-[10px] font-bold px-1.5 py-0.2 rounded bg-slate-100 dark:bg-slate-800 text-[#FC4C02]">
+                                    {item.bibNumber}
+                                  </span>
+                                )}
+                                {isMe && (
+                                  <span className="px-1.5 py-0.2 rounded text-[9px] font-black bg-[#FC4C02] text-white">
+                                    BẠN
+                                  </span>
+                                )}
+                              </div>
+                              <div className="text-[11px] text-slate-400 truncate">
+                                {item.department || 'Runner Community'}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="text-right shrink-0">
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                              <CheckCircle2 className="w-3 h-3" />
+                              Đã mở khóa
+                            </span>
+                            {item.unlockedAtIso && (
+                              <div className="text-[10px] text-slate-400 font-mono mt-0.5">
+                                {new Date(item.unlockedAtIso).toLocaleDateString('vi-VN')}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )
+              ) : (
+                (!selectedChallengeModalData.allParticipants || selectedChallengeModalData.allParticipants.length === 0) ? (
+                  <div className="py-12 text-center text-slate-400 space-y-2">
+                    <Users className="w-10 h-10 mx-auto text-slate-300 dark:text-slate-600" />
+                    <p className="text-xs font-semibold">Chưa có vận động viên nào đăng ký thử thách này</p>
+                  </div>
+                ) : (
+                  <div className="divide-y divide-slate-100 dark:divide-slate-800/60">
+                    {selectedChallengeModalData.allParticipants.map((item: any, idx: number) => {
+                      const isMe = user?.id ? item.userId === user.id : false;
+                      return (
+                        <div
+                          key={item.userId || idx}
+                          className={`flex items-center justify-between py-3 px-3 rounded-xl transition ${
+                            isMe ? 'bg-[#FC4C02]/10 border border-[#FC4C02]/20' : 'hover:bg-slate-50 dark:hover:bg-slate-800/40'
+                          }`}
+                        >
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className="shrink-0">
+                              <AthleteAvatar
+                                user={{ id: item.userId, fullName: item.userName, avatarUrl: item.userAvatar }}
+                                size="sm"
+                                showBadge={false}
+                              />
+                            </div>
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="font-bold text-xs text-slate-900 dark:text-white truncate">
+                                  {item.userName}
+                                </span>
+                                {item.bibNumber && (
+                                  <span className="font-mono text-[10px] font-bold px-1.5 py-0.2 rounded bg-slate-100 dark:bg-slate-800 text-[#FC4C02]">
+                                    {item.bibNumber}
+                                  </span>
+                                )}
+                                {isMe && (
+                                  <span className="px-1.5 py-0.2 rounded text-[9px] font-black bg-[#FC4C02] text-white">
+                                    BẠN
+                                  </span>
+                                )}
+                              </div>
+                              <div className="text-[11px] text-slate-400 truncate">
+                                {item.department || 'Runner Community'}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="text-right shrink-0">
+                            {item.isUnlocked ? (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                                <CheckCircle2 className="w-3 h-3" />
+                                Đã đạt
+                              </span>
+                            ) : (
+                              <span className="inline-flex px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">
+                                Đang thử thách
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex justify-end shrink-0">
+              <button
+                type="button"
+                onClick={() => setSelectedChallengeModalData(null)}
+                className="px-4 py-2 rounded-xl text-xs font-semibold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition cursor-pointer"
+              >
+                Đóng
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* MODAL: XEM E-BIB & CHỨNG NHẬN ĐI THEO GIẢI ĐẤU */}
       {showEBibModal && (

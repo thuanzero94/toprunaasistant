@@ -45,6 +45,8 @@ interface AuthContextType {
   verifyEmailToken: (token: string) => Promise<{ success: boolean; error?: string; message?: string }>;
   verifyOtp: (email: string, otp: string) => Promise<{ success: boolean; error?: string; message?: string }>;
   resendActivation: (email: string) => Promise<{ success: boolean; error?: string; message?: string; emailDelivery?: any }>;
+  requestPasswordResetOtp: (email: string) => Promise<{ success: boolean; error?: string; message?: string }>;
+  resetPasswordWithOtp: (payload: { email: string; otp: string; newPassword: string }) => Promise<{ success: boolean; error?: string; message?: string }>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -282,6 +284,40 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const requestPasswordResetOtp = async (email: string) => {
+    try {
+      const res = await fetch(`${API_BASE}/auth/forgot-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        return { success: false, error: data.message || 'Không thể gửi mã xác thực.' };
+      }
+      return { success: true, message: data.message };
+    } catch (err: any) {
+      return { success: false, error: err.message || 'Lỗi kết nối máy chủ.' };
+    }
+  };
+
+  const resetPasswordWithOtp = async (payload: { email: string; otp: string; newPassword: string }) => {
+    try {
+      const res = await fetch(`${API_BASE}/auth/reset-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        return { success: false, error: data.message || 'Không thể đặt lại mật khẩu.' };
+      }
+      return { success: true, message: data.message };
+    } catch (err: any) {
+      return { success: false, error: err.message || 'Lỗi kết nối máy chủ.' };
+    }
+  };
+
   const logout = () => {
     clearSession();
     if (typeof window !== 'undefined') {
@@ -304,6 +340,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         verifyEmailToken,
         verifyOtp,
         resendActivation,
+        requestPasswordResetOtp,
+        resetPasswordWithOtp,
       }}
     >
       {children}

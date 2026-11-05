@@ -78,6 +78,15 @@ export default function RunnerLeaderboardAndPrView({
   onOpenEBibModal,
 }: RunnerLeaderboardAndPrViewProps) {
   const [usersList, setUsersList] = useState<LeaderboardUser[]>([]);
+  const [monthlyLeaderboardData, setMonthlyLeaderboardData] = useState<Array<{
+    userId: string;
+    fullName: string;
+    avatarUrl?: string;
+    departmentOrUnit?: string;
+    monthlyDistanceKm: number;
+    monthlyRunCount: number;
+    monthlyAvgPaceSec: number;
+  }>>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [timeRange, setTimeRange] = useState<LeaderboardTimeRange>('THIS_MONTH');
   const [category, setCategory] = useState<LeaderboardCategory>('TOTAL_KM');
@@ -90,11 +99,21 @@ export default function RunnerLeaderboardAndPrView({
       try {
         setIsLoading(true);
         const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1';
-        const res = await fetch(`${apiBase}/users`);
-        if (res.ok) {
-          const data = await res.json();
+        const [resUsers, resMonthly] = await Promise.all([
+          fetch(`${apiBase}/users`),
+          fetch(`${apiBase}/leaderboard/monthly`),
+        ]);
+
+        if (resUsers.ok) {
+          const data = await resUsers.json();
           if (isMounted && Array.isArray(data)) {
             setUsersList(data);
+          }
+        }
+        if (resMonthly.ok) {
+          const monthlyData = await resMonthly.json();
+          if (isMounted && Array.isArray(monthlyData)) {
+            setMonthlyLeaderboardData(monthlyData);
           }
         }
       } catch {
@@ -134,13 +153,22 @@ export default function RunnerLeaderboardAndPrView({
     return list;
   }, [usersList, currentUser]);
 
-  // Current Month calculations from activities
+  // Current Month calculations: Tổng hợp từ API /leaderboard/monthly (PostgreSQL SSOT)
   const currentMonthStatsByUser = useMemo(() => {
+    const statsMap: Record<string, { totalKm: number; runCount: number }> = {};
+
+    // 1. Nạp từ Monthly Leaderboard API (toàn bộ VĐV trong hệ thống)
+    monthlyLeaderboardData.forEach((row) => {
+      statsMap[row.userId] = {
+        totalKm: roundKm(row.monthlyDistanceKm || 0),
+        runCount: row.monthlyRunCount || 0,
+      };
+    });
+
+    // 2. Dự phòng / Cập nhật realtime từ activities cá nhân nếu có
     const now = new Date();
     const curYear = now.getFullYear();
     const curMonth = now.getMonth();
-
-    const statsMap: Record<string, { totalKm: number; runCount: number }> = {};
 
     activities.forEach((act) => {
       if (act.isHidden || act.validDistanceKm <= 0) return;
@@ -149,13 +177,15 @@ export default function RunnerLeaderboardAndPrView({
         if (!statsMap[act.userId]) {
           statsMap[act.userId] = { totalKm: 0, runCount: 0 };
         }
-        statsMap[act.userId].totalKm += act.validDistanceKm;
-        statsMap[act.userId].runCount += 1;
+        if (statsMap[act.userId].totalKm < act.validDistanceKm) {
+          statsMap[act.userId].totalKm = roundKm(statsMap[act.userId].totalKm + act.validDistanceKm);
+          statsMap[act.userId].runCount += 1;
+        }
       }
     });
 
     return statsMap;
-  }, [activities]);
+  }, [monthlyLeaderboardData, activities]);
 
   // Filtered and Sorted Leaderboard
   const sortedAthletes = useMemo(() => {

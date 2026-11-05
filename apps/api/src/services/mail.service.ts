@@ -145,5 +145,66 @@ export class MailService {
       otp,
     };
   }
+
+  async sendPasswordResetOtpEmail(to: string, fullName: string, otp: string) {
+    const smtpHost = process.env.SMTP_HOST || 'smtp.gmail.com';
+    const smtpPort = parseInt(process.env.SMTP_PORT || '587', 10);
+    const smtpSecure = process.env.SMTP_SECURE === 'true' || smtpPort === 465;
+    const smtpUser = process.env.SMTP_USER;
+    const smtpPass = process.env.SMTP_PASS;
+    const smtpFrom = process.env.SMTP_FROM || `"TOPRun Assistant" <${smtpUser || 'no-reply@toprun.vn'}>`;
+
+    const htmlContent = `
+      <div style="font-family: Arial, sans-serif; max-width: 580px; margin: 0 auto; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 16px; overflow: hidden;">
+        <div style="background: linear-gradient(135deg, #ea580c 0%, #c2410c 100%); padding: 32px 24px; text-align: center;">
+          <h1 style="color: #ffffff; margin: 0; font-size: 24px; font-weight: 800; letter-spacing: -0.5px;">TOPRUN ASSISTANT</h1>
+          <p style="color: #ffedd5; margin: 8px 0 0 0; font-size: 14px;">Yêu cầu Đặt lại Mật khẩu</p>
+        </div>
+        <div style="padding: 32px 24px;">
+          <p style="margin: 0 0 16px 0; font-size: 15px; color: #334155;">Xin chào <strong>${fullName}</strong>,</p>
+          <p style="margin: 0 0 20px 0; font-size: 14px; color: #475569; line-height: 1.6;">
+            Hệ thống nhận được yêu cầu đặt lại mật khẩu cho tài khoản TOPRun của bạn. Vui lòng sử dụng mã xác thực OTP bên dưới để hoàn tất việc tạo mật khẩu mới.
+          </p>
+          <div style="background: linear-gradient(135deg, #fff7ed 0%, #ffedd5 100%); border: 2px dashed #f97316; border-radius: 14px; padding: 20px; text-align: center; margin: 24px 0;">
+            <p style="margin: 0 0 6px 0; font-size: 12px; font-weight: 700; color: #9a3412; text-transform: uppercase; letter-spacing: 1px;">Mã OTP Đặt Lại Mật Khẩu (Hiệu lực 15 phút)</p>
+            <div style="font-size: 38px; font-weight: 900; letter-spacing: 8px; color: #ea580c; font-family: monospace;">${otp}</div>
+            <p style="margin: 8px 0 0 0; font-size: 12px; color: #c2410c;">Mã có hiệu lực trong 15 phút. Tuyệt đối không chia sẻ mã này cho bất kỳ ai.</p>
+          </div>
+          <p style="margin: 20px 0 0 0; font-size: 13px; color: #64748b; line-height: 1.5;">Nếu bạn không thực hiện yêu cầu này, vui lòng bỏ qua email này hoặc liên hệ Ban quản trị để bảo mật tài khoản.</p>
+        </div>
+        <div style="background: #f8fafc; padding: 16px 24px; text-align: center; border-top: 1px solid #f1f5f9; font-size: 12px; color: #94a3b8;">
+          © 2026 TOPRun Assistant • Hệ sinh thái Chạy bộ & Giải chạy ảo
+        </div>
+      </div>
+    `;
+
+    if (smtpUser && smtpPass) {
+      try {
+        const transporter = nodemailer.createTransport({
+          host: smtpHost,
+          port: smtpPort,
+          secure: smtpSecure,
+          auth: { user: smtpUser, pass: smtpPass },
+          tls: { rejectUnauthorized: false },
+        });
+        await transporter.sendMail({
+          from: smtpFrom,
+          to,
+          subject: '[TOPRun Assistant] Mã OTP đặt lại mật khẩu của bạn',
+          html: htmlContent,
+        });
+        this.logger.log(`✅ Đã gửi OTP đặt lại mật khẩu tới ${to}`);
+        return { sent: true, recipient: to, otp };
+      } catch (err: any) {
+        this.logger.error(`❌ Lỗi gửi OTP reset mật khẩu: ${err.message}`);
+        return { sent: false, recipient: to, otp, error: err.message };
+      }
+    }
+
+    this.logger.warn(`--------------------------------------------------------------------------------`);
+    this.logger.warn(`🔑 [MailService Simulated] MÃ OTP ĐẶT LẠI MẬT KHẨU cho ${to}: [ ${otp} ] (Hiệu lực 15 phút)`);
+    this.logger.warn(`--------------------------------------------------------------------------------`);
+    return { sent: false, isSimulated: true, recipient: to, otp };
+  }
 }
 

@@ -113,6 +113,26 @@ export class ApiController {
     return res;
   }
 
+  @Post('auth/forgot-password')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Yêu cầu mã OTP qua Email để đặt lại mật khẩu' })
+  async requestForgotPassword(@Body() body: { email: string }) {
+    if (!body?.email) {
+      throw new BadRequestException('Vui lòng cung cấp địa chỉ email.');
+    }
+    return await this.accountService.requestPasswordResetOtp(body.email);
+  }
+
+  @Post('auth/reset-password')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Xác thực mã OTP và đặt lại mật khẩu mới' })
+  async resetPasswordWithOtp(@Body() body: { email: string; otp: string; newPassword: string }) {
+    if (!body?.email || !body?.otp || !body?.newPassword) {
+      throw new BadRequestException('Vui lòng cung cấp đầy đủ email, mã OTP và mật khẩu mới.');
+    }
+    return await this.accountService.resetPasswordWithOtp(body);
+  }
+
   @Get('auth/me')
   @ApiOperation({ summary: 'Lấy thông tin người dùng hiện tại từ JWT Token' })
   async getMe(@Headers('authorization') authHeader?: string) {
@@ -599,6 +619,17 @@ export class ApiController {
   @ApiOperation({ summary: 'Danh sách các Giải chạy ảo (Virtual Race) & Thử thách (Mini Challenge)' })
   getEvents() {
     return this.engine.getEvents();
+  }
+
+  @Get('leaderboard/monthly')
+  @ApiOperation({ summary: 'Bảng xếp hạng tổng hợp KM và số buổi chạy trong tháng của toàn bộ VĐV' })
+  async getMonthlyLeaderboard(
+    @Query('month') monthStr?: string,
+    @Query('year') yearStr?: string
+  ) {
+    const month = monthStr ? parseInt(monthStr, 10) - 1 : undefined;
+    const year = yearStr ? parseInt(yearStr, 10) : undefined;
+    return await this.engine.getGlobalMonthlyLeaderboard(month, year);
   }
 
   @Get('events/:idOrSlug')

@@ -17,6 +17,7 @@ interface AthleteAvatarProps {
     id?: string;
     fullName?: string;
     avatarUrl?: string | null;
+    departmentOrUnit?: string | null;
     role?: UserRole | string;
     honorBadge?: string | null;
     pr5kSec?: number | null;
@@ -495,6 +496,10 @@ export function AthleteHonorPill({
   className = '',
 }: {
   user?: {
+    id?: string;
+    fullName?: string;
+    avatarUrl?: string | null;
+    departmentOrUnit?: string | null;
     role?: UserRole | string;
     honorBadge?: string | null;
     pr5kSec?: number | null;

@@ -99,14 +99,15 @@ export class AccountService implements OnModuleInit {
     try {
       const defaultPwdHash = this.hashPassword('TopRun@2026');
 
+      // Đảm bảo tài khoản SuperAdmin có email thuanzero94@gmail.com
       const adminUser = await prisma.user.upsert({
-        where: { email: 'admin@toprun.vn' },
+        where: { email: 'thuanzero94@gmail.com' },
         update: {
           role: UserRole.ADMIN,
         },
         create: {
           id: 'usr_admin_01',
-          email: 'admin@toprun.vn',
+          email: 'thuanzero94@gmail.com',
           passwordHash: defaultPwdHash,
           fullName: 'Nguyễn Hữu Thuận (Alan Hoàng)',
           avatarUrl:
@@ -447,6 +448,60 @@ export class AccountService implements OnModuleInit {
       success: true,
       message: `Đã gửi lại email kích hoạt và mã OTP cho ${user.email}.`,
       emailDelivery,
+    };
+  }
+
+  async requestPasswordResetOtp(email: string) {
+    const emailClean = email.trim().toLowerCase();
+    const user = await prisma.user.findUnique({ where: { email: emailClean } });
+    if (!user) {
+      throw new NotFoundException(`Không tìm thấy tài khoản nào gắn với email "${emailClean}".`);
+    }
+
+    const otp = String(Math.floor(100000 + Math.random() * 900000));
+    this.otpStore.set(`reset_${emailClean}`, {
+      code: otp,
+      userId: user.id,
+      email: user.email,
+      expiresAt: Date.now() + 15 * 60 * 1000, // 15 phút
+    });
+
+    const emailDelivery = await this.mailService.sendPasswordResetOtpEmail(user.email, user.fullName, otp);
+    return {
+      success: true,
+      message: `Đã gửi mã xác thực OTP (hiệu lực 15 phút) đến hộp thư ${user.email}.`,
+      emailDelivery,
+    };
+  }
+
+  async resetPasswordWithOtp(payload: { email: string; otp: string; newPassword: string }) {
+    const emailClean = (payload.email || '').trim().toLowerCase();
+    const otpClean = (payload.otp || '').trim();
+
+    if (!payload.newPassword || payload.newPassword.length < 6) {
+      throw new BadRequestException('Mật khẩu mới phải có tối thiểu 6 ký tự.');
+    }
+
+    const record = this.otpStore.get(`reset_${emailClean}`);
+    if (!record || record.code !== otpClean) {
+      throw new BadRequestException('Mã xác thực OTP không chính xác.');
+    }
+
+    if (Date.now() > record.expiresAt) {
+      this.otpStore.delete(`reset_${emailClean}`);
+      throw new BadRequestException('Mã xác thực OTP đã hết hạn (quá 15 phút). Vui lòng yêu cầu mã mới.');
+    }
+
+    const newPasswordHash = this.hashPassword(payload.newPassword);
+    await prisma.user.update({
+      where: { id: record.userId },
+      data: { passwordHash: newPasswordHash },
+    });
+
+    this.otpStore.delete(`reset_${emailClean}`);
+    return {
+      success: true,
+      message: 'Đặt lại mật khẩu thành công! Bạn có thể đăng nhập bằng mật khẩu mới ngay.',
     };
   }
 
