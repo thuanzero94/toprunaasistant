@@ -23,6 +23,14 @@ import {
   formatPace,
   parseGpxToActivityInput,
   roundKm,
+  isActivityInEventRange,
+  isVietnamWeekend,
+  toVietnamDate,
+  toVietnamDateString,
+  toVietnamEventStartIso,
+  toVietnamEventEndIso,
+  isDateInVietnamMonth,
+  getVietnamMonthYear,
 } from '@toprun/shared';
 import { generateEBibSvg, generateECertificateSvg } from './certificate.service';
 import { prisma } from '@toprun/database';
@@ -498,8 +506,12 @@ export class TopRunEngineService implements OnModuleInit {
 
       const dbEvents = await prisma.event.findMany({
         include: {
-          categories: true,
-          challengeTiers: true,
+          categories: {
+            orderBy: { targetDistanceKm: 'asc' },
+          },
+          challengeTiers: {
+            orderBy: { thresholdValue: 'asc' },
+          },
           teams: true,
         },
       });
@@ -525,17 +537,17 @@ export class TopRunEngineService implements OnModuleInit {
           categories: e.categories.map((c) => ({
             id: c.id,
             name: c.name,
-            targetDistanceKm: c.targetDistanceKm,
-            bibPrefix: (e as any).bibPrefix || c.bibPrefix || 'PRO-',
+            targetDistanceKm: Number(c.targetDistanceKm),
+            bibPrefix: c.bibPrefix || (e as any).bibPrefix || 'PRO-',
           })),
           challengeTiers: e.challengeTiers.map((t) => ({
             id: t.id,
             tierName: t.tierName,
             tierLevel: t.tierLevel as any,
             conditionType: t.conditionType as any,
-            thresholdValue: t.thresholdValue,
-            targetSpeedDistanceKm: (t as any).targetSpeedDistanceKm ?? undefined,
-            minDailyDistanceKm: t.minDailyDistanceKm ?? 2.0,
+            thresholdValue: Number(t.thresholdValue),
+            targetSpeedDistanceKm: t.targetSpeedDistanceKm ? Number(t.targetSpeedDistanceKm) : undefined,
+            minDailyDistanceKm: t.minDailyDistanceKm ? Number(t.minDailyDistanceKm) : 2.0,
             awardBadgeUrl: t.awardBadgeUrl,
             rewardDescription: t.rewardDescription,
           })),
@@ -549,7 +561,8 @@ export class TopRunEngineService implements OnModuleInit {
         }));
       }
     } catch (err) {
-      console.warn('[TopRunEngine] Lỗi đồng bộ events với DB:', err);
+      console.error('[TopRunEngine] Lỗi đồng bộ events với DB:', err);
+      throw err;
     }
   }
 
@@ -569,8 +582,8 @@ export class TopRunEngineService implements OnModuleInit {
           eventType: ev.eventType as any,
           runMode: ev.runMode as any,
           status: ev.status as any,
-          startDate: new Date(ev.startDateIso),
-          endDate: new Date(ev.endDateIso),
+          startDate: new Date(toVietnamEventStartIso(ev.startDateIso)),
+          endDate: new Date(toVietnamEventEndIso(ev.endDateIso)),
           ruleConfig: ev.ruleConfig as any,
           ebibConfig: (ev.ebibConfig as any) || null,
           bibPrefix: (ev as any).bibPrefix || 'PRO-',
@@ -586,8 +599,8 @@ export class TopRunEngineService implements OnModuleInit {
           eventType: ev.eventType as any,
           runMode: ev.runMode as any,
           status: ev.status as any,
-          startDate: new Date(ev.startDateIso),
-          endDate: new Date(ev.endDateIso),
+          startDate: new Date(toVietnamEventStartIso(ev.startDateIso)),
+          endDate: new Date(toVietnamEventEndIso(ev.endDateIso)),
           ruleConfig: ev.ruleConfig as any,
           ebibConfig: (ev.ebibConfig as any) || null,
           bibPrefix: (ev as any).bibPrefix || 'PRO-',
@@ -596,29 +609,89 @@ export class TopRunEngineService implements OnModuleInit {
         },
       });
 
+      // 1. Đồng bộ & Bảo toàn Hạng mục Cự ly Target Categories
+      const activeCatIds = ev.categories
+        .map((c) => {
+          if (!c.id) {
+            c.id = `cat_${ev.id}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+          }
+          return c.id;
+        })
+        .filter(Boolean);
+
+      if (activeCatIds.length > 0) {
+        // Kiểm tra xem có VĐV nào đã đăng ký vào category sắp bị xoá không
+        const registered = await prisma.eventParticipation.findMany({
+          where: {
+            eventId: ev.id,
+            categoryId: { notIn: activeCatIds },
+          },
+          include: { category: true },
+        });
+
+        if (registered.length > 0) {
+          const distinct = Array.from(new Set(registered.map((r) => r.category?.name || r.categoryId))).join(', ');
+          throw new BadRequestException(
+            `Không thể xoá cự ly "${distinct}" vì đã có ${registered.length} VĐV đăng ký tham gia. Vui lòng giữ lại cự ly để bảo toàn dữ liệu thi đấu của VĐV.`
+          );
+        }
+
+        // Xoá an toàn các categories cũ không còn trong cấu hình
+        await prisma.eventCategory.deleteMany({
+          where: {
+            eventId: ev.id,
+            id: { notIn: activeCatIds },
+          },
+        }).catch(() => {});
+      }
+
       for (const cat of ev.categories) {
+        const catId = cat.id || `cat_${ev.id}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+        cat.id = catId;
         await prisma.eventCategory.upsert({
-          where: { id: cat.id },
+          where: { id: catId },
           update: {
             name: cat.name,
-            targetDistanceKm: cat.targetDistanceKm,
-            bibPrefix: cat.bibPrefix,
+            targetDistanceKm: Number(cat.targetDistanceKm),
+            bibPrefix: cat.bibPrefix || (ev as any).bibPrefix || 'PRO-',
           },
           create: {
-            id: cat.id,
+            id: catId,
             eventId: ev.id,
             name: cat.name,
-            targetDistanceKm: cat.targetDistanceKm,
-            bibPrefix: cat.bibPrefix,
+            targetDistanceKm: Number(cat.targetDistanceKm),
+            bibPrefix: cat.bibPrefix || (ev as any).bibPrefix || 'PRO-',
           },
         });
       }
 
-      // Xoá các challenge tiers cũ không còn nằm trong danh sách cấu hình mới
+      // 2. Đồng bộ & Bảo toàn Thử thách mở rộng Challenge Tiers
       const activeTierIds = ev.challengeTiers
-        .map((t: any) => t.id || t.tierCode)
+        .map((t: any) => {
+          if (!t.id) {
+            t.id = (t as any).tierCode || `tier_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+          }
+          return t.id;
+        })
         .filter(Boolean);
+
       if (activeTierIds.length > 0) {
+        // Kiểm tra xem có mốc thử thách nào sắp bị xoá mà đã được trao cho VĐV không
+        const awarded = await prisma.participationAward.findMany({
+          where: {
+            challengeTierId: { notIn: activeTierIds },
+            participation: { eventId: ev.id },
+          },
+          include: { challengeTier: true },
+        });
+
+        if (awarded.length > 0) {
+          const distinct = Array.from(new Set(awarded.map((a) => a.challengeTier?.tierName || a.challengeTierId))).join(', ');
+          throw new BadRequestException(
+            `Không thể xoá mốc thử thách "${distinct}" vì đã có ${awarded.length} VĐV đạt được mốc thành tích này.`
+          );
+        }
+
         await prisma.eventChallengeTier.deleteMany({
           where: {
             eventId: ev.id,
@@ -636,9 +709,9 @@ export class TopRunEngineService implements OnModuleInit {
             tierName: tier.tierName,
             tierLevel: tier.tierLevel,
             conditionType: tier.conditionType as any,
-            thresholdValue: tier.thresholdValue,
+            thresholdValue: Number(tier.thresholdValue),
             targetSpeedDistanceKm: tier.targetSpeedDistanceKm ? Number(tier.targetSpeedDistanceKm) : null,
-            minDailyDistanceKm: tier.minDailyDistanceKm ?? 2.0,
+            minDailyDistanceKm: tier.minDailyDistanceKm ? Number(tier.minDailyDistanceKm) : 2.0,
             awardBadgeUrl: tier.awardBadgeUrl,
             rewardDescription: tier.rewardDescription,
           },
@@ -648,9 +721,9 @@ export class TopRunEngineService implements OnModuleInit {
             tierName: tier.tierName,
             tierLevel: tier.tierLevel,
             conditionType: tier.conditionType as any,
-            thresholdValue: tier.thresholdValue,
+            thresholdValue: Number(tier.thresholdValue),
             targetSpeedDistanceKm: tier.targetSpeedDistanceKm ? Number(tier.targetSpeedDistanceKm) : null,
-            minDailyDistanceKm: tier.minDailyDistanceKm ?? 2.0,
+            minDailyDistanceKm: tier.minDailyDistanceKm ? Number(tier.minDailyDistanceKm) : 2.0,
             awardBadgeUrl: tier.awardBadgeUrl,
             rewardDescription: tier.rewardDescription,
           },
@@ -676,8 +749,9 @@ export class TopRunEngineService implements OnModuleInit {
           },
         });
       }
-    } catch (err) {
-      console.warn(`[TopRunEngine] Lỗi lưu Event ${ev.id} vào DB:`, err);
+    } catch (err: any) {
+      console.error(`[TopRunEngine] Lỗi lưu Event ${ev.id} vào PostgreSQL:`, err);
+      throw err;
     }
   }
 
@@ -2397,11 +2471,11 @@ export class TopRunEngineService implements OnModuleInit {
   }
 
   async getGlobalMonthlyLeaderboard(month?: number, year?: number) {
-    const now = new Date();
-    const targetMonth = month !== undefined ? month : now.getMonth();
-    const targetYear = year !== undefined ? year : now.getFullYear();
+    const vnNow = toVietnamDate();
+    const targetMonth = month !== undefined ? month : vnNow.getUTCMonth();
+    const targetYear = year !== undefined ? year : vnNow.getUTCFullYear();
 
-    // Múi giờ Việt Nam (UTC+7): 00:00:00 ngày 1 tương ứng 17:00:00 UTC ngày cuối tháng trước
+    // Múi giờ Việt Nam (UTC+7): 00:00:00 ngày 1 đến 23:59:59.999 ngày cuối tháng
     const startOfMonth = new Date(Date.UTC(targetYear, targetMonth, 1, 0, 0, 0) - 7 * 3600 * 1000);
     const endOfMonth = new Date(Date.UTC(targetYear, targetMonth + 1, 0, 23, 59, 59, 999) - 7 * 3600 * 1000);
 
@@ -2478,7 +2552,7 @@ export class TopRunEngineService implements OnModuleInit {
     };
   }
 
-  createEvent(payload: {
+  async createEvent(payload: {
     title: string;
     subtitle?: string;
     description: string;
@@ -2533,6 +2607,9 @@ export class TopRunEngineService implements OnModuleInit {
         maxPaceSecPerKm: payload.maxPaceSecPerKm ?? 900,
         allowSplitFiltering: payload.allowSplitFiltering ?? true,
         weekendMultiplier: payload.weekendMultiplier ?? 1.0,
+        enableCrossTrainingConversion: (payload as any).enableCrossTrainingConversion ?? false,
+        rideToRunRatio: (payload as any).rideToRunRatio ?? 0.25,
+        swimToRunRatio: (payload as any).swimToRunRatio ?? 5.0,
       }),
       categories: payload.categories.map((c, idx) => ({
         id: `cat_${Date.now()}_${idx}`,
@@ -2555,7 +2632,7 @@ export class TopRunEngineService implements OnModuleInit {
 
     this.events.unshift(newEvent);
     this.saveEngineState();
-    this.persistEventToDb(newEvent).catch(() => {});
+    await this.persistEventToDb(newEvent);
     return newEvent;
   }
 
@@ -2772,6 +2849,14 @@ export class TopRunEngineService implements OnModuleInit {
     }
     this.saveEngineState();
     await this.persistEventToDb(event);
+
+    // Tính toán lại tiến độ và BXH cho toàn bộ VĐV thuộc giải đấu này theo quy chế mới
+    const affectedParts = this.participations.filter((p) => p.eventId === event.id);
+    const affectedUserIds = Array.from(new Set(affectedParts.map((p) => p.userId)));
+    for (const uId of affectedUserIds) {
+      this.recalculateUserParticipation(uId);
+    }
+
     return event;
   }
 
@@ -2829,10 +2914,11 @@ export class TopRunEngineService implements OnModuleInit {
    * Chỉ tính các hoạt động hợp lệ và KHÔNG bị ẩn (`!a.isHidden`)
    */
   recalculateUserParticipation(userId: string) {
-    const activeRuns = this.activities.filter(
-      (a) => a.userId === userId && !a.isHidden && a.validDistanceKm > 0
+    const userActivities = this.activities.filter(
+      (a) => a.userId === userId && !a.isHidden
     );
 
+    const activeRuns = userActivities.filter((a) => a.validDistanceKm > 0);
     const user = this.users.find((u) => u.id === userId);
     if (user) {
       user.totalDistanceKm = roundKm(activeRuns.reduce((sum, a) => sum + a.validDistanceKm, 0));
@@ -2850,35 +2936,49 @@ export class TopRunEngineService implements OnModuleInit {
       const ev = this.events.find((e) => e.id === part.eventId);
       if (!ev) continue;
 
-      const evStart = new Date(ev.startDateIso).getTime();
-      const evEnd = new Date(ev.endDateIso).getTime();
-
-      // Chỉ lọc các bài chạy diễn ra trong thời gian của giải đấu này
-      const eventRuns = activeRuns.filter((a) => {
-        const actTime = new Date(a.startDateIso).getTime();
-        return actTime >= evStart && actTime <= evEnd;
+      // Lọc các hoạt động của user trong thời gian diễn ra giải đấu này
+      const eventActs = userActivities.filter((a) => {
+        return isActivityInEventRange(a.startDateIso, ev.startDateIso, ev.endDateIso);
       });
 
-      const logs = eventRuns
-        .slice()
-        .reverse()
-        .map((a) => {
-          let mult = 1.0;
-          const actD = new Date(a.startDateIso);
-          const day = actD.getUTCDay();
-          if ((day === 0 || day === 6) && (ev.ruleConfig.weekendMultiplier || 1.0) > 1.0) {
-            mult = ev.ruleConfig.weekendMultiplier;
-          }
-          const multipliedKm = roundKm(a.validDistanceKm * mult);
-          return {
+      const logs: any[] = [];
+      for (const a of eventActs.slice().reverse()) {
+        const evEval = evaluateActivitySplits(
+          {
+            externalId: a.externalId,
+            name: a.name,
+            sportType: a.sportType,
+            startDateIso: a.startDateIso,
+            distanceMeters: Math.round(a.rawDistanceKm * 1000),
+            movingTimeSec: a.movingTimeSec,
+            elapsedTimeSec: a.elapsedTimeSec,
+            totalElevationGainMeters: a.totalElevationGainMeters,
+            averageHeartrate: a.averageHeartrate,
+            maxHeartrate: a.maxHeartrate,
+            averageCadenceSpm: a.averageCadenceSpm,
+            isManual: a.isManual,
+            splits: a.splits?.map((s) => ({
+              splitIndex: s.splitIndex,
+              distanceMeters: s.distanceMeters,
+              movingTimeSec: s.movingTimeSec,
+              elevationDiffMeters: s.elevationDiffMeters,
+              averageHeartrate: s.averageHeartrate,
+            })),
+          },
+          ev.ruleConfig
+        );
+
+        if (evEval.antiCheatStatus !== AntiCheatStatus.REJECTED && evEval.finalCountedDistanceKm > 0) {
+          logs.push({
             activityDateIso: a.startDateIso,
-            validRawDistanceKm: a.validDistanceKm,
-            finalMultipliedDistanceKm: multipliedKm,
+            validRawDistanceKm: evEval.validDistanceKm,
+            finalMultipliedDistanceKm: evEval.finalCountedDistanceKm,
             elevationGainMeters: a.totalElevationGainMeters || 0,
             movingTimeSec: a.movingTimeSec || 0,
-            validAvgPaceSecPerKm: a.avgPaceSecPerKm || 0,
-          };
-        });
+            validAvgPaceSecPerKm: evEval.validAvgPaceSecPerKm || a.avgPaceSecPerKm || 0,
+          });
+        }
+      }
 
       part.dualGoalProgress = calculateDualGoalProgress({
         runMode: ev.runMode,
@@ -2987,11 +3087,8 @@ export class TopRunEngineService implements OnModuleInit {
       const ev = this.events.find((e) => e.id === part.eventId);
       if (!ev) continue;
 
-      const actTime = new Date(rawInput.startDateIso).getTime();
-      const evStart = new Date(ev.startDateIso).getTime();
-      const evEnd = new Date(ev.endDateIso).getTime();
-      if (actTime < evStart || actTime > evEnd) {
-        // Bài chạy không nằm trong khoảng thời gian diễn ra giải này -> Bỏ qua
+      if (!isActivityInEventRange(rawInput.startDateIso, ev.startDateIso, ev.endDateIso)) {
+        // Bài chạy không nằm trong khoảng thời gian diễn ra giải này theo giờ Việt Nam (+7) -> Bỏ qua
         continue;
       }
 

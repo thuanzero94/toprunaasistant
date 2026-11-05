@@ -17,7 +17,7 @@ import {
   Sparkles,
   Crown,
 } from 'lucide-react';
-import { roundKm } from '@toprun/shared';
+import { roundKm, getVietnamMonthYear, isDateInVietnamMonth } from '@toprun/shared';
 import AthleteAvatar, { AthleteHonorPill } from './AthleteAvatar';
 
 interface LeaderboardUser {
@@ -101,9 +101,10 @@ export default function RunnerLeaderboardAndPrView({
       try {
         setIsLoading(true);
         const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1';
+        const { month: vnMonth, year: vnYear } = getVietnamMonthYear();
         const [resUsers, resMonthly] = await Promise.all([
           fetch(`${apiBase}/users`),
-          fetch(`${apiBase}/leaderboard/monthly`),
+          fetch(`${apiBase}/leaderboard/monthly?month=${vnMonth}&year=${vnYear}`),
         ]);
 
         if (resUsers.ok) {
@@ -180,14 +181,11 @@ export default function RunnerLeaderboardAndPrView({
       });
     } else {
       // 2. Dự phòng ngoại tuyến / realtime từ activities nếu API chưa trả về
-      const now = new Date();
-      const curYear = now.getFullYear();
-      const curMonth = now.getMonth();
+      const { month: curMonth, year: curYear } = getVietnamMonthYear();
 
       activities.forEach((act) => {
         if (act.isHidden || act.validDistanceKm <= 0) return;
-        const d = act.startDateIso ? new Date(act.startDateIso) : new Date();
-        if (d.getFullYear() === curYear && d.getMonth() === curMonth) {
+        if (isDateInVietnamMonth(act.startDateIso, curMonth, curYear)) {
           if (!statsMap[act.userId]) {
             statsMap[act.userId] = { totalKm: 0, runCount: 0 };
           }
@@ -285,10 +283,10 @@ export default function RunnerLeaderboardAndPrView({
     return idx >= 0 ? idx + 1 : null;
   }, [sortedAthletes, currentUser?.id]);
 
-  // Current month label
+  // Current month label (theo giờ Việt Nam UTC+7)
   const monthName = useMemo(() => {
-    const d = new Date();
-    return `Tháng ${d.getMonth() + 1}/${d.getFullYear()}`;
+    const { month, year } = getVietnamMonthYear();
+    return `Tháng ${month}/${year}`;
   }, []);
 
   return (

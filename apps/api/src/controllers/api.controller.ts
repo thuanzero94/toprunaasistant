@@ -674,7 +674,7 @@ export class ApiController {
 
   @Post('events')
   @ApiOperation({ summary: 'Tạo mới Giải chạy Ảo (Admin/Organizer) hoặc Mini Challenge (User)' })
-  createEvent(
+  async createEvent(
     @Body()
     body: {
       title: string;
@@ -701,7 +701,7 @@ export class ApiController {
       }>;
     }
   ) {
-    return this.engine.createEvent(body);
+    return await this.engine.createEvent(body);
   }
 
   @Post('events/:id/register')

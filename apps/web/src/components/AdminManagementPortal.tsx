@@ -709,7 +709,7 @@ export default function AdminManagementPortal({
                         </label>
                         <input
                           type="number"
-                          step="0.01"
+                          step="any"
                           min="0.01"
                           max="2.0"
                           value={eventForm.rideToRunRatio ?? 0.25}
@@ -732,7 +732,7 @@ export default function AdminManagementPortal({
                         </label>
                         <input
                           type="number"
-                          step="0.1"
+                          step="any"
                           min="0.1"
                           max="20.0"
                           value={eventForm.swimToRunRatio ?? 5.0}
@@ -777,6 +777,7 @@ export default function AdminManagementPortal({
                         categories: [
                           ...cats,
                           {
+                            id: `cat_${selectedEventId || 'evt'}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
                             name: `Mốc Target ${nextKm}KM`,
                             targetDistanceKm: nextKm,
                           },
@@ -865,7 +866,9 @@ export default function AdminManagementPortal({
                       type="button"
                       onClick={() => {
                         const tiers = eventForm.challengeTiers || challengeTiers;
+                        const tierId = `tier_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
                         const newTier: AdminChallengeTierItem = {
+                          id: tierId,
                           tierCode: `SPEED_${Date.now()}`,
                           tierName: '⚡ Thử thách Tốc độ 5KM',
                           tierLevel: 'SPECIAL',
@@ -886,7 +889,9 @@ export default function AdminManagementPortal({
                       type="button"
                       onClick={() => {
                         const tiers = eventForm.challengeTiers || challengeTiers;
+                        const tierId = `tier_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
                         const newTier: AdminChallengeTierItem = {
+                          id: tierId,
                           tierCode: `TIER_${Date.now()}`,
                           tierName: 'Mốc Thử Thách Mới',
                           tierLevel: 'SILVER',

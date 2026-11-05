@@ -68,6 +68,7 @@ enum ChallengeConditionType {
   SINGLE_LONG_RUN
   ELEVATION_GAIN
   TOP_RANK
+  SPEED_TARGET_TIME
 }
 
 enum FulfillmentStatus {

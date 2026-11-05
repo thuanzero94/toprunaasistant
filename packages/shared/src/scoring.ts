@@ -15,6 +15,7 @@ import {
   SportCategory,
 } from './types';
 import { calculatePaceSecPerKm, formatPace, roundKm } from './pace';
+import { toVietnamDateString, isVietnamWeekend } from './date-utils';
 
 /**
  * ============================================================================
@@ -271,9 +272,8 @@ export function evaluateActivitySplits(
   let appliedMultiplier = sportRatio;
   let multiplierReason: string | null = sportRatioReason || null;
 
-  const actDate = new Date(activity.startDateIso);
-  const dateStr = activity.startDateIso.slice(0, 10); // YYYY-MM-DD
-  const dayOfWeek = actDate.getDay(); // 0 = Chủ Nhật, 6 = Thứ Bảy
+  const dateStr = toVietnamDateString(activity.startDateIso); // YYYY-MM-DD theo giờ Việt Nam (+7)
+  const isWeekend = isVietnamWeekend(activity.startDateIso); // Thứ 7 hoặc Chủ Nhật theo giờ Việt Nam (+7)
 
   const specialDay = rules.specialMultiplierDates?.find((d) => d.date === dateStr);
   if (specialDay && specialDay.multiplier > 1) {
@@ -281,7 +281,7 @@ export function evaluateActivitySplits(
     multiplierReason = multiplierReason
       ? `${multiplierReason} • ${specialDay.label} (x${specialDay.multiplier})`
       : `${specialDay.label} (x${specialDay.multiplier})`;
-  } else if ((dayOfWeek === 0 || dayOfWeek === 6) && rules.weekendMultiplier > 1) {
+  } else if (isWeekend && rules.weekendMultiplier > 1) {
     appliedMultiplier *= rules.weekendMultiplier;
     multiplierReason = multiplierReason
       ? `${multiplierReason} • Cuối tuần x${rules.weekendMultiplier}`
