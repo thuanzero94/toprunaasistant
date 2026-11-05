@@ -10,9 +10,7 @@ import {
   ChevronRight,
   Compass,
   Download,
-  FileUp,
   Flame,
-  FlaskConical,
   Heart,
   LayoutDashboard,
   LogOut,
@@ -24,7 +22,6 @@ import {
   Search,
   Settings,
   Share2,
-  ShieldAlert,
   ShieldCheck,
   Sparkles,
   Sun,
@@ -192,13 +189,11 @@ export default function TopRunWebApp() {
     defaultActivityId: 'act_01',
   });
 
-  const showSimulatorDrawer = activeModal === 'simulator';
   const showShareModal = activeModal === 'share';
   const showRegisterModal = activeModal === 'register';
   const showEBibModal = activeModal === 'ebib';
   const showCreateEventModal = activeModal === 'create-event';
 
-  const setShowSimulatorDrawer = (show: boolean) => (show ? openModal('simulator') : closeModal('simulator'));
   const setShowShareModal = (show: boolean) => (show ? openModal('share') : closeModal('share'));
   const setShowRegisterModal = (show: boolean) => (show ? openModal('register') : closeModal('register'));
   const setShowEBibModal = (show: boolean) => (show ? openModal('ebib') : closeModal('ebib'));
@@ -1343,134 +1338,9 @@ export default function TopRunWebApp() {
     }
   }, [activeTab, adminSubTab, selectedEventId, fetchRaceKitOrders]);
 
-  const handleSimulateStravaSync = (mode: 'clean_weekend' | 'motorbike_last_km') => {
-    setShowSimulatorDrawer(false);
-    if (mode === 'motorbike_last_km') {
-      const rawInput = {
-        externalId: `strava_${Date.now()}`,
-        name: 'Chạy bộ chiều + Quên tắt đồng hồ khi lên xe máy ở Km 6',
-        sportType: SportType.RUN,
-        startDateIso: new Date().toISOString(),
-        distanceMeters: 6000,
-        movingTimeSec: 325 * 5 + 95,
-        elapsedTimeSec: 1800,
-        totalElevationGainMeters: 35,
-        averageHeartrate: 155,
-        averageCadenceSpm: 170,
-        isManual: false,
-        splits: [
-          { splitIndex: 1, distanceMeters: 1000, movingTimeSec: 326, elevationDiffMeters: 5, averageHeartrate: 148 },
-          { splitIndex: 2, distanceMeters: 1000, movingTimeSec: 324, elevationDiffMeters: 6, averageHeartrate: 152 },
-          { splitIndex: 3, distanceMeters: 1000, movingTimeSec: 322, elevationDiffMeters: -2, averageHeartrate: 156 },
-          { splitIndex: 4, distanceMeters: 1000, movingTimeSec: 328, elevationDiffMeters: 4, averageHeartrate: 158 },
-          { splitIndex: 5, distanceMeters: 1000, movingTimeSec: 325, elevationDiffMeters: 3, averageHeartrate: 160 },
-          { splitIndex: 6, distanceMeters: 1000, movingTimeSec: 95, elevationDiffMeters: 0, averageHeartrate: 115 },
-        ],
-      };
-
-      const evalRes = evaluateActivitySplits(rawInput, DEFAULT_EVENT_RULES);
-      const newAct = {
-        id: `act_${Date.now()}`,
-        userId: user?.id || 'usr_runner_01',
-        userName: user?.fullName || 'Vận Động Viên',
-        department: user?.departmentOrUnit || 'Runner Community',
-        source: 'STRAVA SYNC',
-        externalId: rawInput.externalId,
-        name: rawInput.name,
-        startDateIso: rawInput.startDateIso,
-        dateStr: 'Vừa xong • Đồng bộ tự động',
-        rawDistanceKm: evalRes.rawDistanceKm,
-        validDistanceKm: evalRes.validDistanceKm,
-        invalidDistanceKm: evalRes.invalidDistanceKm,
-        appliedMultiplier: 1.0,
-        finalCountedDistanceKm: evalRes.validDistanceKm,
-        movingTimeSec: evalRes.validMovingTimeSec,
-        avgPaceSecPerKm: evalRes.validAvgPaceSecPerKm,
-        elevationGain: 35,
-        avgHr: 155,
-        avgCadence: 170,
-        deviceName: 'Garmin Forerunner 965',
-        antiCheatStatus: evalRes.antiCheatStatus,
-        flagReasons: evalRes.flagReasons,
-        polyline: SAMPLE_POLYLINE_WESTLAKE,
-        kudos: 1,
-        liked: true,
-        isHidden: false,
-        splits: evalRes.evaluatedSplits,
-      };
-
-      setActivities((prev) => [newAct, ...prev]);
-      setSelectedActivityId(newAct.id);
-      setSyncBannerMessage(
-        `Kiểm duyệt tự động: Phát hiện Km số 6 có tốc độ 01:35/km (< 03:00/km). Đã tự động cắt 1km lỗi và ghi nhận ${evalRes.validDistanceKm} km chạy bộ hợp lệ.`
-      );
-      setActiveTab('tracklogs');
-      return;
-    }
-
-    const rawInput = {
-      externalId: `strava_${Date.now()}`,
-      name: 'Chạy dài sáng Chủ Nhật — Tích lũy cuối tuần 10KM',
-      sportType: SportType.RUN,
-      startDateIso: new Date().toISOString(),
-      distanceMeters: 10000,
-      movingTimeSec: 3100,
-      elapsedTimeSec: 3180,
-      totalElevationGainMeters: 62,
-      averageHeartrate: 160,
-      averageCadenceSpm: 178,
-      isManual: false,
-      splits: Array.from({ length: 10 }, (_, i) => ({
-        splitIndex: i + 1,
-        distanceMeters: 1000,
-        movingTimeSec: 308 + (i % 3) * 3,
-        elevationDiffMeters: 5,
-        averageHeartrate: 154 + i,
-      })),
-    };
-
-    const evalRes = evaluateActivitySplits(rawInput, DEFAULT_EVENT_RULES);
-    const newAct = {
-      id: `act_${Date.now()}`,
-      userId: 'usr_admin_01',
-      userName: 'Nguyễn Hữu Thuận (Alan Hoàng)',
-      department: 'ASSA ABLOY Engineering',
-      source: 'STRAVA SYNC',
-      externalId: rawInput.externalId,
-      name: rawInput.name,
-      startDateIso: rawInput.startDateIso,
-      dateStr: 'Vừa xong • Đồng bộ tự động',
-      rawDistanceKm: evalRes.rawDistanceKm,
-      validDistanceKm: evalRes.validDistanceKm,
-      invalidDistanceKm: 0,
-      appliedMultiplier: 1.0,
-      finalCountedDistanceKm: evalRes.validDistanceKm,
-      movingTimeSec: evalRes.validMovingTimeSec,
-      avgPaceSecPerKm: evalRes.validAvgPaceSecPerKm,
-      elevationGain: 62,
-      avgHr: 160,
-      avgCadence: 178,
-      deviceName: 'Garmin Forerunner 965',
-      antiCheatStatus: evalRes.antiCheatStatus,
-      flagReasons: [],
-      polyline: SAMPLE_POLYLINE_SALA,
-      kudos: 1,
-      liked: true,
-      isHidden: false,
-      splits: evalRes.evaluatedSplits,
-    };
-
-    setActivities((prev) => [newAct, ...prev]);
-    setSelectedActivityId(newAct.id);
-    setSyncBannerMessage(
-      `Đồng bộ Strava thành công: đã ghi nhận +${evalRes.validDistanceKm} km hợp lệ vào tiến độ Giải chạy.`
-    );
-  };
-
   const handleGpxFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    setShowSimulatorDrawer(false);
     try {
       const xmlText = await file.text();
       const parsed = parseGpxToActivityInput(xmlText, file.name);
@@ -1618,36 +1488,24 @@ export default function TopRunWebApp() {
 
         {/* Bottom Sidebar Controls (Theme Switcher, Simulator Trigger, Athlete Profile) */}
         <div className="hidden lg:flex flex-col gap-3 p-4 border-t border-slate-200/80 dark:border-slate-800/80">
-          {/* Theme & Simulator Row */}
-          <div className="grid grid-cols-2 gap-2">
+          {/* Theme Switcher */}
+          <div>
             <button
               type="button"
               onClick={toggleTheme}
-              className="px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800/60 text-xs font-medium text-slate-700 dark:text-slate-300 flex items-center justify-center gap-2 transition cursor-pointer"
+              className="w-full px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800/60 text-xs font-medium text-slate-700 dark:text-slate-300 flex items-center justify-center gap-2 transition cursor-pointer"
             >
               {theme === 'dark' ? (
                 <>
                   <Sun className="w-3.5 h-3.5 text-amber-400" />
-                  <span>Nền sáng</span>
+                  <span>Chuyển sang Nền sáng</span>
                 </>
               ) : (
                 <>
                   <Moon className="w-3.5 h-3.5 text-slate-600" />
-                  <span>Nền tối</span>
+                  <span>Chuyển sang Nền tối</span>
                 </>
               )}
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setShowSimulatorDrawer(!showSimulatorDrawer)}
-              className={`px-3 py-2 rounded-xl border text-xs font-medium flex items-center justify-center gap-1.5 transition cursor-pointer ${showSimulatorDrawer
-                ? 'border-[#FC4C02] bg-[#FC4C02]/10 text-[#FC4C02]'
-                : 'border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800/60 text-slate-700 dark:text-slate-300'
-                }`}
-            >
-              <FlaskConical className="w-3.5 h-3.5" />
-              <span>Chế độ Test</span>
             </button>
           </div>
 
@@ -1768,53 +1626,7 @@ export default function TopRunWebApp() {
           </div>
         </header>
 
-        {/* Collapsible Simulator Drawer (Only visible when toggled) */}
-        {showSimulatorDrawer && (
-          <div className="bg-slate-900 text-white border-b border-slate-800 px-4 sm:px-8 py-3.5">
-            <div className="max-w-6xl mx-auto flex flex-wrap items-center justify-between gap-3">
-              <div className="flex items-center gap-2 text-xs text-slate-300">
-                <FlaskConical className="w-4 h-4 text-[#FC4C02] shrink-0" />
-                <span>
-                  <strong>Công cụ giả lập dữ liệu (Dev Simulator):</strong> Kiểm thử nhanh luồng nhận Webhook từ Strava và bộ lọc chống gian lận:
-                </span>
-              </div>
 
-              <div className="flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => handleSimulateStravaSync('clean_weekend')}
-                  className="px-3 py-1.5 rounded-lg bg-[#FC4C02] hover:bg-[#E34402] text-white text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer"
-                >
-                  <RefreshCw className="w-3.5 h-3.5" />
-                  <span>Giả lập +10KM hợp lệ</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => handleSimulateStravaSync('motorbike_last_km')}
-                  className="px-3 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer"
-                >
-                  <ShieldAlert className="w-3.5 h-3.5" />
-                  <span>Giả lập chạy 5KM + đi xe máy 1KM cuối</span>
-                </button>
-
-                <label className="cursor-pointer px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold flex items-center gap-1.5 transition">
-                  <FileUp className="w-3.5 h-3.5 text-sky-400" />
-                  <span>Tải file GPX</span>
-                  <input type="file" accept=".gpx,.xml" onChange={handleGpxFileUpload} className="hidden" />
-                </label>
-
-                <button
-                  type="button"
-                  onClick={() => setShowSimulatorDrawer(false)}
-                  className="p-1.5 rounded-lg text-slate-400 hover:text-white cursor-pointer"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
 
         {/* Notification Toast Banner */}
         {syncBannerMessage && (

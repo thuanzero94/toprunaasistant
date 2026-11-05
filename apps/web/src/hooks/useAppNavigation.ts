@@ -19,8 +19,7 @@ export type AppModal =
   | 'register'
   | 'participant'
   | 'create-event'
-  | 'share'
-  | 'simulator';
+  | 'share';
 
 export interface NavigationState {
   activeTab: NavTab;
@@ -134,7 +133,6 @@ export function useAppNavigation({
       'participant',
       'create-event',
       'share',
-      'simulator',
     ];
     const modal: AppModal | null =
       rawModal && validModals.includes(rawModal) ? rawModal : null;
