@@ -2,10 +2,10 @@
  * TOPRunAssistant - Script Phân định & Phân tách Tuyệt đối Dữ liệu Tracklog
  * 
  * Mục tiêu:
- * 1. Xác định chính xác danh sách bài chạy thực sự của VĐV Nguyễn Huy Long từ Strava (Athlete #68541399).
- * 2. Trả toàn bộ dữ liệu của Admin (bài chạy 16km Sala Thủ Thiêm, 5.09km, các bài test/seed) về cho Admin (Alan Nguyen).
- * 3. Đảm bảo mỗi User chỉ sở hữu đúng bài chạy của mình, không bị lẫn lộn giữa các tài khoản.
- * 4. Tính toán lại chính xác tiến độ giải đấu và tổng km cho từng người.
+ * 1. Dùng Token Strava của Nguyễn Huy Long để xác định chính xác danh sách bài chạy thuộc về Huy Long.
+ * 2. Lưu / cập nhật bài chạy của Huy Long bằng SQL trực tiếp để tránh lỗi Prisma relation.
+ * 3. Trả toàn bộ bài chạy còn lại (bài test, bài 16km Sala, bài 5.09km, bài seed của Admin) về cho Admin (Alan Nguyen).
+ * 4. Tính toán lại tiến độ giải đấu và tổng quãng đường cho từng tài khoản độc lập.
  */
 
 const fs = require('fs');
@@ -92,7 +92,7 @@ async function main() {
           const paceSec = distM > 0 ? Math.round(movingSec / (distM / 1000)) : 0;
           const validKm = Math.round((distM / 1000) * 100) / 100;
 
-          // Chi tiết Splits
+          // Lấy chi tiết Splits
           let splits = [];
           try {
             const detailRes = await fetch(`https://www.strava.com/api/v3/activities/${act.id}`, {
@@ -115,56 +115,70 @@ async function main() {
             }
           } catch (e) {}
 
-          const upserted = await prisma.activity.upsert({
-            where: { externalId: extId },
-            update: {
-              userId: longUser.id,
-              userName: longUser.fullName,
-              userAvatar: longUser.avatarUrl,
-              userDepartment: longUser.departmentOrUnit || 'Runner Community',
-              name: act.name || 'Strava Run',
-              sportType: act.sport_type || act.type || 'Run',
-              startDate: new Date(act.start_date || act.start_date_local || new Date()),
-              distanceMeters: distM,
-              validDistanceKm: validKm,
-              movingTimeSec: movingSec,
-              elapsedTimeSec: Number(act.elapsed_time || movingSec),
-              avgPaceSecPerKm: paceSec,
-              totalElevationGain: Number(act.total_elevation_gain || 0),
-              avgHeartrate: act.average_heartrate ? Math.round(Number(act.average_heartrate)) : null,
-              maxHeartrate: act.max_heartrate ? Math.round(Number(act.max_heartrate)) : null,
-              mapPolyline: act.map?.summary_polyline || act.map?.polyline || null,
-              antiCheatStatus: 'VALID',
-            },
-            create: {
-              id: `act_${extId}`,
-              userId: longUser.id,
-              userName: longUser.fullName,
-              userAvatar: longUser.avatarUrl,
-              userDepartment: longUser.departmentOrUnit || 'Runner Community',
-              source: 'STRAVA',
-              externalId: extId,
-              name: act.name || 'Strava Run',
-              sportType: act.sport_type || act.type || 'Run',
-              startDate: new Date(act.start_date || act.start_date_local || new Date()),
-              distanceMeters: distM,
-              validDistanceKm: validKm,
-              movingTimeSec: movingSec,
-              elapsedTimeSec: Number(act.elapsed_time || movingSec),
-              avgPaceSecPerKm: paceSec,
-              totalElevationGain: Number(act.total_elevation_gain || 0),
-              avgHeartrate: act.average_heartrate ? Math.round(Number(act.average_heartrate)) : null,
-              maxHeartrate: act.max_heartrate ? Math.round(Number(act.max_heartrate)) : null,
-              mapPolyline: act.map?.summary_polyline || act.map?.polyline || null,
-              antiCheatStatus: 'VALID',
-            },
-          });
+          // Kiểm tra xem bài chạy đã có trong DB chưa
+          const existingActs = await prisma.$queryRawUnsafe(
+            `SELECT id FROM activities WHERE "externalId" = $1 AND source = 'STRAVA' LIMIT 1`,
+            extId
+          );
 
+          let actId = `act_${extId}`;
+          if (existingActs && existingActs.length > 0) {
+            actId = existingActs[0].id;
+            await prisma.$executeRawUnsafe(
+              `UPDATE activities 
+               SET "userId" = $1, name = $2, "sportType" = $3, "startDate" = $4,
+                   "distanceMeters" = $5, "validDistanceKm" = $6, "movingTimeSec" = $7,
+                   "elapsedTimeSec" = $8, "avgPaceSecPerKm" = $9, "totalElevationGain" = $10,
+                   "mapPolyline" = $11, "updatedAt" = NOW()
+               WHERE id = $12`,
+              longUser.id,
+              act.name || 'Strava Run',
+              act.sport_type || act.type || 'Run',
+              new Date(act.start_date || act.start_date_local || new Date()),
+              distM,
+              validKm,
+              movingSec,
+              Number(act.elapsed_time || movingSec),
+              paceSec,
+              Number(act.total_elevation_gain || 0),
+              act.map?.summary_polyline || act.map?.polyline || null,
+              actId
+            );
+          } else {
+            await prisma.$executeRawUnsafe(
+              `INSERT INTO activities (
+                id, "userId", source, "externalId", name, "sportType", "startDate",
+                "distanceMeters", "validDistanceKm", "movingTimeSec", "elapsedTimeSec",
+                "avgPaceSecPerKm", "totalElevationGain", "mapPolyline", "antiCheatStatus",
+                "isManual", "isHidden", "kudosCount", "commentCount", "createdAt", "updatedAt"
+              ) VALUES (
+                $1, $2, 'STRAVA', $3, $4, $5, $6,
+                $7, $8, $9, $10,
+                $11, $12, $13, 'VALID',
+                false, false, 0, 0, NOW(), NOW()
+              )`,
+              actId,
+              longUser.id,
+              extId,
+              act.name || 'Strava Run',
+              act.sport_type || act.type || 'Run',
+              new Date(act.start_date || act.start_date_local || new Date()),
+              distM,
+              validKm,
+              movingSec,
+              Number(act.elapsed_time || movingSec),
+              paceSec,
+              Number(act.total_elevation_gain || 0),
+              act.map?.summary_polyline || act.map?.polyline || null
+            );
+          }
+
+          // Cập nhật splits
           if (splits.length > 0) {
-            await prisma.activitySplit.deleteMany({ where: { activityId: upserted.id } });
+            await prisma.activitySplit.deleteMany({ where: { activityId: actId } }).catch(() => {});
             await prisma.activitySplit.createMany({
               data: splits.map((sp) => ({
-                activityId: upserted.id,
+                activityId: actId,
                 splitIndex: sp.splitIndex,
                 distanceMeters: sp.distanceMeters,
                 movingTimeSec: sp.movingTimeSec,
@@ -174,7 +188,7 @@ async function main() {
                 isValid: true,
                 invalidReason: null,
               })),
-            });
+            }).catch(() => {});
           }
         }
       }
@@ -183,7 +197,7 @@ async function main() {
     }
   }
 
-  // 3. Phân tách và trả tất cả bài chạy KHÔNG THUỘC về Huy Long về lại cho Admin
+  // 3. Phân tách: Trả tất cả bài chạy KHÔNG THUỘC về Huy Long về cho Admin
   console.log('\n🔍 [CleanActivities] Đang quét và phân loại lại toàn bộ hoạt động trong DB...');
   const allActivities = await prisma.activity.findMany();
   let returnedCount = 0;
@@ -192,16 +206,12 @@ async function main() {
   for (const act of allActivities) {
     const isActuallyLong = longStravaExternalIds.has(act.externalId);
     if (!isActuallyLong && act.userId === longUser.id) {
-      // Bài này không nằm trong Strava của Huy Long -> Trả lại cho Admin!
-      await prisma.activity.update({
-        where: { id: act.id },
-        data: {
-          userId: adminUser.id,
-          userName: adminUser.fullName,
-          userAvatar: adminUser.avatarUrl,
-          userDepartment: adminUser.departmentOrUnit || 'ASSA ABLOY Engineering',
-        },
-      });
+      // Bài này KHÔNG nằm trong Strava của Huy Long -> Trả lại cho Admin qua SQL!
+      await prisma.$executeRawUnsafe(
+        `UPDATE activities SET "userId" = $1 WHERE id = $2`,
+        adminUser.id,
+        act.id
+      );
       returnedCount++;
       console.log(` ↩️ Trả về Admin: "${act.name}" (${act.validDistanceKm}km, id: ${act.id}, extId: ${act.externalId})`);
     } else if (isActuallyLong) {
@@ -333,4 +343,3 @@ async function main() {
 main()
   .catch((e) => console.error('❌ Lỗi:', e))
   .finally(async () => await prisma.$disconnect());
-
