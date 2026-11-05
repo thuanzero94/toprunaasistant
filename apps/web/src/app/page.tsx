@@ -823,6 +823,31 @@ export default function TopRunWebApp() {
     [mapBackendActivityToUi, user?.id, user?.role]
   );
 
+  const handleSelectActivityDetail = useCallback(
+    (actId: string, fromOrigin: string = 'tournaments') => {
+      // 1. Nếu bài chạy chưa có trong activities state (ví dụ bài chạy của VĐV khác), fetch ngay từ API
+      const existing = activities.find((a) => a.id === actId);
+      if (!existing) {
+        const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1';
+        const token = typeof window !== 'undefined' ? localStorage.getItem('toprun_auth_token') : null;
+        fetch(`${apiBase}/activities/${actId}`, {
+          headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        })
+          .then((res) => (res.ok ? res.json() : null))
+          .then((raw) => {
+            if (raw) {
+              const mapped = mapBackendActivityToUi(raw);
+              setActivities((prev) => [mapped, ...prev.filter((p) => p.id !== mapped.id)]);
+            }
+          })
+          .catch(() => {});
+      }
+      // 2. Chuyển tab sang Tracklog ở view Detail
+      navigateToTracklogDetail(actId, fromOrigin);
+    },
+    [activities, mapBackendActivityToUi, navigateToTracklogDetail]
+  );
+
   useEffect(() => {
     fetchActivitiesFromBackend(true);
     if (typeof window !== 'undefined') {
@@ -868,6 +893,9 @@ export default function TopRunWebApp() {
           validRawDistanceKm: a.validDistanceKm,
           finalMultipliedDistanceKm: roundKm(a.validDistanceKm * mult),
           elevationGainMeters: a.elevationGain || 0,
+          movingTimeSec: a.movingTimeSec || 0,
+          validAvgPaceSecPerKm: a.avgPaceSecPerKm || 0,
+          sportType: a.sportType || 'Run',
         };
       });
   }, [activities, currentEventData, user?.id]);
@@ -2522,6 +2550,9 @@ export default function TopRunWebApp() {
                 if (eventId) setSelectedEventId(eventId);
                 setShowEBibModal(true);
               }}
+              onViewRunnerDetail={(pData) => {
+                setSelectedParticipantDetail(pData);
+              }}
             />
           )}
 
@@ -2656,7 +2687,7 @@ export default function TopRunWebApp() {
         onClose={() => setSelectedParticipantDetail(null)}
         onSelectActivity={(actId) => {
           setSelectedParticipantDetail(null);
-          navigateToTracklogDetail(actId, 'tournaments');
+          handleSelectActivityDetail(actId, 'tournaments');
         }}
       />
 

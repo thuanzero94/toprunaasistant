@@ -204,7 +204,14 @@ export default function TournamentParticipantModal({
                 {participant.activities.map((act) => (
                   <div
                     key={act.id}
-                    className="p-3 bg-white dark:bg-slate-900/60 hover:bg-slate-50 dark:hover:bg-slate-800/40 flex items-center justify-between gap-3 text-xs transition"
+                    onClick={() => {
+                      if (onSelectActivity) {
+                        onSelectActivity(act.id);
+                        onClose();
+                      }
+                    }}
+                    className="p-3 bg-white dark:bg-slate-900/60 hover:bg-orange-50/50 dark:hover:bg-slate-800/60 flex items-center justify-between gap-3 text-xs transition cursor-pointer group"
+                    title="Nhấn để xem chi tiết Tracklog GPS bản đồ vệ tinh & Splits"
                   >
                     <div className="space-y-0.5">
                       <div className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5">

@@ -163,12 +163,15 @@ export default function UserTracklogExplorer({
   }, [activities, ownerFilter, statusFilter, sportListFilter, searchQuery, isAdmin, currentUserId]);
 
   const selectedActivity = useMemo(() => {
+    // 1. Ưu tiên tìm chính xác theo selectedActivityId trong toàn bộ activities (kể cả bài chạy VĐV khác vừa click từ BXH)
+    if (selectedActivityId) {
+      const direct = activities.find((a) => a.id === selectedActivityId);
+      if (direct) return direct;
+    }
+    // 2. Dự phòng tìm trong danh sách lọc
     if (filteredActivities.length === 0) return null;
-    return (
-      filteredActivities.find((a) => a.id === selectedActivityId) ||
-      filteredActivities[0]
-    );
-  }, [filteredActivities, selectedActivityId]);
+    return filteredActivities[0];
+  }, [activities, filteredActivities, selectedActivityId]);
 
   // Overall KPI statistics
   const summaryStats = useMemo(() => {
@@ -196,18 +199,42 @@ export default function UserTracklogExplorer({
     };
   }, [activities, ownerFilter, isAdmin, currentUserId]);
 
-  // If in Detail Mode and an activity is selected, render Full Detail View
-  if (viewMode === 'detail' && selectedActivity) {
+  // If in Detail Mode, render Full Detail View
+  if (viewMode === 'detail') {
+    if (selectedActivity) {
+      return (
+        <TracklogDetailView
+          activity={selectedActivity}
+          onBackToList={() => setViewMode('list')}
+          onOpenShareModal={onOpenShareModal}
+          onToggleHideActivity={onToggleHideActivity}
+          onDeleteActivity={onDeleteActivity}
+          isAdmin={isAdmin}
+          theme={theme}
+        />
+      );
+    }
     return (
-      <TracklogDetailView
-        activity={selectedActivity}
-        onBackToList={() => setViewMode('list')}
-        onOpenShareModal={onOpenShareModal}
-        onToggleHideActivity={onToggleHideActivity}
-        onDeleteActivity={onDeleteActivity}
-        isAdmin={isAdmin}
-        theme={theme}
-      />
+      <div className="rounded-2xl bg-white dark:bg-[#0F1420] border border-slate-200/80 dark:border-slate-800/80 p-12 text-center space-y-4 shadow-sm">
+        <div className="w-12 h-12 rounded-2xl bg-[#FC4C02]/10 text-[#FC4C02] flex items-center justify-center mx-auto">
+          <Activity className="w-6 h-6 animate-pulse" />
+        </div>
+        <div className="space-y-1">
+          <h3 className="text-base font-bold text-slate-900 dark:text-white">
+            Đang tải dữ liệu chi tiết GPS Tracklog...
+          </h3>
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            Hệ thống đang chuẩn bị bản đồ vệ tinh và bảng Splits từng km.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => setViewMode('list')}
+          className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-semibold hover:bg-slate-200 dark:hover:bg-slate-700 cursor-pointer"
+        >
+          Quay lại danh sách
+        </button>
+      </div>
     );
   }
 

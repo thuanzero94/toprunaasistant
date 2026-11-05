@@ -47,6 +47,7 @@ interface RunnerLeaderboardAndPrViewProps {
   activities: any[];
   onGoToAccountSettings?: () => void;
   onOpenEBibModal?: (eventId?: string) => void;
+  onViewRunnerDetail?: (runnerData: any) => void;
 }
 
 type LeaderboardTimeRange = 'THIS_MONTH' | 'ALL_TIME';
@@ -76,6 +77,7 @@ export default function RunnerLeaderboardAndPrView({
   activities = [],
   onGoToAccountSettings,
   onOpenEBibModal,
+  onViewRunnerDetail,
 }: RunnerLeaderboardAndPrViewProps) {
   const [usersList, setUsersList] = useState<LeaderboardUser[]>([]);
   const [monthlyLeaderboardData, setMonthlyLeaderboardData] = useState<Array<{
@@ -111,9 +113,20 @@ export default function RunnerLeaderboardAndPrView({
           }
         }
         if (resMonthly.ok) {
-          const monthlyData = await resMonthly.json();
-          if (isMounted && Array.isArray(monthlyData)) {
-            setMonthlyLeaderboardData(monthlyData);
+          const resJson = await resMonthly.json();
+          const items = Array.isArray(resJson) ? resJson : (resJson?.leaderboard || []);
+          if (isMounted) {
+            setMonthlyLeaderboardData(
+              items.map((r: any) => ({
+                userId: r.userId || r.id,
+                fullName: r.fullName,
+                avatarUrl: r.avatarUrl,
+                departmentOrUnit: r.departmentOrUnit,
+                monthlyDistanceKm: Number(r.monthlyDistanceKm || 0),
+                monthlyRunCount: Number(r.monthlyRunCount || 0),
+                monthlyAvgPaceSec: Number(r.monthlyAvgPaceSec || 0),
+              }))
+            );
           }
         }
       } catch {
@@ -157,32 +170,32 @@ export default function RunnerLeaderboardAndPrView({
   const currentMonthStatsByUser = useMemo(() => {
     const statsMap: Record<string, { totalKm: number; runCount: number }> = {};
 
-    // 1. Nạp từ Monthly Leaderboard API (toàn bộ VĐV trong hệ thống)
-    monthlyLeaderboardData.forEach((row) => {
-      statsMap[row.userId] = {
-        totalKm: roundKm(row.monthlyDistanceKm || 0),
-        runCount: row.monthlyRunCount || 0,
-      };
-    });
+    // 1. Nạp từ Monthly Leaderboard API (toàn bộ VĐV trong hệ thống từ PostgreSQL SSOT)
+    if (monthlyLeaderboardData.length > 0) {
+      monthlyLeaderboardData.forEach((row) => {
+        statsMap[row.userId] = {
+          totalKm: roundKm(row.monthlyDistanceKm || 0),
+          runCount: row.monthlyRunCount || 0,
+        };
+      });
+    } else {
+      // 2. Dự phòng ngoại tuyến / realtime từ activities nếu API chưa trả về
+      const now = new Date();
+      const curYear = now.getFullYear();
+      const curMonth = now.getMonth();
 
-    // 2. Dự phòng / Cập nhật realtime từ activities cá nhân nếu có
-    const now = new Date();
-    const curYear = now.getFullYear();
-    const curMonth = now.getMonth();
-
-    activities.forEach((act) => {
-      if (act.isHidden || act.validDistanceKm <= 0) return;
-      const d = act.startDateIso ? new Date(act.startDateIso) : new Date();
-      if (d.getFullYear() === curYear && d.getMonth() === curMonth) {
-        if (!statsMap[act.userId]) {
-          statsMap[act.userId] = { totalKm: 0, runCount: 0 };
-        }
-        if (statsMap[act.userId].totalKm < act.validDistanceKm) {
+      activities.forEach((act) => {
+        if (act.isHidden || act.validDistanceKm <= 0) return;
+        const d = act.startDateIso ? new Date(act.startDateIso) : new Date();
+        if (d.getFullYear() === curYear && d.getMonth() === curMonth) {
+          if (!statsMap[act.userId]) {
+            statsMap[act.userId] = { totalKm: 0, runCount: 0 };
+          }
           statsMap[act.userId].totalKm = roundKm(statsMap[act.userId].totalKm + act.validDistanceKm);
           statsMap[act.userId].runCount += 1;
         }
-      }
-    });
+      });
+    }
 
     return statsMap;
   }, [monthlyLeaderboardData, activities]);
@@ -441,11 +454,10 @@ export default function RunnerLeaderboardAndPrView({
             <button
               type="button"
               onClick={() => setTimeRange('THIS_MONTH')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
-                timeRange === 'THIS_MONTH'
-                  ? 'bg-white dark:bg-[#0F1420] text-[#FC4C02] shadow-xs'
-                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-              }`}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${timeRange === 'THIS_MONTH'
+                ? 'bg-white dark:bg-[#0F1420] text-[#FC4C02] shadow-xs'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                }`}
             >
               <Calendar className="w-3.5 h-3.5" />
               <span>{monthName}</span>
@@ -453,11 +465,10 @@ export default function RunnerLeaderboardAndPrView({
             <button
               type="button"
               onClick={() => setTimeRange('ALL_TIME')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
-                timeRange === 'ALL_TIME'
-                  ? 'bg-white dark:bg-[#0F1420] text-[#FC4C02] shadow-xs'
-                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-              }`}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${timeRange === 'ALL_TIME'
+                ? 'bg-white dark:bg-[#0F1420] text-[#FC4C02] shadow-xs'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                }`}
             >
               <TrendingUp className="w-3.5 h-3.5" />
               <span>Toàn thời gian</span>
@@ -472,55 +483,50 @@ export default function RunnerLeaderboardAndPrView({
             <button
               type="button"
               onClick={() => setCategory('TOTAL_KM')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition cursor-pointer ${
-                category === 'TOTAL_KM'
-                  ? 'bg-[#FC4C02] text-white shadow-xs'
-                  : 'bg-slate-100 dark:bg-slate-800/80 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
-              }`}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition cursor-pointer ${category === 'TOTAL_KM'
+                ? 'bg-[#FC4C02] text-white shadow-xs'
+                : 'bg-slate-100 dark:bg-slate-800/80 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+                }`}
             >
               🏃 Tổng Quãng Đường (KM)
             </button>
             <button
               type="button"
               onClick={() => setCategory('5K')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition cursor-pointer ${
-                category === '5K'
-                  ? 'bg-[#FC4C02] text-white shadow-xs'
-                  : 'bg-slate-100 dark:bg-slate-800/80 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
-              }`}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition cursor-pointer ${category === '5K'
+                ? 'bg-[#FC4C02] text-white shadow-xs'
+                : 'bg-slate-100 dark:bg-slate-800/80 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+                }`}
             >
               ⚡ PR 5KM
             </button>
             <button
               type="button"
               onClick={() => setCategory('10K')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition cursor-pointer ${
-                category === '10K'
-                  ? 'bg-[#FC4C02] text-white shadow-xs'
-                  : 'bg-slate-100 dark:bg-slate-800/80 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
-              }`}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition cursor-pointer ${category === '10K'
+                ? 'bg-[#FC4C02] text-white shadow-xs'
+                : 'bg-slate-100 dark:bg-slate-800/80 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+                }`}
             >
               🎖️ PR 10KM
             </button>
             <button
               type="button"
               onClick={() => setCategory('21K')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition cursor-pointer ${
-                category === '21K'
-                  ? 'bg-[#FC4C02] text-white shadow-xs'
-                  : 'bg-slate-100 dark:bg-slate-800/80 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
-              }`}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition cursor-pointer ${category === '21K'
+                ? 'bg-[#FC4C02] text-white shadow-xs'
+                : 'bg-slate-100 dark:bg-slate-800/80 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+                }`}
             >
               🏆 PR 21.1KM
             </button>
             <button
               type="button"
               onClick={() => setCategory('42K')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition cursor-pointer ${
-                category === '42K'
-                  ? 'bg-[#FC4C02] text-white shadow-xs'
-                  : 'bg-slate-100 dark:bg-slate-800/80 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
-              }`}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap transition cursor-pointer ${category === '42K'
+                ? 'bg-[#FC4C02] text-white shadow-xs'
+                : 'bg-slate-100 dark:bg-slate-800/80 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+                }`}
             >
               👑 PR 42.2KM
             </button>
@@ -576,11 +582,36 @@ export default function RunnerLeaderboardAndPrView({
               return (
                 <div
                   key={athlete.id}
-                  className={`flex items-center justify-between py-3 px-2 sm:px-3 rounded-xl transition ${
+                  onClick={() => {
+                    if (onViewRunnerDetail) {
+                      const userActs = activities.filter(
+                        (a) => a.userId === athlete.id && !a.isHidden && a.validDistanceKm > 0
+                      );
+                      const monthStats = currentMonthStatsByUser[athlete.id];
+                      const isThisMonth = category === 'TOTAL_KM' && timeRange === 'THIS_MONTH';
+                      const totalKm = isThisMonth ? (monthStats?.totalKm || 0) : (athlete.totalDistanceKm || 0);
+                      onViewRunnerDetail({
+                        userId: athlete.id,
+                        name: athlete.fullName,
+                        avatarUrl: athlete.avatarUrl,
+                        clubName: athlete.departmentOrUnit || 'ASSA ABLOY Engineering',
+                        bibNumber: (athlete as any).bibNumber || `TOP-${athlete.id.slice(-4).toUpperCase()}`,
+                        targetDistanceKm: isThisMonth ? 100 : (athlete.totalDistanceKm || 100),
+                        totalValidKm: totalKm,
+                        progressPercent: Math.min(100, Math.round((totalKm / 100) * 100)),
+                        rank: rank,
+                        role: athlete.role,
+                        honorBadge: athlete.honorBadge,
+                        activities: userActs,
+                      });
+                    }
+                  }}
+                  className={`flex items-center justify-between py-3 px-2 sm:px-3 rounded-xl transition cursor-pointer group ${
                     isMe
-                      ? 'bg-[#FC4C02]/10 border border-[#FC4C02]/30 shadow-xs'
-                      : 'hover:bg-slate-50 dark:hover:bg-slate-800/40'
+                      ? 'bg-[#FC4C02]/10 border border-[#FC4C02]/30 shadow-xs hover:bg-[#FC4C02]/15'
+                      : 'hover:bg-slate-50 dark:hover:bg-slate-800/60'
                   }`}
+                  title="Nhấn để xem chi tiết hoạt động của VĐV này"
                 >
                   {/* Left: Rank + Avatar + Name */}
                   <div className="flex items-center gap-3 min-w-0">
@@ -641,27 +672,30 @@ export default function RunnerLeaderboardAndPrView({
                     </div>
                   </div>
 
-                  {/* Right: Metrics */}
-                  <div className="text-right shrink-0 pl-2">
-                    {category === 'TOTAL_KM' ? (
-                      <div>
-                        <div className="text-base font-black font-mono text-slate-900 dark:text-white tabular-nums">
-                          {(athlete as any).displayValue} <span className="text-xs font-normal text-slate-400">km</span>
+                  {/* Right: Metrics & Arrow */}
+                  <div className="flex items-center gap-2 pl-2 shrink-0">
+                    <div className="text-right">
+                      {category === 'TOTAL_KM' ? (
+                        <div>
+                          <div className="text-base font-black font-mono text-slate-900 dark:text-white tabular-nums">
+                            {(athlete as any).displayValue} <span className="text-xs font-normal text-slate-400">km</span>
+                          </div>
+                          <div className="text-[10px] text-slate-400 font-mono">
+                            {(athlete as any).displaySub}
+                          </div>
                         </div>
-                        <div className="text-[10px] text-slate-400 font-mono">
-                          {(athlete as any).displaySub}
+                      ) : (
+                        <div>
+                          <div className="text-base font-black font-mono text-[#FC4C02] tabular-nums">
+                            {(athlete as any).displayFormatted}
+                          </div>
+                          <div className="text-[10px] text-slate-400 font-mono">
+                            {(athlete as any).displayPace}
+                          </div>
                         </div>
-                      </div>
-                    ) : (
-                      <div>
-                        <div className="text-base font-black font-mono text-[#FC4C02] tabular-nums">
-                          {(athlete as any).displayFormatted}
-                        </div>
-                        <div className="text-[10px] text-slate-400 font-mono">
-                          {(athlete as any).displayPace}
-                        </div>
-                      </div>
-                    )}
+                      )}
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-slate-300 dark:text-slate-600 group-hover:text-[#FC4C02] group-hover:translate-x-0.5 transition" />
                   </div>
                 </div>
               );

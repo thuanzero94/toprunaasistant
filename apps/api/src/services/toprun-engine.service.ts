@@ -2401,21 +2401,39 @@ export class TopRunEngineService implements OnModuleInit {
     const targetMonth = month !== undefined ? month : now.getMonth();
     const targetYear = year !== undefined ? year : now.getFullYear();
 
-    const startOfMonth = new Date(Date.UTC(targetYear, targetMonth, 1, 0, 0, 0));
-    const endOfMonth = new Date(Date.UTC(targetYear, targetMonth + 1, 0, 23, 59, 59));
+    // Múi giờ Việt Nam (UTC+7): 00:00:00 ngày 1 tương ứng 17:00:00 UTC ngày cuối tháng trước
+    const startOfMonth = new Date(Date.UTC(targetYear, targetMonth, 1, 0, 0, 0) - 7 * 3600 * 1000);
+    const endOfMonth = new Date(Date.UTC(targetYear, targetMonth + 1, 0, 23, 59, 59, 999) - 7 * 3600 * 1000);
 
-    const monthlyActs = await prisma.activity.findMany({
+    let monthlyActs = await prisma.activity.findMany({
       where: {
-        antiCheatStatus: 'VALID',
+        antiCheatStatus: { not: 'REJECTED' },
         isHidden: false,
         startDate: { gte: startOfMonth, lte: endOfMonth },
       },
       select: {
+        id: true,
         userId: true,
         validDistanceKm: true,
         movingTimeSec: true,
       },
     });
+
+    // Đồng bộ tức thời cùng bộ đệm bộ nhớ của Engine
+    const actIdSet = new Set(monthlyActs.map((a) => a.id));
+    for (const a of this.activities) {
+      if (a.isHidden || a.validDistanceKm <= 0 || a.antiCheatStatus === 'REJECTED') continue;
+      const d = new Date(a.startDateIso);
+      if (d >= startOfMonth && d <= endOfMonth && !actIdSet.has(a.id)) {
+        monthlyActs.push({
+          id: a.id,
+          userId: a.userId,
+          validDistanceKm: a.validDistanceKm,
+          movingTimeSec: a.movingTimeSec,
+        });
+        actIdSet.add(a.id);
+      }
+    }
 
     const userStatsMap: Record<string, { totalKm: number; runCount: number; totalSec: number }> = {};
     for (const a of monthlyActs) {
@@ -2433,6 +2451,7 @@ export class TopRunEngineService implements OnModuleInit {
         const avgPace = stats.totalKm > 0 ? Math.round(stats.totalSec / stats.totalKm) : 0;
         return {
           id: u.id,
+          userId: u.id,
           fullName: u.fullName,
           email: u.email,
           avatarUrl: u.avatarUrl,

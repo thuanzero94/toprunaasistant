@@ -466,11 +466,81 @@ export function calculateDualGoalProgress(params: {
       case ChallengeConditionType.SPEED_TARGET_TIME: {
         const requiredKm = tier.targetSpeedDistanceKm || 5.0;
         const maxTimeSec = tier.thresholdValue * 60;
-        const matchingRun = activityLogs.find(
-          (log) => log.validRawDistanceKm >= requiredKm && (log.movingTimeSec || 0) <= maxTimeSec && (log.movingTimeSec || 0) > 0
-        );
-        isUnlocked = Boolean(matchingRun);
-        currentValue = isUnlocked ? Math.round((matchingRun!.movingTimeSec || 0) / 60) : 0;
+        const targetPaceSec = requiredKm > 0 ? maxTimeSec / requiredKm : maxTimeSec;
+
+        // Tìm bài chạy hợp lệ có cự ly >= requiredKm đạt chuẩn tốc độ (Pace <= targetPaceSec hoặc Thời gian <= maxTimeSec)
+        const qualifyingRuns = activityLogs.filter((log) => {
+          if ((log.validRawDistanceKm || 0) < requiredKm) return false;
+          const paceSec =
+            log.validAvgPaceSecPerKm ||
+            (log.movingTimeSec && log.validRawDistanceKm > 0
+              ? log.movingTimeSec / log.validRawDistanceKm
+              : 0);
+          const timeForReqDistSec = paceSec > 0 ? paceSec * requiredKm : log.movingTimeSec || 0;
+
+          const meetsPace = paceSec > 0 && paceSec <= targetPaceSec + 1; // Margin 1s do làm tròn
+          const meetsTime = (log.movingTimeSec || 0) > 0 && (log.movingTimeSec || 0) <= maxTimeSec;
+          const meetsReqDistTime = timeForReqDistSec > 0 && timeForReqDistSec <= maxTimeSec + 2;
+
+          return meetsPace || meetsTime || meetsReqDistTime;
+        });
+
+        isUnlocked = qualifyingRuns.length > 0;
+        if (isUnlocked) {
+          const bestRun = qualifyingRuns.reduce((best, cur) => {
+            const curPace =
+              cur.validAvgPaceSecPerKm ||
+              (cur.movingTimeSec && cur.validRawDistanceKm > 0
+                ? cur.movingTimeSec / cur.validRawDistanceKm
+                : 99999);
+            const bestPace =
+              best.validAvgPaceSecPerKm ||
+              (best.movingTimeSec && best.validRawDistanceKm > 0
+                ? best.movingTimeSec / best.validRawDistanceKm
+                : 99999);
+            return curPace < bestPace ? cur : best;
+          });
+          const bestPace =
+            bestRun.validAvgPaceSecPerKm ||
+            (bestRun.movingTimeSec && bestRun.validRawDistanceKm > 0
+              ? bestRun.movingTimeSec / bestRun.validRawDistanceKm
+              : 0);
+          const bestTimeMinutes =
+            bestPace > 0
+              ? (bestPace * requiredKm) / 60
+              : (bestRun.movingTimeSec || 0) / 60;
+          currentValue = Math.round(bestTimeMinutes * 10) / 10;
+        } else {
+          // Nếu chưa đạt, hiển thị thời gian của bài chạy cự ly >= requiredKm có tốc độ tốt nhất
+          const candidates = activityLogs.filter((log) => (log.validRawDistanceKm || 0) >= requiredKm);
+          if (candidates.length > 0) {
+            const bestCandidate = candidates.reduce((best, cur) => {
+              const curPace =
+                cur.validAvgPaceSecPerKm ||
+                (cur.movingTimeSec && cur.validRawDistanceKm > 0
+                  ? cur.movingTimeSec / cur.validRawDistanceKm
+                  : 99999);
+              const bestPace =
+                best.validAvgPaceSecPerKm ||
+                (best.movingTimeSec && best.validRawDistanceKm > 0
+                  ? best.movingTimeSec / best.validRawDistanceKm
+                  : 99999);
+              return curPace < bestPace ? cur : best;
+            });
+            const bestPace =
+              bestCandidate.validAvgPaceSecPerKm ||
+              (bestCandidate.movingTimeSec && bestCandidate.validRawDistanceKm > 0
+                ? bestCandidate.movingTimeSec / bestCandidate.validRawDistanceKm
+                : 0);
+            const candTimeMinutes =
+              bestPace > 0
+                ? (bestPace * requiredKm) / 60
+                : (bestCandidate.movingTimeSec || 0) / 60;
+            currentValue = Math.round(candTimeMinutes * 10) / 10;
+          } else {
+            currentValue = 0;
+          }
+        }
         break;
       }
     }
