@@ -90,6 +90,8 @@ interface Props {
   onSyncStravaLive: () => Promise<void>;
   isSyncingStrava: boolean;
   theme: 'dark' | 'light';
+  viewingUser?: { id: string; name: string } | null;
+  onClearViewingUser?: () => void;
 }
 
 export default function UserTracklogExplorer({
@@ -107,6 +109,8 @@ export default function UserTracklogExplorer({
   onSyncStravaLive,
   isSyncingStrava,
   theme,
+  viewingUser,
+  onClearViewingUser,
 }: Props) {
   const isAdmin = currentUserRole === 'ADMIN';
   const [internalViewMode, setInternalViewMode] = useState<'list' | 'detail'>('list');
@@ -135,8 +139,15 @@ export default function UserTracklogExplorer({
   // Filter activities
   const filteredActivities = useMemo(() => {
     return activities.filter((act) => {
-      if (!isAdmin || ownerFilter === 'mine') {
+      if (viewingUser) {
+        if (act.userId !== viewingUser.id) return false;
+        if (act.isHidden && !isAdmin && !isMyActivity(act)) return false;
+      } else if (ownerFilter === 'mine') {
         if (!isMyActivity(act)) return false;
+      } else {
+        // ownerFilter === 'all': xem toàn bộ VĐV (Cộng đồng)
+        // Chỉ hiện các bài công khai đối với người khác
+        if (act.isHidden && !isAdmin && !isMyActivity(act)) return false;
       }
       if (statusFilter === 'hidden') {
         if (!act.isHidden) return false;
@@ -160,7 +171,7 @@ export default function UserTracklogExplorer({
       }
       return true;
     });
-  }, [activities, ownerFilter, statusFilter, sportListFilter, searchQuery, isAdmin, currentUserId]);
+  }, [activities, viewingUser, ownerFilter, statusFilter, sportListFilter, searchQuery, isAdmin, currentUserId]);
 
   const selectedActivity = useMemo(() => {
     // 1. Ưu tiên tìm chính xác theo selectedActivityId trong toàn bộ activities (kể cả bài chạy VĐV khác vừa click từ BXH)
@@ -176,10 +187,13 @@ export default function UserTracklogExplorer({
   // Overall KPI statistics
   const summaryStats = useMemo(() => {
     const scopeActs = activities.filter((act) => {
-      if (!isAdmin || ownerFilter === 'mine') {
+      if (viewingUser) {
+        return act.userId === viewingUser.id && (!act.isHidden || isAdmin || isMyActivity(act));
+      }
+      if (ownerFilter === 'mine') {
         return isMyActivity(act);
       }
-      return true;
+      return !act.isHidden || isAdmin || isMyActivity(act);
     });
 
     const activeActs = scopeActs.filter((a) => !a.isHidden && a.validDistanceKm > 0);
@@ -210,6 +224,7 @@ export default function UserTracklogExplorer({
           onToggleHideActivity={onToggleHideActivity}
           onDeleteActivity={onDeleteActivity}
           isAdmin={isAdmin}
+          isOwner={isMyActivity(selectedActivity)}
           theme={theme}
         />
       );
@@ -355,8 +370,23 @@ export default function UserTracklogExplorer({
          ===================================================================== */}
       <div className="rounded-2xl bg-white dark:bg-[#0F1420] border border-slate-200/80 dark:border-slate-800/80 p-3.5 flex flex-wrap items-center justify-between gap-3 shadow-sm">
         <div className="flex flex-wrap items-center gap-2">
-          {/* Owner Filter */}
-          {isAdmin ? (
+          {/* Owner Filter (Cho phép cả Runner & Admin xem bài của mình hoặc cộng đồng) */}
+          {viewingUser ? (
+            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[#FC4C02]/10 border border-[#FC4C02]/30 text-xs font-bold text-[#FC4C02]">
+              <User className="w-3.5 h-3.5" />
+              <span>VĐV: {viewingUser.name}</span>
+              {onClearViewingUser && (
+                <button
+                  type="button"
+                  onClick={onClearViewingUser}
+                  className="ml-1 text-slate-400 hover:text-slate-700 dark:hover:text-white cursor-pointer"
+                  title="Quay lại bài chạy của tôi"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+          ) : (
             <div className="inline-flex p-1 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-200/70 dark:border-slate-800">
               <button
                 type="button"
@@ -368,7 +398,7 @@ export default function UserTracklogExplorer({
                 }`}
               >
                 <User className="w-3.5 h-3.5 text-[#FC4C02]" />
-                <span>Hoạt động của tôi</span>
+                <span>Bài của tôi</span>
               </button>
               <button
                 type="button"
@@ -380,13 +410,8 @@ export default function UserTracklogExplorer({
                 }`}
               >
                 <Users className="w-3.5 h-3.5" />
-                <span>Toàn CLB (Admin)</span>
+                <span>Toàn bộ VĐV</span>
               </button>
-            </div>
-          ) : (
-            <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-200/70 dark:border-slate-800 text-xs font-semibold text-slate-700 dark:text-slate-300">
-              <User className="w-3.5 h-3.5 text-[#FC4C02]" />
-              <span>Hoạt động cá nhân ({summaryStats.totalRuns})</span>
             </div>
           )}
 

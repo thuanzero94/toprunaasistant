@@ -563,16 +563,17 @@ export class ApiController {
     @Query('userId') queryUserId?: string,
     @Headers('authorization') authHeader?: string
   ) {
-    let callerUserId = queryUserId;
-    let callerRole = 'RUNNER';
+    let viewerUserId: string | undefined = undefined;
+    let viewerRole = 'RUNNER';
     if (authHeader && authHeader.startsWith('Bearer ')) {
       const decoded = this.accountService.verifyJwt(authHeader.slice(7));
       if (decoded) {
-        callerRole = decoded.role;
-        callerUserId = callerRole === 'ADMIN' ? queryUserId : decoded.userId;
+        viewerRole = decoded.role;
+        viewerUserId = decoded.userId;
       }
     }
-    return this.engine.getActivities(callerUserId, callerRole);
+    const targetUserId = queryUserId || viewerUserId;
+    return this.engine.getActivities(targetUserId, viewerRole, viewerUserId);
   }
 
   @Get('activities/:id')

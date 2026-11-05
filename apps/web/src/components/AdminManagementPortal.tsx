@@ -25,6 +25,7 @@ import { AntiCheatStatus } from '@toprun/shared';
 import type { TracklogActivityItem } from './UserTracklogExplorer';
 import AdminTournamentsTable from './AdminTournamentsTable';
 import AdminStravaPoolManagement from './AdminStravaPoolManagement';
+import AdminGpsModerationPanel from './AdminGpsModerationPanel';
 import AthleteAvatar, { AthleteHonorPill } from './AthleteAvatar';
 
 export interface AdminCategoryItem {
@@ -1256,52 +1257,13 @@ export default function AdminManagementPortal({
 
       {/* SUB-VIEW 3: HÀNG ĐỢI KIỂM DUYỆT TỐC ĐỘ & GIAN LẬN GPS */}
       {adminSubTab === 'moderation' && (
-        <div className="rounded-2xl bg-white dark:bg-[#0F1420] border border-slate-200/80 dark:border-slate-800/80 p-6 space-y-4 shadow-sm">
-          <div>
-            <h2 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
-              <ShieldAlert className="w-4 h-4 text-amber-500" />
-              <span>Danh sách hoạt động có cắt đoạn tốc độ bất thường</span>
-            </h2>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-              Các buổi chạy có km vượt ngưỡng 03:00/km đã được hệ thống tự động tách phần lỗi
-            </p>
-          </div>
-
-          <div className="space-y-3">
-            {flaggedActivities.map((flaggedAct) => (
-              <div
-                key={flaggedAct.id}
-                className="p-4 rounded-xl bg-slate-50 dark:bg-slate-900/70 border border-slate-200/80 dark:border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-4"
-              >
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2">
-                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300">
-                      Đã cắt km lỗi
-                    </span>
-                    <span className="font-bold text-slate-900 dark:text-white text-sm">{flaggedAct.userName}</span>
-                    <span className="text-xs text-slate-400">• {flaggedAct.name}</span>
-                  </div>
-                  <p className="text-xs text-slate-600 dark:text-slate-300">{flaggedAct.flagReasons[0]}</p>
-                </div>
-
-                <div className="flex items-center gap-2 shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => onInspectFlaggedActivity(flaggedAct.id)}
-                    className="px-3 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 cursor-pointer"
-                  >
-                    Xem chi tiết
-                  </button>
-                </div>
-              </div>
-            ))}
-            {flaggedActivities.length === 0 && (
-              <div className="text-center py-8 text-xs text-slate-400">
-                Không có hoạt động nào bị gắn cờ bất thường trong hệ thống.
-              </div>
-            )}
-          </div>
-        </div>
+        <AdminGpsModerationPanel
+          activities={activities}
+          eventsList={eventsList}
+          onInspectFlaggedActivity={onInspectFlaggedActivity}
+          selectedEventId={selectedEventId}
+          onSelectEventId={onSelectEventId}
+        />
       )}
 
       {/* SUB-VIEW 4: QUẢN LÝ GIAO HÀNG RACE-KIT */}

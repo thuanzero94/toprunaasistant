@@ -13,6 +13,7 @@ import {
   MapPin,
   Clock,
   ExternalLink,
+  Compass,
 } from 'lucide-react';
 import { formatPace, roundKm, normalizeSportCategory } from '@toprun/shared';
 import AthleteAvatar, { AthleteHonorPill } from './AthleteAvatar';
@@ -38,12 +39,14 @@ interface TournamentParticipantModalProps {
   participant: ParticipantDetailData | null;
   onClose: () => void;
   onSelectActivity?: (activityId: string) => void;
+  onViewFullUserTracklogs?: (userId: string, userName: string) => void;
 }
 
 export default function TournamentParticipantModal({
   participant,
   onClose,
   onSelectActivity,
+  onViewFullUserTracklogs,
 }: TournamentParticipantModalProps) {
   if (!participant) return null;
 
@@ -201,66 +204,101 @@ export default function TournamentParticipantModal({
 
             {participant.activities && participant.activities.length > 0 ? (
               <div className="divide-y divide-slate-100 dark:divide-slate-800 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden">
-                {participant.activities.map((act) => (
-                  <div
-                    key={act.id}
-                    onClick={() => {
-                      if (onSelectActivity) {
-                        onSelectActivity(act.id);
-                        onClose();
-                      }
-                    }}
-                    className="p-3 bg-white dark:bg-slate-900/60 hover:bg-orange-50/50 dark:hover:bg-slate-800/60 flex items-center justify-between gap-3 text-xs transition cursor-pointer group"
-                    title="Nhấn để xem chi tiết Tracklog GPS bản đồ vệ tinh & Splits"
-                  >
-                    <div className="space-y-0.5">
-                      <div className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
-                        <span>{act.title || act.name || 'Buổi chạy tích luỹ'}</span>
-                      </div>
-                      <div className="text-[11px] text-slate-400 flex items-center gap-2">
-                        <span>
-                          {act.startDateIso
-                            ? new Date(act.startDateIso).toLocaleDateString('vi-VN')
-                            : act.dateStr || '—'}
-                        </span>
-                        <span>• Pace: {formatPace(act.avgPaceSecPerKm)}</span>
-                        {act.elevationGainM ? <span>• +{act.elevationGainM}m</span> : null}
-                      </div>
-                    </div>
+                {participant.activities.map((act) => {
+                  const sportCat = normalizeSportCategory(act.sportType);
+                  const sportIcon = sportCat === 'Ride' ? '🚴' : sportCat === 'Swim' ? '🏊' : '🏃';
+                  const countedKm = roundKm(act.finalCountedDistanceKm || act.validDistanceKm || 0);
+                  const rawKm = roundKm(act.validDistanceKm || act.rawDistanceKm || 0);
+                  const hasConversion = sportCat !== 'Run' && countedKm > 0 && countedKm !== rawKm;
 
-                    <div className="flex items-center gap-3">
-                      <div className="text-right">
-                        <div className="font-bold text-[#FC4C02] font-mono text-sm tabular-nums">
-                          +{roundKm(act.validDistanceKm)} km
+                  return (
+                    <div
+                      key={act.id}
+                      onClick={() => {
+                        if (onSelectActivity) {
+                          onSelectActivity(act.id);
+                          onClose();
+                        }
+                      }}
+                      className="p-3 bg-white dark:bg-slate-900/60 hover:bg-orange-50/50 dark:hover:bg-slate-800/60 flex items-center justify-between gap-3 text-xs transition cursor-pointer group"
+                      title="Nhấn để xem chi tiết Tracklog GPS bản đồ vệ tinh & Splits"
+                    >
+                      <div className="space-y-0.5">
+                        <div className="font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                          <span>{sportIcon}</span>
+                          <span>{act.title || act.name || 'Hoạt động trong giải'}</span>
+                          {hasConversion && (
+                            <span className="px-1.5 py-0.2 rounded text-[10px] font-mono bg-cyan-100 dark:bg-cyan-950/40 text-cyan-700 dark:text-cyan-300">
+                              Quy đổi
+                            </span>
+                          )}
                         </div>
-                        {act.kudosCount ? (
-                          <div className="text-[10px] text-slate-400 flex items-center justify-end gap-0.5">
-                            <ThumbsUp className="w-2.5 h-2.5 text-[#FC4C02]" />
-                            <span>{act.kudosCount}</span>
-                          </div>
-                        ) : null}
+                        <div className="text-[11px] text-slate-400 flex items-center gap-2">
+                          <span>
+                            {act.startDateIso
+                              ? new Date(act.startDateIso).toLocaleDateString('vi-VN')
+                              : act.dateStr || '—'}
+                          </span>
+                          <span>• Pace: {formatPace(act.avgPaceSecPerKm)}</span>
+                          {act.elevationGain || act.elevationGainM ? <span>• +{act.elevationGain || act.elevationGainM}m</span> : null}
+                        </div>
                       </div>
 
-                      {onSelectActivity && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            onSelectActivity(act.id);
-                            onClose();
-                          }}
-                          title="Xem chi tiết Tracklog GPS"
-                          className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 cursor-pointer"
-                        >
-                          <ExternalLink className="w-3.5 h-3.5" />
-                        </button>
-                      )}
+                      <div className="flex items-center gap-3">
+                        <div className="text-right">
+                          <div className="font-bold text-[#FC4C02] font-mono text-sm tabular-nums">
+                            +{countedKm} km
+                          </div>
+                          {hasConversion ? (
+                            <div className="text-[10px] text-slate-400 font-mono">
+                              ({rawKm} km gốc)
+                            </div>
+                          ) : act.kudosCount ? (
+                            <div className="text-[10px] text-slate-400 flex items-center justify-end gap-0.5">
+                              <ThumbsUp className="w-2.5 h-2.5 text-[#FC4C02]" />
+                              <span>{act.kudosCount}</span>
+                            </div>
+                          ) : null}
+                        </div>
+
+                        {onSelectActivity && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              onSelectActivity(act.id);
+                              onClose();
+                            }}
+                            title="Xem chi tiết Tracklog GPS"
+                            className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 cursor-pointer"
+                          >
+                            <ExternalLink className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             ) : (
               <div className="p-6 text-center rounded-xl bg-slate-50 dark:bg-slate-900/40 border border-slate-200 dark:border-slate-800 text-slate-400 text-xs">
                 Chưa có bài chạy hợp lệ nào được đồng bộ trong thời gian giải.
+              </div>
+            )}
+
+            {/* Nút Xem thêm đầy đủ tracklog của User */}
+            {onViewFullUserTracklogs && participant.userId && (
+              <div className="pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    onViewFullUserTracklogs(participant.userId, participant.name);
+                    onClose();
+                  }}
+                  className="w-full py-2.5 px-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/60 hover:bg-[#FC4C02]/10 dark:hover:bg-[#FC4C02]/15 text-slate-700 dark:text-slate-200 hover:text-[#FC4C02] text-xs font-bold transition flex items-center justify-center gap-2 cursor-pointer shadow-xs"
+                >
+                  <Compass className="w-4 h-4 text-[#FC4C02]" />
+                  <span>Xem thêm đầy đủ Tracklog của {participant.name} →</span>
+                </button>
               </div>
             )}
           </div>

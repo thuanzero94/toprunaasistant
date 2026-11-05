@@ -17,11 +17,11 @@ async function main() {
 
   // 1. Tạo Users (Admin, Organizer, và các Runners)
   const adminUser = await prisma.user.upsert({
-    where: { email: 'admin@toprun.vn' },
+    where: { email: 'thuanzero94@gmail.com' },
     update: {},
     create: {
       id: 'usr_admin_01',
-      email: 'admin@toprun.vn',
+      email: 'thuanzero94@gmail.com',
       fullName: 'Alan Hoàng (System Admin)',
       departmentOrUnit: 'ASSA ABLOY Engineering',
       role: UserRole.ADMIN,

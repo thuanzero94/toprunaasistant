@@ -1210,13 +1210,13 @@ export class TopRunEngineService implements OnModuleInit {
           clientId = dbConn.stravaApp.clientId;
           clientSecret = dbConn.stravaApp.clientSecret;
         }
-      } else if (user.role === 'ADMIN' && (user.id === 'usr_admin_01' || user.email === 'admin@toprun.vn')) {
+      } else if (user.role === 'ADMIN' && (user.id === 'usr_admin_01' || user.email === 'thuanzero94@gmail.com' || user.email === 'admin@toprun.vn')) {
         // Chỉ duy nhất Admin tài khoản gốc trong môi trường dev/demo mới được fallback về env config
         userAccessToken = this.stravaConfig.accessToken;
         userRefreshToken = this.stravaConfig.refreshToken;
       }
     } catch {
-      if (user.role === 'ADMIN' && (user.id === 'usr_admin_01' || user.email === 'admin@toprun.vn')) {
+      if (user.role === 'ADMIN' && (user.id === 'usr_admin_01' || user.email === 'thuanzero94@gmail.com' || user.email === 'admin@toprun.vn')) {
         userAccessToken = this.stravaConfig.accessToken;
         userRefreshToken = this.stravaConfig.refreshToken;
       }
@@ -2882,14 +2882,21 @@ export class TopRunEngineService implements OnModuleInit {
   // 4. ĐỒNG BỘ TRACKLOG TỪ STRAVA API / WEBHOOK / GPX & CHẤM ĐIỂM TỰ ĐỘNG
   // --------------------------------------------------------------------------
 
-  getActivities(userId?: string, role?: string) {
+  getActivities(userId?: string, role?: string, viewerUserId?: string) {
     let list: StoredActivity[] = [];
     if (role === 'ADMIN') {
       list = userId ? this.activities.filter((a) => a.userId === userId) : this.activities;
     } else if (userId) {
-      list = this.activities.filter((a) => a.userId === userId);
+      if (viewerUserId && viewerUserId === userId) {
+        // Chủ sở hữu xem bài của mình (bao gồm cả bài mình ẩn)
+        list = this.activities.filter((a) => a.userId === userId);
+      } else {
+        // VĐV xem bài của VĐV khác: chỉ lấy bài công khai
+        list = this.activities.filter((a) => a.userId === userId && !a.isHidden);
+      }
     } else {
-      return [];
+      // Feed chung công khai toàn cộng đồng: lấy các bài không bị ẩn
+      list = this.activities.filter((a) => !a.isHidden);
     }
 
     return list.map((a) => {

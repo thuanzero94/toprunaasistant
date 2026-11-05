@@ -38,6 +38,7 @@ interface TracklogDetailViewProps {
   onToggleHideActivity: (id: string) => Promise<void> | void;
   onDeleteActivity: (id: string) => Promise<void> | void;
   isAdmin?: boolean;
+  isOwner?: boolean;
   theme: 'dark' | 'light';
 }
 
@@ -48,6 +49,7 @@ export default function TracklogDetailView({
   onToggleHideActivity,
   onDeleteActivity,
   isAdmin = false,
+  isOwner = true,
   theme,
 }: TracklogDetailViewProps) {
   const [hoveredSplitKm, setHoveredSplitKm] = useState<number | null>(null);
@@ -395,19 +397,21 @@ export default function TracklogDetailView({
             <span>Chia sẻ ảnh Tracklog</span>
           </button>
 
-          <button
-            type="button"
-            onClick={() => onToggleHideActivity(activity.id)}
-            className={`px-3 py-2 rounded-xl border text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer ${
-              activity.isHidden
-                ? 'bg-amber-500/10 border-amber-500/30 text-amber-500 hover:bg-amber-500/20'
-                : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
-            }`}
-            title={activity.isHidden ? 'Bỏ ẩn và tính lại vào giải đấu' : 'Ẩn bài chạy khỏi giải đấu'}
-          >
-            {activity.isHidden ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
-            <span>{activity.isHidden ? 'Hiện lại' : 'Ẩn bài'}</span>
-          </button>
+          {(isAdmin || isOwner) && (
+            <button
+              type="button"
+              onClick={() => onToggleHideActivity(activity.id)}
+              className={`px-3 py-2 rounded-xl border text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer ${
+                activity.isHidden
+                  ? 'bg-amber-500/10 border-amber-500/30 text-amber-500 hover:bg-amber-500/20'
+                  : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+              }`}
+              title={activity.isHidden ? 'Bỏ ẩn và tính lại vào giải đấu' : 'Ẩn bài chạy khỏi giải đấu'}
+            >
+              {activity.isHidden ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+              <span>{activity.isHidden ? 'Hiện lại' : 'Ẩn bài'}</span>
+            </button>
+          )}
 
           {isAdmin && (
             <button

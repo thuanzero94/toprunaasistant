@@ -99,6 +99,12 @@ export class AccountService implements OnModuleInit {
     try {
       const defaultPwdHash = this.hashPassword('TopRun@2026');
 
+      // Tự động chuyển giao email tài khoản Admin về thuanzero94@gmail.com
+      await prisma.user.updateMany({
+        where: { OR: [{ email: 'admin@toprun.vn' }, { email: 'admin@toptun.vn' }, { id: 'usr_admin_01' }] },
+        data: { email: 'thuanzero94@gmail.com', role: UserRole.ADMIN },
+      }).catch(() => {});
+
       // Đảm bảo tài khoản SuperAdmin có email thuanzero94@gmail.com
       const adminUser = await prisma.user.upsert({
         where: { email: 'thuanzero94@gmail.com' },
@@ -232,11 +238,11 @@ export class AccountService implements OnModuleInit {
           console.log('✅ [AccountService] Đồng bộ bảng thành công! Đang hoàn tất khởi tạo tài khoản Admin...');
           const defaultPwdHash = this.hashPassword('TopRun@2026');
           await prisma.user.upsert({
-            where: { email: 'admin@toprun.vn' },
+            where: { email: 'thuanzero94@gmail.com' },
             update: { role: UserRole.ADMIN },
             create: {
               id: 'usr_admin_01',
-              email: 'admin@toprun.vn',
+              email: 'thuanzero94@gmail.com',
               passwordHash: defaultPwdHash,
               fullName: 'Nguyễn Hữu Thuận (Alan Hoàng)',
               avatarUrl: 'https://dgalywyr863hv.cloudfront.net/pictures/athletes/126278000/57450920/1/large.jpg',
@@ -507,13 +513,24 @@ export class AccountService implements OnModuleInit {
 
   async login(payload: { email: string; password: string }) {
     const emailClean = payload.email.trim().toLowerCase();
-    const user = await prisma.user.findUnique({
+    let user = await prisma.user.findUnique({
       where: { email: emailClean },
       include: {
         stravaConnection: true,
         stravaSyncLogs: { take: 10, orderBy: { createdAt: 'desc' } },
       },
     });
+
+    // Nếu gõ email admin cũ mà chưa tìm thấy, tự động đối chiếu sang thuanzero94@gmail.com
+    if (!user && (emailClean === 'admin@toprun.vn' || emailClean === 'admin@toptun.vn')) {
+      user = await prisma.user.findFirst({
+        where: { OR: [{ email: 'thuanzero94@gmail.com' }, { id: 'usr_admin_01' }] },
+        include: {
+          stravaConnection: true,
+          stravaSyncLogs: { take: 10, orderBy: { createdAt: 'desc' } },
+        },
+      });
+    }
 
     if (!user) {
       throw new UnauthorizedException('Email hoặc mật khẩu không chính xác.');
@@ -696,7 +713,7 @@ export class AccountService implements OnModuleInit {
   async deleteUser(targetUserId: string) {
     const user = await prisma.user.findUnique({ where: { id: targetUserId } });
     if (!user) throw new NotFoundException('Không tìm thấy tài khoản để xoá.');
-    if (user.email === 'admin@toprun.vn') {
+    if (user.email === 'thuanzero94@gmail.com' || user.email === 'admin@toprun.vn') {
       throw new BadRequestException('Không thể xoá tài khoản Quản trị viên tối cao.');
     }
 

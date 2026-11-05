@@ -76,6 +76,7 @@ import {
   toVietnamDateString,
   toVietnamEventStartIso,
   toVietnamEventEndIso,
+  isActivityInEventRange,
 } from '@toprun/shared';
 
 const SAMPLE_POLYLINE_SALA = encodePolyline([
@@ -220,6 +221,7 @@ export default function TopRunWebApp() {
   };
 
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
+  const [filterTracklogUser, setFilterTracklogUser] = useState<{ id: string; name: string } | null>(null);
   const [leaderboardMode, setLeaderboardMode] = useState<'individual' | 'team'>('individual');
   const [syncBannerMessage, setSyncBannerMessage] = useState<string | null>(null);
   const [isSyncingStrava, setIsSyncingStrava] = useState(false);
@@ -850,14 +852,121 @@ export default function TopRunWebApp() {
             if (raw) {
               const mapped = mapBackendActivityToUi(raw);
               setActivities((prev) => [mapped, ...prev.filter((p) => p.id !== mapped.id)]);
+              if (raw.userId && raw.userId !== user?.id) {
+                setFilterTracklogUser({ id: raw.userId, name: raw.userName || 'Vận động viên' });
+              }
             }
           })
           .catch(() => {});
+      } else {
+        if (existing.userId && existing.userId !== user?.id) {
+          setFilterTracklogUser({ id: existing.userId, name: existing.userName });
+        }
       }
       // 2. Chuyển tab sang Tracklog ở view Detail
       navigateToTracklogDetail(actId, fromOrigin);
     },
-    [activities, mapBackendActivityToUi, navigateToTracklogDetail]
+    [activities, mapBackendActivityToUi, navigateToTracklogDetail, user?.id]
+  );
+
+  const handleViewFullUserTracklogs = useCallback(
+    async (targetUserId: string, targetUserName: string) => {
+      setSelectedParticipantDetail(null);
+      setFilterTracklogUser({ id: targetUserId, name: targetUserName });
+      setActiveTab('tracklogs');
+      setTracklogViewMode('list');
+
+      try {
+        const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1';
+        const token = typeof window !== 'undefined' ? localStorage.getItem('toprun_auth_token') : null;
+        const res = await fetch(`${apiBase}/activities?userId=${encodeURIComponent(targetUserId)}`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
+        if (res.ok) {
+          const list = await res.json();
+          if (Array.isArray(list) && list.length > 0) {
+            const mapped = list.map(mapBackendActivityToUi);
+            setActivities((prev) => {
+              const prevIds = new Set(prev.map((a) => a.id));
+              const added = mapped.filter((m) => !prevIds.has(m.id));
+              return [...added, ...prev];
+            });
+            setSelectedActivityId(mapped[0]?.id || '');
+          }
+        }
+      } catch (err) {
+        console.error('Failed to load user tracklogs:', err);
+      }
+    },
+    [mapBackendActivityToUi, setActiveTab, setSelectedActivityId, setTracklogViewMode]
+  );
+
+  const handleOpenParticipantDetail = useCallback(
+    async (p: any, fromEvent: boolean = true) => {
+      const targetUserId = p.userId || '';
+      const targetUserName = p.userName || p.name || 'Vận động viên';
+      const targetKm = Number(p.targetDistanceKm || 50);
+      const multipliedKm = Number(p.multipliedDistanceKm ?? p.totalValidKm ?? 0);
+      const pct =
+        p.progressPercent !== undefined
+          ? Number(p.progressPercent)
+          : targetKm > 0
+          ? Math.min(100, Math.round((multipliedKm / targetKm) * 100))
+          : 0;
+
+      let userActivities = activities.filter((a) => a.userId === targetUserId);
+      if (userActivities.length === 0 && targetUserId) {
+        try {
+          const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1';
+          const token = typeof window !== 'undefined' ? localStorage.getItem('toprun_auth_token') : null;
+          const res = await fetch(`${apiBase}/activities?userId=${encodeURIComponent(targetUserId)}`, {
+            headers: token ? { Authorization: `Bearer ${token}` } : {},
+          });
+          if (res.ok) {
+            const list = await res.json();
+            if (Array.isArray(list) && list.length > 0) {
+              const mapped = list.map(mapBackendActivityToUi);
+              setActivities((prev) => {
+                const prevIds = new Set(prev.map((a) => a.id));
+                const added = mapped.filter((m) => !prevIds.has(m.id));
+                return [...added, ...prev];
+              });
+              userActivities = mapped;
+            }
+          }
+        } catch (err) {
+          console.error('Failed to load participant activities:', err);
+        }
+      }
+
+      // Nếu mở từ giải đấu: chỉ hiển thị bài trong thời gian giải và hợp lệ (không bị từ chối)
+      const filteredActs = fromEvent
+        ? userActivities.filter((a) => {
+            if (a.isHidden || a.antiCheatStatus === AntiCheatStatus.REJECTED) return false;
+            return a.startDateIso
+              ? isActivityInEventRange(a.startDateIso, currentEventData?.startDateIso, currentEventData?.endDateIso)
+              : false;
+          })
+        : userActivities.filter((a) => !a.isHidden && a.antiCheatStatus !== AntiCheatStatus.REJECTED);
+
+      setSelectedParticipantDetail({
+        userId: targetUserId,
+        name: targetUserName,
+        avatarUrl: p.userAvatar || p.avatarUrl || '',
+        clubName: p.department || p.clubName || 'ASSA ABLOY Vietnam',
+        bibNumber: p.bibNumber || 'TOP-0001',
+        targetDistanceKm: targetKm,
+        totalValidKm: multipliedKm,
+        progressPercent: pct,
+        rank: p.rank,
+        gender: p.gender,
+        challengeTierAchieved: p.challengeTierAchieved,
+        role: p.role,
+        honorBadge: p.honorBadge,
+        activities: filteredActs,
+      });
+    },
+    [activities, currentEventData?.startDateIso, currentEventData?.endDateIso, mapBackendActivityToUi]
   );
 
   useEffect(() => {
@@ -880,36 +989,54 @@ export default function TopRunWebApp() {
 
   // Tính toán danh sách bài chạy hợp lệ theo giải đang chọn (khớp thời gian giải đấu + nhân hệ số của giải đó)
   const myActivityLogs = useMemo(() => {
-    const evStart = currentEventData?.startDateIso ? new Date(currentEventData.startDateIso).getTime() : 0;
-    const evEnd = currentEventData?.endDateIso ? new Date(currentEventData.endDateIso).getTime() : Infinity;
-    const multiplier = currentEventData?.ruleConfig?.weekendMultiplier ?? 1.0;
-
     return activities
       .filter((a) => {
         const isMine = user?.id ? a.userId === user.id : false;
-        if (!isMine || a.isHidden || a.validDistanceKm <= 0) return false;
-
-        const actTime = a.startDateIso ? new Date(a.startDateIso).getTime() : Date.now();
-        return actTime >= evStart && actTime <= evEnd;
+        if (!isMine || a.isHidden || a.antiCheatStatus === AntiCheatStatus.REJECTED) return false;
+        return a.startDateIso
+          ? isActivityInEventRange(a.startDateIso, currentEventData?.startDateIso, currentEventData?.endDateIso)
+          : false;
       })
       .map((a) => {
-        let mult = 1.0;
-        if (a.startDateIso) {
-          const d = new Date(a.startDateIso).getUTCDay();
-          if ((d === 0 || d === 6) && multiplier > 1.0) {
-            mult = multiplier;
-          }
+        let validKm = a.validDistanceKm;
+        let finalKm = a.validDistanceKm;
+        let avgPace = a.avgPaceSecPerKm || 0;
+
+        if (currentEventData?.ruleConfig) {
+          const evEval = evaluateActivitySplits(
+            {
+              externalId: a.externalId,
+              name: a.name,
+              sportType: a.sportType || 'Run',
+              startDateIso: a.startDateIso || new Date().toISOString(),
+              distanceMeters: Math.round((a.rawDistanceKm || a.validDistanceKm || 0) * 1000),
+              movingTimeSec: a.movingTimeSec || 0,
+              elapsedTimeSec: a.elapsedTimeSec || a.movingTimeSec || 0,
+              totalElevationGainMeters: a.elevationGain || 0,
+              averageHeartrate: a.avgHr || null,
+              averageCadenceSpm: a.avgCadence || null,
+              isManual: false,
+              splits: a.splits,
+            },
+            currentEventData.ruleConfig
+          );
+          if (evEval.antiCheatStatus === AntiCheatStatus.REJECTED) return null;
+          validKm = evEval.validDistanceKm;
+          finalKm = evEval.finalCountedDistanceKm;
+          avgPace = evEval.validAvgPaceSecPerKm || a.avgPaceSecPerKm || 0;
         }
+
         return {
-          activityDateIso: (a as any).startDateIso || '2026-10-28T06:00:00Z',
-          validRawDistanceKm: a.validDistanceKm,
-          finalMultipliedDistanceKm: roundKm(a.validDistanceKm * mult),
+          activityDateIso: a.startDateIso || '2026-10-28T06:00:00Z',
+          validRawDistanceKm: validKm,
+          finalMultipliedDistanceKm: finalKm,
           elevationGainMeters: a.elevationGain || 0,
           movingTimeSec: a.movingTimeSec || 0,
-          validAvgPaceSecPerKm: a.avgPaceSecPerKm || 0,
+          validAvgPaceSecPerKm: avgPace,
           sportType: a.sportType || 'Run',
         };
-      });
+      })
+      .filter(Boolean) as any[];
   }, [activities, currentEventData, user?.id]);
 
   const userEventParticipation = useMemo(() => {
@@ -2284,23 +2411,7 @@ export default function TopRunWebApp() {
                                   return (
                                     <tr
                                       key={p.participationId || p.bibNumber || index}
-                                      onClick={() => {
-                                        setSelectedParticipantDetail({
-                                          userId: p.userId || '',
-                                          name: p.userName || 'Vận động viên',
-                                          avatarUrl: p.userAvatar || '',
-                                          clubName: p.department || 'ASSA ABLOY Vietnam',
-                                          bibNumber: p.bibNumber || 'TOP-0001',
-                                          targetDistanceKm: targetKm,
-                                          totalValidKm: multipliedKm,
-                                          progressPercent: pct,
-                                          rank: rank,
-                                          gender: p.gender,
-                                          activities: activities.filter(
-                                            (a) => a.userId === p.userId && !a.isHidden && a.validDistanceKm > 0
-                                          ),
-                                        });
-                                      }}
+                                      onClick={() => handleOpenParticipantDetail({ ...p, rank })}
                                       className={`transition cursor-pointer ${
                                         isMe
                                           ? 'bg-[#FC4C02]/10 dark:bg-[#FC4C02]/15 hover:bg-[#FC4C02]/20'
@@ -2547,6 +2658,8 @@ export default function TopRunWebApp() {
               onDeleteActivity={handleDeleteActivity}
               isSyncingStrava={isSyncingStrava}
               theme={theme}
+              viewingUser={filterTracklogUser}
+              onClearViewingUser={() => setFilterTracklogUser(null)}
             />
           )}
 
@@ -2563,7 +2676,7 @@ export default function TopRunWebApp() {
                 setShowEBibModal(true);
               }}
               onViewRunnerDetail={(pData) => {
-                setSelectedParticipantDetail(pData);
+                handleOpenParticipantDetail(pData, false);
               }}
             />
           )}
@@ -2701,6 +2814,7 @@ export default function TopRunWebApp() {
           setSelectedParticipantDetail(null);
           handleSelectActivityDetail(actId, 'tournaments');
         }}
+        onViewFullUserTracklogs={handleViewFullUserTracklogs}
       />
 
       {/* MODAL: CHI TIẾT THỬ THÁCH MỞ RỘNG (CHALLENGE AWARDS & DANH SÁCH VĐV) */}

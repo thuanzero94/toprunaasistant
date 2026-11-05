@@ -365,7 +365,7 @@ export default function AccountAndStravaPanel({
                 </span>
               </div>
               <p className="text-sm text-slate-500 dark:text-slate-400 mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
-                <span>{accountData?.user?.email || authUser?.email || 'admin@toprun.vn'}</span>
+                <span>{accountData?.user?.email || authUser?.email || 'thuanzero94@gmail.com'}</span>
                 <span className="text-slate-300 dark:text-slate-700">•</span>
                 <span className="font-medium text-slate-700 dark:text-slate-300">
                   {departmentOrUnit}
@@ -1031,7 +1031,7 @@ export default function AccountAndStravaPanel({
                   Email đăng nhập
                 </div>
                 <div className="text-sm font-bold text-slate-900 dark:text-white truncate">
-                  {accountData?.user?.email || authUser?.email || 'admin@toprun.vn'}
+                  {accountData?.user?.email || authUser?.email || 'thuanzero94@gmail.com'}
                 </div>
               </div>
 
