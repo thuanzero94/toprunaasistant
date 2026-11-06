@@ -2390,6 +2390,7 @@ export class TopRunEngineService implements OnModuleInit {
 
     const individualLeaderboard = eventParticipations.map((p, idx) => {
       const u = this.users.find((user) => user.id === p.userId);
+      const registeredTierIds = Array.isArray(p.selectedChallengeTierIds) ? p.selectedChallengeTierIds : [];
       return {
         rank: idx + 1,
         participationId: p.id,
@@ -2398,7 +2399,11 @@ export class TopRunEngineService implements OnModuleInit {
         userAvatar: u?.avatarUrl || p.userAvatar,
         department: u?.departmentOrUnit || p.userDepartment,
         bibNumber: p.bibNumber,
+        categoryId: p.categoryId,
+        teamId: p.teamId || null,
         teamName: p.teamName,
+        selectedChallengeTierIds: registeredTierIds,
+        raceKitOrder: p.raceKitOrder || null,
         targetCategoryName: p.categoryName,
         targetDistanceKm: p.targetDistanceKm,
         rawDistanceKm: p.dualGoalProgress.target.currentRawDistanceKm,
@@ -2406,9 +2411,11 @@ export class TopRunEngineService implements OnModuleInit {
         targetProgressPct: p.dualGoalProgress.target.progressPercentage,
         isTargetCompleted: p.dualGoalProgress.target.isCompleted,
         sportBreakdown: p.dualGoalProgress.sportBreakdown,
-        unlockedChallengesCount: p.dualGoalProgress.challenges.filter((c) => c.isUnlocked).length,
+        unlockedChallengesCount: p.dualGoalProgress.challenges.filter(
+          (c) => c.isUnlocked && registeredTierIds.includes(c.tierId)
+        ).length,
         unlockedChallengeBadges: p.dualGoalProgress.challenges
-          .filter((c) => c.isUnlocked)
+          .filter((c) => c.isUnlocked && registeredTierIds.includes(c.tierId))
           .map((c) => ({ tierName: c.tierName, badge: c.awardBadgeUrl })),
       };
     });
@@ -2423,7 +2430,7 @@ export class TopRunEngineService implements OnModuleInit {
 
     const challengeLeaderboards = event.challengeTiers.map((tier) => {
       const participants = eventParticipations
-        .filter((p) => (p.selectedChallengeTierIds || []).includes(tier.id) || p.dualGoalProgress.challenges.some((c) => c.tierId === tier.id))
+        .filter((p) => Array.isArray(p.selectedChallengeTierIds) && p.selectedChallengeTierIds.includes(tier.id))
         .map((p) => {
           const chStatus = p.dualGoalProgress.challenges.find((c) => c.tierId === tier.id);
           const u = this.users.find((user) => user.id === p.userId);
@@ -2433,6 +2440,12 @@ export class TopRunEngineService implements OnModuleInit {
             userAvatar: u?.avatarUrl || p.userAvatar,
             department: u?.departmentOrUnit || p.userDepartment,
             bibNumber: p.bibNumber,
+            categoryId: p.categoryId,
+            targetCategoryName: p.categoryName,
+            targetDistanceKm: p.targetDistanceKm,
+            multipliedDistanceKm: p.dualGoalProgress.target.currentMultipliedDistanceKm,
+            targetProgressPct: p.dualGoalProgress.target.progressPercentage,
+            sportBreakdown: p.dualGoalProgress.sportBreakdown,
             isUnlocked: Boolean(chStatus?.isUnlocked),
             unlockedAtIso: chStatus?.unlockedAtIso || null,
             currentValue: chStatus?.currentValue || 0,
@@ -2446,6 +2459,9 @@ export class TopRunEngineService implements OnModuleInit {
           if (a.unlockedAtIso && b.unlockedAtIso) {
             return new Date(a.unlockedAtIso).getTime() - new Date(b.unlockedAtIso).getTime();
           }
+          if (tier.conditionType === 'SPEED_TARGET_TIME') {
+            return (a.currentValue || 9999) - (b.currentValue || 9999);
+          }
           return b.currentValue - a.currentValue;
         })
         .map((p, idx) => ({ rank: idx + 1, ...p }));
@@ -2454,6 +2470,10 @@ export class TopRunEngineService implements OnModuleInit {
         tierId: tier.id,
         tierName: tier.tierName,
         tierLevel: tier.tierLevel,
+        conditionType: tier.conditionType,
+        targetSpeedDistanceKm: tier.targetSpeedDistanceKm,
+        minDailyDistanceKm: tier.minDailyDistanceKm,
+        thresholdValue: tier.thresholdValue,
         awardBadgeUrl: tier.awardBadgeUrl,
         rewardDescription: tier.rewardDescription,
         totalParticipants: participants.length,
@@ -2689,12 +2709,7 @@ export class TopRunEngineService implements OnModuleInit {
 
     part.bibNumber = bibClean;
     this.saveEngineState();
-    prisma.eventParticipation
-      .update({
-        where: { eventId_userId: { eventId: event.id, userId } },
-        data: { bibNumber: bibClean },
-      })
-      .catch(() => {});
+    this.persistParticipationToDb(part).catch(() => {});
     return {
       success: true,
       bibNumber: part.bibNumber,
@@ -2721,12 +2736,24 @@ export class TopRunEngineService implements OnModuleInit {
     if (!event) throw new NotFoundException('Không tìm thấy giải đấu');
 
     const user = await this.ensureUser(payload.userId);
-    const category = event.categories.find((c) => c.id === payload.categoryId) || event.categories[0];
+    const category = event.categories.find((c) => c.id === payload.categoryId || c.name === payload.categoryId) || event.categories[0];
     const team = event.teams.find((t) => t.id === payload.teamId) || null;
 
     const existing = this.participations.find((p) => p.eventId === event.id && p.userId === user.id);
     if (existing) {
-      if (payload.categoryId && payload.categoryId !== existing.categoryId) {
+      if (payload.bibNumber) {
+        const cleanBib = payload.bibNumber.trim().toUpperCase();
+        if (cleanBib && cleanBib.length >= 2 && cleanBib !== existing.bibNumber.toUpperCase()) {
+          const isDuplicate = this.participations.some(
+            (p) => p.eventId === event.id && p.userId !== user.id && p.bibNumber.toUpperCase() === cleanBib
+          );
+          if (isDuplicate) {
+            throw new BadRequestException(`Số BIB "${cleanBib}" đã có vận động viên khác trong giải sử dụng. Vui lòng chọn số khác.`);
+          }
+          existing.bibNumber = cleanBib;
+        }
+      }
+      if (payload.categoryId && category) {
         existing.categoryId = category.id;
         existing.categoryName = category.name;
         existing.targetDistanceKm = category.targetDistanceKm;
@@ -2750,7 +2777,7 @@ export class TopRunEngineService implements OnModuleInit {
         existing.teamId = team?.id || null;
         existing.teamName = team?.name || null;
       }
-      if (payload.selectedChallengeTierIds) {
+      if (Array.isArray(payload.selectedChallengeTierIds)) {
         existing.selectedChallengeTierIds = payload.selectedChallengeTierIds;
       }
       this.recalculateUserParticipation(user.id);

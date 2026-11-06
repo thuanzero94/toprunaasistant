@@ -46,16 +46,18 @@ export default function RunnerTrophyAndEBibView({
   onGoToExplore,
 }: RunnerTrophyAndEBibViewProps) {
   const [selectedEventId, setSelectedEventId] = useState<string>(() => {
-    return myEvents[0]?.id || trophyCase[0]?.eventId || '';
+    return currentEventData?.id || myEvents[0]?.id || trophyCase[0]?.eventId || '';
   });
   const [isCopiedBib, setIsCopiedBib] = useState(false);
 
-  // Sync selected event if list updates
+  // Sync selected event if currentEventData or list updates
   React.useEffect(() => {
-    if (!selectedEventId && myEvents.length > 0) {
+    if (currentEventData?.id) {
+      setSelectedEventId(currentEventData.id);
+    } else if (!selectedEventId && myEvents.length > 0) {
       setSelectedEventId(myEvents[0].id);
     }
-  }, [myEvents, selectedEventId]);
+  }, [currentEventData?.id, myEvents, selectedEventId]);
 
   // Selected event meta
   const activeMyEvent = useMemo(() => {
@@ -173,9 +175,9 @@ export default function RunnerTrophyAndEBibView({
                 type="button"
                 onClick={() =>
                   onOpenEditBib(
-                    activeMyEvent?.id || selectedEventId,
+                    activeMyEvent?.id || currentEventData?.id || selectedEventId,
                     currentBibNumber,
-                    activeMyEvent?.title || 'Giải đấu'
+                    activeMyEvent?.title || currentEventData?.title || 'Giải đấu'
                   )
                 }
                 className="px-2.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-xs font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1 transition cursor-pointer"

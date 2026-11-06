@@ -23,6 +23,7 @@ interface RunnerEventModalsProps {
   onChangeNewEventForm: (form: any) => void;
   onSubmitCreateNewEvent: (e: React.FormEvent) => void;
   currentEvent?: any;
+  myParticipation?: any;
   clubsList?: any[];
   currentUser?: any;
   currentUserName?: string;
@@ -53,6 +54,7 @@ export default function RunnerEventModals({
   onChangeNewEventForm,
   onSubmitCreateNewEvent,
   currentEvent,
+  myParticipation,
   clubsList = [],
   currentUser,
   currentUserName = '',
@@ -88,35 +90,54 @@ export default function RunnerEventModals({
   }, [editBibInitialValue, showEditBibModal]);
 
   useEffect(() => {
-    if (currentUser) {
-      if (currentUser.fullName) {
-        setRegRecipient(currentUser.fullName);
-        setRegEngraving(currentUser.fullName.toUpperCase());
-      }
-      if (currentUser.phone) {
-        setRegPhone(currentUser.phone);
-      }
-      if (currentUser.defaultShippingAddress) {
-        setRegAddress(currentUser.defaultShippingAddress);
-      }
-      if (currentUser.defaultShirtSize) {
-        setRegShirtSize(currentUser.defaultShirtSize);
-      }
-    } else if (currentUserName) {
-      setRegEngraving(currentUserName.toUpperCase());
-      setRegRecipient(currentUserName);
-    }
-  }, [currentUser, currentUserName, showRegisterModal]);
+    if (!showRegisterModal) return;
 
-  useEffect(() => {
-    if (currentEvent?.categories && currentEvent.categories.length > 0) {
-      const firstCat = currentEvent.categories[0];
-      setRegCategoryId(firstCat.id || firstCat.name);
-      const prefix = currentEvent.bibPrefix || firstCat.bibPrefix || 'PRO-';
-      const count = (currentEvent.participantsCount || (currentEvent.participants ? currentEvent.participants.length : 0)) + 101;
-      setRegBibNumber(`${prefix}${String(count).padStart(4, '0')}`);
+    const cats = currentEvent?.categories && currentEvent.categories.length > 0 ? currentEvent.categories : [];
+    const firstCat = cats[0];
+
+    if (myParticipation) {
+      // Pre-fill existing registration data for this event
+      const matchedCat = cats.find(
+        (c: any) =>
+          c.id === myParticipation.categoryId ||
+          c.name === myParticipation.targetCategoryName ||
+          Number(c.targetDistanceKm) === Number(myParticipation.targetDistanceKm)
+      );
+      setRegCategoryId(matchedCat ? matchedCat.id || matchedCat.name : myParticipation.categoryId || firstCat?.id || firstCat?.name || '');
+      setRegBibNumber(myParticipation.bibNumber || myBibNumber || '');
+      setSelectedChallengeIds(
+        Array.isArray(myParticipation.selectedChallengeTierIds) ? myParticipation.selectedChallengeTierIds : []
+      );
+      setRegTeamId(myParticipation.teamId || '');
+
+      const order = myParticipation.raceKitOrder;
+      setRegShirtSize(order?.shirtSize || myShirtSize || currentUser?.defaultShirtSize || 'L');
+      setRegEngraving(
+        order?.medalEngravingName || currentUser?.fullName?.toUpperCase() || currentUserName?.toUpperCase() || ''
+      );
+      setRegRecipient(order?.recipientName || currentUser?.fullName || currentUserName || '');
+      setRegPhone(order?.phone || currentUser?.phone || '0909123456');
+      setRegAddress(order?.shippingAddress || currentUser?.defaultShippingAddress || 'Văn phòng Công ty ASSA ABLOY');
+    } else {
+      // New registration defaults
+      if (firstCat) {
+        setRegCategoryId(firstCat.id || firstCat.name);
+        const prefix = currentEvent?.bibPrefix || firstCat.bibPrefix || 'PRO-';
+        const count =
+          (currentEvent?.participantCount ||
+            currentEvent?.participantsCount ||
+            (currentEvent?.individualLeaderboard ? currentEvent.individualLeaderboard.length : 0)) + 101;
+        setRegBibNumber(`${prefix}${String(count).padStart(4, '0')}`);
+      }
+      setSelectedChallengeIds([]);
+      setRegTeamId('');
+      setRegShirtSize(currentUser?.defaultShirtSize || myShirtSize || 'L');
+      setRegEngraving(currentUser?.fullName?.toUpperCase() || currentUserName?.toUpperCase() || '');
+      setRegRecipient(currentUser?.fullName || currentUserName || '');
+      setRegPhone(currentUser?.phone || '0909123456');
+      setRegAddress(currentUser?.defaultShippingAddress || 'Văn phòng Công ty ASSA ABLOY');
     }
-  }, [currentEvent]);
+  }, [showRegisterModal, currentEvent, myParticipation, currentUser, currentUserName, myBibNumber, myShirtSize]);
 
   const handleGenerateRandomBib = () => {
     const randomNum = Math.floor(1000 + Math.random() * 9000);
@@ -270,7 +291,7 @@ export default function RunnerEventModals({
                 </div>
                 <div>
                   <h3 className="text-base font-bold text-slate-900 dark:text-white">
-                    Đăng Ký Tham Gia Giải Đấu
+                    {myParticipation ? 'Cập Nhật Cự Ly, BIB & Thử Thách' : 'Đăng Ký Tham Gia Giải Đấu'}
                   </h3>
                   <p className="text-xs text-slate-500 dark:text-slate-400 font-medium line-clamp-1">
                     {currentEvent?.title || 'TOPRun Virtual Race'}
@@ -525,7 +546,7 @@ export default function RunnerEventModals({
                   className="px-5 py-2.5 rounded-xl bg-[#FC4C02] hover:bg-[#E34402] text-white text-xs font-bold flex items-center gap-1.5 shadow-sm transition cursor-pointer disabled:opacity-50"
                 >
                   <CheckCircle2 className="w-4 h-4" />
-                  <span>{isSubmittingReg ? 'Đang cấp E-BIB...' : 'Xác nhận đăng ký & Nhận E-BIB'}</span>
+                  <span>{isSubmittingReg ? 'Đang lưu thông tin...' : myParticipation ? 'Lưu cập nhật thông tin & E-BIB' : 'Xác nhận đăng ký & Nhận E-BIB'}</span>
                 </button>
               </div>
             </form>
@@ -662,7 +683,7 @@ export default function RunnerEventModals({
       )}
       {/* MODAL 4: ĐỔI SỐ BIB CÁ NHÂN */}
       {showEditBibModal && (
-        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[70] bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="max-w-md w-full rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0F1420] p-6 space-y-5 shadow-2xl animate-in fade-in zoom-in-95 duration-200">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
               <div className="flex items-center gap-2.5">

@@ -911,14 +911,19 @@ export default function TopRunWebApp() {
   );
 
   const handleOpenParticipantDetail = useCallback(
-    async (p: any, fromEvent: boolean = true) => {
+    async (p: any, fromEvent: boolean = true, challengeContext?: any) => {
       const targetUserId = p.userId || '';
-      const targetUserName = p.userName || p.name || 'Vận động viên';
-      const targetKm = Number(p.targetDistanceKm || 50);
-      const multipliedKm = Number(p.multipliedDistanceKm ?? p.totalValidKm ?? 0);
+      const leaderFallback = currentEventData?.individualLeaderboard?.find((x: any) => x.userId === targetUserId);
+      const targetUserName = p.userName || p.name || leaderFallback?.userName || 'Vận động viên';
+      const targetKm = Number(p.targetDistanceKm || leaderFallback?.targetDistanceKm || 50);
+      const multipliedKm = Number(p.multipliedDistanceKm ?? p.totalValidKm ?? leaderFallback?.multipliedDistanceKm ?? 0);
       const pct =
         p.progressPercent !== undefined
           ? Number(p.progressPercent)
+          : p.targetProgressPct !== undefined
+          ? Number(p.targetProgressPct)
+          : leaderFallback?.targetProgressPct !== undefined
+          ? Number(leaderFallback.targetProgressPct)
           : targetKm > 0
           ? Math.min(100, Math.round((multipliedKm / targetKm) * 100))
           : 0;
@@ -949,7 +954,7 @@ export default function TopRunWebApp() {
       }
 
       // Nếu mở từ giải đấu: chỉ hiển thị bài trong thời gian giải và hợp lệ (không bị từ chối)
-      const filteredActs = fromEvent
+      let filteredActs = fromEvent
         ? userActivities.filter((a) => {
             if (a.isHidden || a.antiCheatStatus === AntiCheatStatus.REJECTED) return false;
             return a.startDateIso
@@ -958,25 +963,86 @@ export default function TopRunWebApp() {
           })
         : userActivities.filter((a) => !a.isHidden && a.antiCheatStatus !== AntiCheatStatus.REJECTED);
 
+      let challengeFilterMeta: any = undefined;
+      if (challengeContext) {
+        const tierSpec =
+          currentEventData?.challengeTiers?.find((t: any) => t.id === challengeContext.tierId) || challengeContext;
+        const condType = tierSpec.conditionType || challengeContext.conditionType;
+        const thresholdVal = Number(tierSpec.thresholdValue ?? challengeContext.thresholdValue ?? 0);
+        const speedDistKm = Number(tierSpec.targetSpeedDistanceKm ?? challengeContext.targetSpeedDistanceKm ?? 5);
+
+        const annotatedActs = filteredActs.map((act) => {
+          const validKm = Number(act.validDistanceKm || 0);
+          const paceSec = Number(act.avgPaceSecPerKm || 0);
+          let isQualifying = false;
+          let metricNote = '';
+
+          if (condType === ChallengeConditionType.SPEED_TARGET_TIME) {
+            if (validKm >= speedDistKm && paceSec > 0) {
+              const timeMin = roundKm((paceSec * speedDistKm) / 60);
+              if (timeMin <= thresholdVal) {
+                isQualifying = true;
+                metricNote = `${timeMin} phút / ${speedDistKm}km`;
+              }
+            }
+          } else if (condType === ChallengeConditionType.SINGLE_LONG_RUN) {
+            if (validKm >= thresholdVal) {
+              isQualifying = true;
+              metricNote = `${validKm} km`;
+            }
+          } else if (validKm > 0) {
+            isQualifying = true;
+          }
+
+          return {
+            ...act,
+            isChallengeQualifying: isQualifying,
+            challengeMetricNote: metricNote,
+          };
+        });
+
+        const strictlyQualifying = annotatedActs.filter((a) => a.isChallengeQualifying);
+        filteredActs = strictlyQualifying.length > 0 ? strictlyQualifying : annotatedActs;
+
+        challengeFilterMeta = {
+          tierId: challengeContext.tierId,
+          tierName: challengeContext.tierName,
+          tierLevel: challengeContext.tierLevel,
+          conditionType: condType,
+          thresholdValue: thresholdVal,
+          targetSpeedDistanceKm: speedDistKm,
+          currentValue: p.currentValue ?? challengeContext.currentValue ?? 0,
+          isUnlocked: Boolean(p.isUnlocked),
+        };
+      }
+
       setSelectedParticipantDetail({
         userId: targetUserId,
         name: targetUserName,
-        avatarUrl: p.userAvatar || p.avatarUrl || '',
-        clubName: p.department || p.clubName || 'ASSA ABLOY Vietnam',
-        bibNumber: p.bibNumber || 'TOP-0001',
+        avatarUrl: p.userAvatar || p.avatarUrl || leaderFallback?.userAvatar || '',
+        clubName: p.department || p.clubName || leaderFallback?.department || 'ASSA ABLOY Vietnam',
+        bibNumber: p.bibNumber || leaderFallback?.bibNumber || 'TOP-0001',
         targetDistanceKm: targetKm,
         totalValidKm: multipliedKm,
         progressPercent: pct,
-        rank: p.rank,
+        rank: p.rank || leaderFallback?.rank,
         gender: p.gender,
-        challengeTierAchieved: p.challengeTierAchieved,
+        challengeTierAchieved: challengeContext ? challengeContext.tierName : p.challengeTierAchieved,
         role: p.role,
         honorBadge: p.honorBadge,
-        sportBreakdown: p.sportBreakdown,
+        sportBreakdown: p.sportBreakdown || leaderFallback?.sportBreakdown,
+        challengeFilter: challengeFilterMeta,
         activities: filteredActs,
       });
     },
-    [activities, currentEventData?.startDateIso, currentEventData?.endDateIso, mapBackendActivityToUi]
+    [
+      activities,
+      currentEventData?.startDateIso,
+      currentEventData?.endDateIso,
+      currentEventData?.individualLeaderboard,
+      currentEventData?.challengeTiers,
+      mapBackendActivityToUi,
+    ]
   );
 
   useEffect(() => {
@@ -1067,10 +1133,10 @@ export default function TopRunWebApp() {
     }
   }, [userEventParticipation, user?.id]);
 
-  const dualGoalProgress = calculateDualGoalProgress({
+  const rawDualGoalProgress = calculateDualGoalProgress({
     runMode: currentEventData?.runMode || RunMode.ACCUMULATIVE,
     targetCategory: {
-      id: userEventParticipation?.targetCategoryName || 'cat_target',
+      id: userEventParticipation?.categoryId || userEventParticipation?.targetCategoryName || 'cat_target',
       name: userEventParticipation?.targetCategoryName || `Hạng mục Mục tiêu ${myTargetKm}KM (Finisher)`,
       targetDistanceKm: myTargetKm,
       bibPrefix: myBibNumber.split('-')[0] + '-' || `TOP${myTargetKm}-`,
@@ -1080,6 +1146,22 @@ export default function TopRunWebApp() {
     activityLogs: myActivityLogs,
     previouslyCompletedTargetAtIso: '2026-10-25T07:15:00Z',
   });
+
+  const myRegisteredChallengeIds: string[] = Array.isArray(userEventParticipation?.selectedChallengeTierIds)
+    ? userEventParticipation.selectedChallengeTierIds
+    : [];
+
+  const dualGoalProgress = {
+    ...rawDualGoalProgress,
+    challenges: rawDualGoalProgress.challenges.map((c) => {
+      const isRegistered = myRegisteredChallengeIds.includes(c.tierId);
+      return {
+        ...c,
+        isRegistered,
+        isUnlocked: isRegistered ? c.isUnlocked : false,
+      };
+    }),
+  };
 
   const myEventsList: MyEventItem[] = useMemo(() => {
     if (!user?.id) return [];
@@ -2035,14 +2117,24 @@ export default function TopRunWebApp() {
                           >
                             <div className="space-y-1.5">
                               <div className="flex items-center justify-between gap-2">
-                                <span
-                                  className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded ${chal.isUnlocked
-                                    ? 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300'
-                                    : 'bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
-                                    }`}
-                                >
-                                  {chal.isUnlocked ? 'Đã đạt' : chal.tierLevel}
-                                </span>
+                                <div className="flex items-center gap-1.5">
+                                  <span
+                                    className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded ${chal.isUnlocked
+                                      ? 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300'
+                                      : 'bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+                                      }`}
+                                  >
+                                    {chal.isUnlocked ? 'Đã đạt' : chal.tierLevel}
+                                  </span>
+                                  <span
+                                    className={`text-[10px] font-semibold px-2 py-0.5 rounded ${(chal as any).isRegistered
+                                      ? 'bg-[#FC4C02]/15 text-[#FC4C02]'
+                                      : 'bg-slate-100 dark:bg-slate-800/80 text-slate-400'
+                                      }`}
+                                  >
+                                    {(chal as any).isRegistered ? 'Đã đăng ký' : 'Chưa đăng ký'}
+                                  </span>
+                                </div>
                                 <Medal
                                   className={`w-4 h-4 ${chal.isUnlocked ? 'text-amber-500' : 'text-slate-400 dark:text-slate-600'
                                     }`}
@@ -2125,9 +2217,11 @@ export default function TopRunWebApp() {
                                   tierId: chal.tierId,
                                   tierName: chal.tierName,
                                   tierLevel: chal.tierLevel,
+                                  conditionType: chal.conditionType,
+                                  targetSpeedDistanceKm: chal.targetSpeedDistanceKm,
                                   awardBadgeUrl: chal.awardBadgeUrl,
                                   thresholdValue: chal.thresholdValue,
-                                  totalParticipants: 0,
+                                  totalParticipants: (chal as any).isRegistered ? 1 : 0,
                                   completedCount: chal.isUnlocked ? 1 : 0,
                                   completedLeaderboard: chal.isUnlocked
                                     ? [
@@ -2144,18 +2238,20 @@ export default function TopRunWebApp() {
                                         },
                                       ]
                                     : [],
-                                  allParticipants: [
-                                    {
-                                      userId: user?.id,
-                                      userName: user?.fullName || 'Bạn',
-                                      userAvatar: user?.avatarUrl,
-                                      department: user?.departmentOrUnit || 'Runner',
-                                      bibNumber: myBibNumber,
-                                      isUnlocked: chal.isUnlocked,
-                                      currentValue: chal.currentValue,
-                                      thresholdValue: chal.thresholdValue,
-                                    },
-                                  ],
+                                  allParticipants: (chal as any).isRegistered
+                                    ? [
+                                        {
+                                          userId: user?.id,
+                                          userName: user?.fullName || 'Bạn',
+                                          userAvatar: user?.avatarUrl,
+                                          department: user?.departmentOrUnit || 'Runner',
+                                          bibNumber: myBibNumber,
+                                          isUnlocked: chal.isUnlocked,
+                                          currentValue: chal.currentValue,
+                                          thresholdValue: chal.thresholdValue,
+                                        },
+                                      ]
+                                    : [],
                                 };
                                 setSelectedChallengeModalData(chInfo);
                                 setChallengeModalTab('completed');
@@ -2167,7 +2263,7 @@ export default function TopRunWebApp() {
                                 Xem BXH &amp; VĐV ({
                                   currentEventData?.challengeLeaderboards?.find(
                                     (cl: any) => cl.tierId === chal.tierId
-                                  )?.totalParticipants ?? 1
+                                  )?.totalParticipants ?? ((chal as any).isRegistered ? 1 : 0)
                                 })
                               </span>
                             </button>
@@ -2656,7 +2752,9 @@ export default function TopRunWebApp() {
         myTargetKm={myTargetKm}
         onChangeTargetKm={(km) => {
           setMyTargetKm(km);
-          setMyBibNumber(`TOP${km}-0018`);
+          if (!userEventParticipation?.bibNumber) {
+            setMyBibNumber(`TOP${km}-0018`);
+          }
         }}
         myShirtSize={myShirtSize}
         onChangeShirtSize={setMyShirtSize}
@@ -2665,7 +2763,8 @@ export default function TopRunWebApp() {
         newEventForm={newEventForm}
         onChangeNewEventForm={setNewEventForm}
         onSubmitCreateNewEvent={handleCreateNewEvent}
-        currentEvent={eventsList.find((e) => e.id === selectedEventId) || currentEventData}
+        currentEvent={currentEventData || eventsList.find((e) => e.id === selectedEventId)}
+        myParticipation={userEventParticipation}
         clubsList={currentEventData?.teams || []}
         currentUser={user}
         currentUserName={user?.fullName || ''}
@@ -2773,7 +2872,13 @@ export default function TopRunWebApp() {
                       return (
                         <div
                           key={item.userId || idx}
-                          className={`flex items-center justify-between py-3 px-3 rounded-xl transition ${
+                          onClick={() => {
+                            const chCtx = selectedChallengeModalData;
+                            setSelectedChallengeModalData(null);
+                            handleOpenParticipantDetail(item, true, chCtx);
+                          }}
+                          title="Nhấn để xem Tracklog hợp lệ hoàn thành thử thách của VĐV"
+                          className={`flex items-center justify-between py-3 px-3 rounded-xl transition cursor-pointer group ${
                             isMe ? 'bg-[#FC4C02]/10 border border-[#FC4C02]/20' : 'hover:bg-slate-50 dark:hover:bg-slate-800/40'
                           }`}
                         >
@@ -2832,11 +2937,9 @@ export default function TopRunWebApp() {
                               <CheckCircle2 className="w-3 h-3" />
                               Đã mở khóa
                             </span>
-                            {item.unlockedAtIso && (
-                              <div className="text-[10px] text-slate-400 font-mono mt-0.5">
-                                {new Date(item.unlockedAtIso).toLocaleDateString('vi-VN')}
-                              </div>
-                            )}
+                            <div className="text-[10px] text-[#FC4C02] font-semibold mt-0.5 group-hover:underline">
+                              Xem Tracklog đạt giải →
+                            </div>
                           </div>
                         </div>
                       );
@@ -2856,7 +2959,13 @@ export default function TopRunWebApp() {
                       return (
                         <div
                           key={item.userId || idx}
-                          className={`flex items-center justify-between py-3 px-3 rounded-xl transition ${
+                          onClick={() => {
+                            const chCtx = selectedChallengeModalData;
+                            setSelectedChallengeModalData(null);
+                            handleOpenParticipantDetail(item, true, chCtx);
+                          }}
+                          title="Nhấn để xem Tracklog thử thách của VĐV"
+                          className={`flex items-center justify-between py-3 px-3 rounded-xl transition cursor-pointer group ${
                             isMe ? 'bg-[#FC4C02]/10 border border-[#FC4C02]/20' : 'hover:bg-slate-50 dark:hover:bg-slate-800/40'
                           }`}
                         >
@@ -2904,6 +3013,9 @@ export default function TopRunWebApp() {
                                 Đang thử thách
                               </span>
                             )}
+                            <div className="text-[10px] text-[#FC4C02] font-semibold mt-0.5 group-hover:underline">
+                              Xem Tracklog →
+                            </div>
                           </div>
                         </div>
                       );
