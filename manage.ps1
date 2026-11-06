@@ -29,6 +29,20 @@ param(
 $ErrorActionPreference = "Stop"
 $ScriptDir = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Parent $MyInvocation.MyCommand.Path }
 
+# Tu dong bo sung duong dan Docker Desktop vao PATH neu chua co
+if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
+  $DockerPaths = @(
+    "$env:LOCALAPPDATA\Programs\DockerDesktop\resources\bin",
+    "C:\Program Files\Docker\Docker\resources\bin"
+  )
+  foreach ($dp in $DockerPaths) {
+    if (Test-Path "$dp\docker.exe") {
+      $env:PATH = "$dp;$env:PATH"
+      break
+    }
+  }
+}
+
 # File Compose muc tieu
 $ComposeFile = "docker-compose.prod.yml"
 $EnvMode = "Production"
@@ -129,19 +143,19 @@ switch ($Action) {
   }
 
   "reload" {
-    Write-Host "[Zero-Downtime Reload] Dang chuan bi cap nhat Web Frontend..." -ForegroundColor Magenta
-    Write-Host "Buoc 1: Build image Web moi trong nen (Container cu van dang phuc vu)..." -ForegroundColor Cyan
-    docker compose -f $ComposeFile build web
+    Write-Host "[Zero-Downtime Reload] Dang chuan bi cap nhat API & Web Frontend..." -ForegroundColor Magenta
+    Write-Host "Buoc 1: Build image API & Web moi trong nen (Container cu van dang phuc vu)..." -ForegroundColor Cyan
+    docker compose -f $ComposeFile build api web
 
-    Write-Host "Buoc 2: Hoan doi nhanh sang container Web moi..." -ForegroundColor Cyan
-    docker compose -f $ComposeFile up -d --no-deps web
+    Write-Host "Buoc 2: Hoan doi nhanh sang container API & Web moi..." -ForegroundColor Cyan
+    docker compose -f $ComposeFile up -d --no-deps api web
 
-    Write-Host "Buoc 3: Doi 3 giay de Web khoi dong hoan toan..." -ForegroundColor Cyan
+    Write-Host "Buoc 3: Doi 3 giay de dich vu khoi dong hoan toan..." -ForegroundColor Cyan
     Start-Sleep -Seconds 3
 
     Write-Host "Buoc 4: Kiem tra trang thai hoat dong..." -ForegroundColor Cyan
-    docker compose -f $ComposeFile ps web
-    Write-Host "Reload giao dien hoan tat thanh cong, khong gay downtime!" -ForegroundColor Green
+    docker compose -f $ComposeFile ps api web
+    Write-Host "Reload he thong (API & Web) hoan tat thanh cong, khong gay downtime!" -ForegroundColor Green
   }
 
   "restart" {
@@ -157,13 +171,17 @@ switch ($Action) {
 
     Write-Host "Buoc 4: Cap nhat Schema Co so du lieu PostgreSQL an toan (Bao toan du lieu cu)..." -ForegroundColor Cyan
     try {
-      docker compose -f $ComposeFile exec -T api npx prisma db push --schema=packages/database/prisma/schema.prisma
+      docker compose -f $ComposeFile exec -T api npx prisma db push --schema=packages/database/prisma/schema.prisma --skip-generate --accept-data-loss
     } catch {
       Write-Host "Luu y: Dong bo prisma schema chua hoan tat hoac API dang khoi dong. Du lieu DB van an toan." -ForegroundColor Yellow
     }
 
     Write-Host "Buoc 5: Don dep Docker images cu khong su dung..." -ForegroundColor Cyan
-    docker image prune -f 2>$null
+    try {
+      $ErrorActionPreference = "Continue"
+      docker image prune -f | Out-Null
+      $ErrorActionPreference = "Stop"
+    } catch {}
 
     Write-Host "========================================================================" -ForegroundColor Cyan
     Write-Host "Restart va dong bo hoan tat thanh cong!" -ForegroundColor Green

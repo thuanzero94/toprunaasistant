@@ -559,7 +559,13 @@ export default function TopRunWebApp() {
           swimToRunRatio: Number(eventForm.swimToRunRatio) || 5.0,
         },
         categories: eventForm.categories,
-        challengeTiers: eventForm.challengeTiers,
+        challengeTiers: (eventForm.challengeTiers || []).map((t: any, idx: number) => ({
+          ...t,
+          id: t.id || t.tierCode || `tier_${Date.now()}_${idx}`,
+          sportCategory: t.sportCategory || 'Run',
+          awardBadgeUrl: t.awardBadgeUrl || (t.conditionType === 'SPEED_TARGET_TIME' ? '⚡' : '🏆'),
+          rewardDescription: t.rewardDescription || t.tierName || 'Thử thách mở rộng',
+        })),
       };
 
       const res = await fetch(`${apiBase}/events/${encodeURIComponent(selectedEventId)}`, {
@@ -1154,11 +1160,18 @@ export default function TopRunWebApp() {
   }, [activities, currentEventData, user?.id]);
 
   const userEventParticipation = useMemo(() => {
-    if (!currentEventData?.individualLeaderboard || !user?.id) return null;
-    return currentEventData.individualLeaderboard.find(
-      (p: any) => p.userId === user.id
-    );
-  }, [currentEventData, user?.id]);
+    if (!user?.id) return null;
+    if (currentEventData?.id === selectedEventId && Array.isArray(currentEventData?.individualLeaderboard)) {
+      const found = currentEventData.individualLeaderboard.find((p: any) => p.userId === user.id);
+      if (found) return found;
+    }
+    const evFromList = eventsList.find((e) => e.id === selectedEventId);
+    if (Array.isArray(evFromList?.participants)) {
+      const foundInList = evFromList.participants.find((p: any) => p.userId === user.id);
+      if (foundInList) return foundInList;
+    }
+    return currentEventData?.individualLeaderboard?.find((p: any) => p.userId === user.id) || null;
+  }, [currentEventData, eventsList, selectedEventId, user?.id]);
 
   useEffect(() => {
     if (userEventParticipation?.bibNumber) {
@@ -1197,6 +1210,8 @@ export default function TopRunWebApp() {
         ...c,
         isRegistered,
         isUnlocked: isRegistered ? c.isUnlocked : false,
+        currentValue: isRegistered ? c.currentValue : 0,
+        progressPercentage: isRegistered ? c.progressPercentage : 0,
       };
     }),
   };

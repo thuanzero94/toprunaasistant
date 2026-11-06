@@ -21,6 +21,7 @@ import {
   encodePolyline,
   evaluateActivitySplits,
   formatPace,
+  normalizeSportCategory,
   parseGpxToActivityInput,
   roundKm,
   isActivityInEventRange,
@@ -569,9 +570,10 @@ export class TopRunEngineService implements OnModuleInit {
 
   async persistEventToDb(ev: StoredEvent) {
     try {
-      const creatorId = this.users.some((u) => u.id === ev.creatorId)
-        ? ev.creatorId
-        : this.users[0]?.id || 'usr_admin_01';
+      const dbCreator =
+        (ev.creatorId ? await prisma.user.findUnique({ where: { id: ev.creatorId } }).catch(() => null) : null) ||
+        (await prisma.user.findFirst().catch(() => null));
+      const creatorId = dbCreator?.id || ev.creatorId || 'usr_admin_01';
 
       const challengeSportMap: Record<string, string> = {};
       for (const t of ev.challengeTiers || []) {
@@ -585,97 +587,101 @@ export class TopRunEngineService implements OnModuleInit {
         challengeSportMap,
       } as any;
 
+      const safeSlug = ev.slug || `evt-${ev.id}-${Date.now().toString().slice(-4)}`;
+      ev.slug = safeSlug;
+
       await prisma.event.upsert({
         where: { id: ev.id },
         update: {
-          title: ev.title,
-          subtitle: ev.subtitle,
-          description: ev.description,
-          bannerUrl: ev.bannerUrl,
-          eventType: ev.eventType as any,
-          runMode: ev.runMode as any,
-          status: ev.status as any,
+          title: ev.title || 'Giải chạy TOPRun',
+          subtitle: ev.subtitle || '',
+          description: ev.description || ev.title || '',
+          bannerUrl: ev.bannerUrl || '',
+          eventType: (ev.eventType as any) || 'MINI_CHALLENGE',
+          runMode: (ev.runMode as any) || 'ACCUMULATIVE',
+          status: (ev.status as any) || 'ACTIVE',
           startDate: new Date(toVietnamEventStartIso(ev.startDateIso)),
           endDate: new Date(toVietnamEventEndIso(ev.endDateIso)),
           ruleConfig: ev.ruleConfig as any,
           ebibConfig: (ev.ebibConfig as any) || null,
           bibPrefix: (ev as any).bibPrefix || 'PRO-',
-          participantCount: ev.participantCount,
+          participantCount: Number(ev.participantCount) || 0,
         },
         create: {
           id: ev.id,
-          slug: ev.slug,
-          title: ev.title,
-          subtitle: ev.subtitle,
-          description: ev.description,
-          bannerUrl: ev.bannerUrl,
-          eventType: ev.eventType as any,
-          runMode: ev.runMode as any,
-          status: ev.status as any,
+          slug: safeSlug,
+          title: ev.title || 'Giải chạy TOPRun',
+          subtitle: ev.subtitle || '',
+          description: ev.description || ev.title || '',
+          bannerUrl: ev.bannerUrl || '',
+          eventType: (ev.eventType as any) || 'MINI_CHALLENGE',
+          runMode: (ev.runMode as any) || 'ACCUMULATIVE',
+          status: (ev.status as any) || 'ACTIVE',
           startDate: new Date(toVietnamEventStartIso(ev.startDateIso)),
           endDate: new Date(toVietnamEventEndIso(ev.endDateIso)),
           ruleConfig: ev.ruleConfig as any,
           ebibConfig: (ev.ebibConfig as any) || null,
           bibPrefix: (ev as any).bibPrefix || 'PRO-',
           creatorId,
-          participantCount: ev.participantCount,
+          participantCount: Number(ev.participantCount) || 0,
         },
       });
 
       // 1. Đồng bộ & Bảo toàn Hạng mục Cự ly Target Categories
-      const activeCatIds = ev.categories
-        .map((c) => {
-          if (!c.id) {
-            c.id = `cat_${ev.id}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
-          }
-          return c.id;
-        })
-        .filter(Boolean);
-
-      if (activeCatIds.length > 0) {
-        // Kiểm tra xem có VĐV nào đã đăng ký vào category sắp bị xoá không
-        const registered = await prisma.eventParticipation.findMany({
-          where: {
-            eventId: ev.id,
-            categoryId: { notIn: activeCatIds },
-          },
-          include: { category: true },
-        });
-
-        if (registered.length > 0) {
-          const distinct = Array.from(new Set(registered.map((r) => r.category?.name || r.categoryId))).join(', ');
-          throw new BadRequestException(
-            `Không thể xoá cự ly "${distinct}" vì đã có ${registered.length} VĐV đăng ký tham gia. Vui lòng giữ lại cự ly để bảo toàn dữ liệu thi đấu của VĐV.`
-          );
-        }
-
-        // Xoá an toàn các categories cũ không còn trong cấu hình
-        await prisma.eventCategory.deleteMany({
-          where: {
-            eventId: ev.id,
-            id: { notIn: activeCatIds },
-          },
-        }).catch(() => {});
-      }
-
-      for (const cat of ev.categories) {
+      const activeCatIds: string[] = [];
+      for (const cat of ev.categories || []) {
         const catId = cat.id || `cat_${ev.id}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
         cat.id = catId;
+        activeCatIds.push(catId);
         await prisma.eventCategory.upsert({
           where: { id: catId },
           update: {
-            name: cat.name,
-            targetDistanceKm: Number(cat.targetDistanceKm),
+            name: cat.name || `Mục tiêu ${cat.targetDistanceKm || 21}KM`,
+            targetDistanceKm: Number(cat.targetDistanceKm) || 21,
             bibPrefix: cat.bibPrefix || (ev as any).bibPrefix || 'PRO-',
           },
           create: {
             id: catId,
             eventId: ev.id,
-            name: cat.name,
-            targetDistanceKm: Number(cat.targetDistanceKm),
+            name: cat.name || `Mục tiêu ${cat.targetDistanceKm || 21}KM`,
+            targetDistanceKm: Number(cat.targetDistanceKm) || 21,
             bibPrefix: cat.bibPrefix || (ev as any).bibPrefix || 'PRO-',
           },
         });
+      }
+
+      if (activeCatIds.length > 0) {
+        const fallbackCat = ev.categories[0];
+        // Nếu có VĐV đang gắn với category cũ đã bị thay thế/xoá, tự động chuyển sang category đầu tiên để không lỗi khoá ngoại
+        await prisma.eventParticipation
+          .updateMany({
+            where: {
+              eventId: ev.id,
+              categoryId: { notIn: activeCatIds },
+            },
+            data: {
+              categoryId: fallbackCat.id,
+            },
+          })
+          .catch(() => {});
+
+        for (const p of this.participations) {
+          if (p.eventId === ev.id && !activeCatIds.includes(p.categoryId)) {
+            p.categoryId = fallbackCat.id;
+            p.categoryName = fallbackCat.name;
+            p.targetDistanceKm = Number(fallbackCat.targetDistanceKm) || 21;
+          }
+        }
+
+        // Xoá an toàn các categories cũ không còn trong cấu hình
+        await prisma.eventCategory
+          .deleteMany({
+            where: {
+              eventId: ev.id,
+              id: { notIn: activeCatIds },
+            },
+          })
+          .catch(() => {});
       }
 
       // 2. Đồng bộ Thử thách mở rộng Challenge Tiers (Cho phép Admin xoá và tạo lại thử thách mới)
@@ -697,37 +703,61 @@ export class TopRunEngineService implements OnModuleInit {
         })
         .catch(() => {});
 
-      for (const tier of ev.challengeTiers) {
+      const validConditions = [
+        'DISTANCE_OVERACHIEVE',
+        'STREAK_DAYS',
+        'SINGLE_RUN_DISTANCE',
+        'ELEVATION_GAIN',
+        'SPEED_TARGET_TIME',
+      ];
+
+      for (const tier of ev.challengeTiers || []) {
         const tierId = tier.id || (tier as any).tierCode || `tier_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
         tier.id = tierId;
+        const condType = validConditions.includes(tier.conditionType)
+          ? tier.conditionType
+          : 'DISTANCE_OVERACHIEVE';
+        const safeBadge = tier.awardBadgeUrl || (condType === 'SPEED_TARGET_TIME' ? '⚡' : '🏆');
+        const safeName = tier.tierName || 'Thử thách mở rộng';
+        const safeDesc = tier.rewardDescription || safeName;
+        const safeLevel = tier.tierLevel || 'SPECIAL';
+        const safeThreshold = Number.isFinite(Number(tier.thresholdValue)) ? Number(tier.thresholdValue) : 0;
+
+        tier.awardBadgeUrl = safeBadge;
+        tier.tierName = safeName;
+        tier.rewardDescription = safeDesc;
+        tier.tierLevel = safeLevel as any;
+        tier.conditionType = condType as any;
+        tier.thresholdValue = safeThreshold;
+
         await prisma.eventChallengeTier.upsert({
           where: { id: tierId },
           update: {
-            tierName: tier.tierName,
-            tierLevel: tier.tierLevel,
-            conditionType: tier.conditionType as any,
-            thresholdValue: Number(tier.thresholdValue),
+            tierName: safeName,
+            tierLevel: safeLevel,
+            conditionType: condType as any,
+            thresholdValue: safeThreshold,
             targetSpeedDistanceKm: tier.targetSpeedDistanceKm ? Number(tier.targetSpeedDistanceKm) : null,
             minDailyDistanceKm: tier.minDailyDistanceKm ? Number(tier.minDailyDistanceKm) : 2.0,
-            awardBadgeUrl: tier.awardBadgeUrl,
-            rewardDescription: tier.rewardDescription,
+            awardBadgeUrl: safeBadge,
+            rewardDescription: safeDesc,
           },
           create: {
             id: tierId,
             eventId: ev.id,
-            tierName: tier.tierName,
-            tierLevel: tier.tierLevel,
-            conditionType: tier.conditionType as any,
-            thresholdValue: Number(tier.thresholdValue),
+            tierName: safeName,
+            tierLevel: safeLevel,
+            conditionType: condType as any,
+            thresholdValue: safeThreshold,
             targetSpeedDistanceKm: tier.targetSpeedDistanceKm ? Number(tier.targetSpeedDistanceKm) : null,
             minDailyDistanceKm: tier.minDailyDistanceKm ? Number(tier.minDailyDistanceKm) : 2.0,
-            awardBadgeUrl: tier.awardBadgeUrl,
-            rewardDescription: tier.rewardDescription,
+            awardBadgeUrl: safeBadge,
+            rewardDescription: safeDesc,
           },
         });
       }
 
-      for (const tm of ev.teams) {
+      for (const tm of ev.teams || []) {
         await prisma.eventTeam.upsert({
           where: { id: tm.id },
           update: {
@@ -2364,10 +2394,17 @@ export class TopRunEngineService implements OnModuleInit {
         participants: parts.map((p) => ({
           userId: p.userId,
           bibNumber: p.bibNumber,
+          categoryId: p.categoryId,
+          targetCategoryName: p.categoryName,
           targetDistanceKm: p.targetDistanceKm,
+          teamId: p.teamId || null,
+          selectedChallengeTierIds: Array.isArray(p.selectedChallengeTierIds) ? p.selectedChallengeTierIds : [],
+          raceKitOrder: p.raceKitOrder || null,
           totalValidKm: p.dualGoalProgress?.target?.currentMultipliedDistanceKm || 0,
           rank: 0,
-          challengeTier: p.dualGoalProgress?.challenges?.find((c) => c.isUnlocked)?.tierName,
+          challengeTier: p.dualGoalProgress?.challenges?.find(
+            (c) => c.isUnlocked && Array.isArray(p.selectedChallengeTierIds) && p.selectedChallengeTierIds.includes(c.tierId)
+          )?.tierName,
         })),
       };
     });
@@ -3043,7 +3080,8 @@ export class TopRunEngineService implements OnModuleInit {
         }
       }
 
-      part.dualGoalProgress = calculateDualGoalProgress({
+      const registeredIds = Array.isArray(part.selectedChallengeTierIds) ? part.selectedChallengeTierIds : [];
+      const rawProgress = calculateDualGoalProgress({
         runMode: ev.runMode,
         targetCategory: {
           id: part.categoryId,
@@ -3054,6 +3092,20 @@ export class TopRunEngineService implements OnModuleInit {
         challengeTiers: ev.challengeTiers,
         activityLogs: logs,
       });
+
+      part.dualGoalProgress = {
+        ...rawProgress,
+        challenges: rawProgress.challenges.map((c) => {
+          const isReg = registeredIds.includes(c.tierId);
+          return {
+            ...c,
+            isUnlocked: isReg ? c.isUnlocked : false,
+            unlockedAtIso: isReg ? c.unlockedAtIso : null,
+            currentValue: isReg ? c.currentValue : 0,
+            progressPercentage: isReg ? c.progressPercentage : 0,
+          };
+        }),
+      };
 
       if (
         part.dualGoalProgress.target.isCompleted &&

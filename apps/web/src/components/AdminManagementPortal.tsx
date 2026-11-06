@@ -45,6 +45,7 @@ export interface AdminChallengeTierItem {
   thresholdValue: number;
   targetSpeedDistanceKm?: number;
   targetSpeedPaceFormatted?: string;
+  awardBadgeUrl?: string;
   rewardDescription: string;
 }
 
@@ -878,6 +879,7 @@ export default function AdminManagementPortal({
                           sportCategory: 'Run',
                           targetSpeedDistanceKm: 5,
                           thresholdValue: 25,
+                          awardBadgeUrl: '⚡',
                           rewardDescription: 'Chạy cự ly 5km đạt Pace ≤ 05:00/km (Thời gian ≤ 25:00)',
                         };
                         onChangeEventForm({ ...eventForm, challengeTiers: [...tiers, newTier] });
@@ -901,6 +903,7 @@ export default function AdminManagementPortal({
                           conditionType: 'DISTANCE_OVERACHIEVE',
                           sportCategory: 'Run',
                           thresholdValue: 100,
+                          awardBadgeUrl: '🏆',
                           rewardDescription: 'Vượt mốc tích luỹ km chạy bộ thực tế',
                         };
                         onChangeEventForm({ ...eventForm, challengeTiers: [...tiers, newTier] });

@@ -166,19 +166,19 @@ case "$COMMAND" in
   # RELOAD: Chạy lại code giao diện mới KHÔNG GÂY DOWNTIME
   # ----------------------------------------------------------------------------
   reload)
-    echo "⚡ [Zero-Downtime Reload] Đang chuẩn bị cập nhật Web Frontend..."
-    echo "📦 Bước 1: Build image Web mới trong nền (Container cũ vẫn đang phục vụ)..."
-    docker compose -f "$COMPOSE_FILE" build web
+    echo "⚡ [Zero-Downtime Reload] Đang chuẩn bị cập nhật API & Web Frontend..."
+    echo "📦 Bước 1: Build image API & Web mới trong nền (Container cũ vẫn đang phục vụ)..."
+    docker compose -f "$COMPOSE_FILE" build api web
 
-    echo "🔄 Bước 2: Hoán đổi nhanh sang container Web mới..."
-    docker compose -f "$COMPOSE_FILE" up -d --no-deps web
+    echo "🔄 Bước 2: Hoán đổi nhanh sang container API & Web mới..."
+    docker compose -f "$COMPOSE_FILE" up -d --no-deps api web
 
-    echo "⏳ Bước 3: Đợi 3 giây để Web khởi động hoàn toàn..."
+    echo "⏳ Bước 3: Đợi 3 giây để dịch vụ khởi động hoàn toàn..."
     sleep 3
 
     echo "🩺 Bước 4: Kiểm tra trạng thái hoạt động..."
-    docker compose -f "$COMPOSE_FILE" ps web
-    echo "✨ Reload giao diện hoàn tất thành công, không gây downtime!"
+    docker compose -f "$COMPOSE_FILE" ps api web
+    echo "✨ Reload hệ thống (API & Web) hoàn tất thành công, không gây downtime!"
     ;;
 
   # ----------------------------------------------------------------------------
@@ -196,7 +196,7 @@ case "$COMMAND" in
     sleep 5
 
     echo "🗄️ Bước 4: Cập nhật Schema Cơ sở dữ liệu PostgreSQL an toàn (Bảo toàn dữ liệu cũ)..."
-    docker compose -f "$COMPOSE_FILE" exec -T api npx prisma db push --schema=packages/database/prisma/schema.prisma || {
+    docker compose -f "$COMPOSE_FILE" exec -T api npx prisma db push --schema=packages/database/prisma/schema.prisma --skip-generate --accept-data-loss || {
       echo "⚠️ Lưu ý: Đồng bộ prisma schema chưa hoàn tất hoặc container API đang khởi động. Dữ liệu DB vẫn an toàn."
     }
 

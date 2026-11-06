@@ -81,6 +81,7 @@ export default function RunnerEventModals({
   const [editBibInput, setEditBibInput] = useState<string>('');
   const [isSubmittingBib, setIsSubmittingBib] = useState(false);
   const [editBibError, setEditBibError] = useState<string | null>(null);
+  const initializedModalRef = React.useRef<string | null>(null);
 
   useEffect(() => {
     if (editBibInitialValue) {
@@ -90,7 +91,14 @@ export default function RunnerEventModals({
   }, [editBibInitialValue, showEditBibModal]);
 
   useEffect(() => {
-    if (!showRegisterModal) return;
+    if (!showRegisterModal) {
+      initializedModalRef.current = null;
+      return;
+    }
+
+    const modalKey = `${currentEvent?.id || 'evt'}_${myParticipation ? 'edit' : 'new'}`;
+    if (initializedModalRef.current === modalKey) return;
+    initializedModalRef.current = modalKey;
 
     const cats = currentEvent?.categories && currentEvent.categories.length > 0 ? currentEvent.categories : [];
     const firstCat = cats[0];
