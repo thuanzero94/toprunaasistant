@@ -86,17 +86,18 @@ if ($LASTEXITCODE -ne 0) {
 $stagedFiles = git status --short
 Write-Host $stagedFiles -ForegroundColor Yellow
 
-$diffStat = git diff --staged --stat
+$diffStat = (git diff --staged --stat | Out-String).Trim()
 Write-Header "2. DIFF SUMMARY"
 Write-Host $diffStat -ForegroundColor Gray
 
 # 4. Lay diff de gui cho AI (chuyen double-quote thanh single-quote de tranh xung dot command-line)
-$cleanDiffStat = if ($diffStat) { $diffStat -replace '"', "'" } else { "" }
-$rawFullDiff = git diff --staged
-$cleanFullDiff = if ($rawFullDiff) { $rawFullDiff -replace '"', "'" } else { "" }
+$cleanDiffStat = ($diffStat -replace '"', "'")
+$rawFullDiff = (git diff --staged | Out-String)
+$cleanFullDiff = if ($rawFullDiff) { ($rawFullDiff -replace '"', "'").Trim() } else { "" }
 
-if ($cleanFullDiff.Length -gt 4000) {
-  $diffSample = $cleanFullDiff.Substring(0, 4000) + "`n... [diff truncated for brevity] ..."
+# Gioi han mau diff toi da 3000 ky tu de dam bao khong vuot qua gioi han command-line cua Windows
+if ($cleanFullDiff.Length -gt 3000) {
+  $diffSample = $cleanFullDiff.Substring(0, 3000) + "`n... [diff truncated for brevity] ..."
 } else {
   $diffSample = $cleanFullDiff
 }

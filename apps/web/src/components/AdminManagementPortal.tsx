@@ -104,6 +104,7 @@ interface AdminManagementPortalProps {
   selectedEventId: string;
   onSelectEventId: (eventId: string) => void;
   onOpenCreateEventModal: () => void;
+  onCloneEvent?: (eventId: string) => void;
   eventForm: AdminEventFormState;
   onChangeEventForm: (form: AdminEventFormState) => void;
   onSaveEventRules: (e: React.FormEvent) => void;
@@ -134,6 +135,7 @@ export default function AdminManagementPortal({
   selectedEventId,
   onSelectEventId,
   onOpenCreateEventModal,
+  onCloneEvent,
   eventForm,
   onChangeEventForm,
   onSaveEventRules,
@@ -473,6 +475,7 @@ export default function AdminManagementPortal({
                 }
               }}
               onOpenCreateModal={onOpenCreateEventModal}
+              onCloneEvent={onCloneEvent}
               onViewRunnerDetail={onViewRunnerDetail}
             />
           ) : (

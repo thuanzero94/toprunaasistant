@@ -681,6 +681,9 @@ export class ApiController {
       title: string;
       subtitle?: string;
       description: string;
+      bannerUrl?: string;
+      status?: EventStatus;
+      ebibConfig?: any;
       eventType: EventType;
       runMode: RunMode;
       startDateIso: string;

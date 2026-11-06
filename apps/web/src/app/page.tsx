@@ -198,6 +198,11 @@ export default function TopRunWebApp() {
   const setShowRegisterModal = (show: boolean) => (show ? openModal('register') : closeModal('register'));
   const setShowEBibModal = (show: boolean) => (show ? openModal('ebib') : closeModal('ebib'));
   const setShowCreateEventModal = (show: boolean) => (show ? openModal('create-event') : closeModal('create-event'));
+  const [cloneSourceEventId, setCloneSourceEventId] = useState<string | null>(null);
+  const handleCloneEvent = (eventId: string) => {
+    setCloneSourceEventId(eventId);
+    setShowCreateEventModal(true);
+  };
 
   const [selectedParticipantDetailData, setSelectedParticipantDetailData] = useState<ParticipantDetailData | null>(null);
   const [selectedChallengeModalData, setSelectedChallengeModalData] = useState<any | null>(null);
@@ -2774,7 +2779,8 @@ export default function TopRunWebApp() {
               eventsList={eventsList}
               selectedEventId={selectedEventId}
               onSelectEventId={setSelectedEventId}
-              onOpenCreateEventModal={() => setShowCreateEventModal(true)}
+              onOpenCreateEventModal={() => { setCloneSourceEventId(null); setShowCreateEventModal(true); }}
+              onCloneEvent={handleCloneEvent}
               eventForm={eventForm}
               onChangeEventForm={setEventForm}
               onSaveEventRules={handleSaveEventRules}
@@ -2819,7 +2825,19 @@ export default function TopRunWebApp() {
         myShirtSize={myShirtSize}
         onChangeShirtSize={setMyShirtSize}
         showCreateEventModal={showCreateEventModal}
-        onCloseCreateEventModal={() => setShowCreateEventModal(false)}
+        cloneSourceEventId={cloneSourceEventId}
+        eventsList={eventsList}
+        onCloneSuccess={async (created) => {
+          setSyncBannerMessage(`Tạo giải đấu "${created.title}" thành công!`);
+          setShowCreateEventModal(false);
+          setCloneSourceEventId(null);
+          await fetchEventsList();
+          setSelectedEventId(created.id);
+        }}
+        onCloseCreateEventModal={() => {
+          setShowCreateEventModal(false);
+          setCloneSourceEventId(null);
+        }}
         newEventForm={newEventForm}
         onChangeNewEventForm={setNewEventForm}
         onSubmitCreateNewEvent={handleCreateNewEvent}

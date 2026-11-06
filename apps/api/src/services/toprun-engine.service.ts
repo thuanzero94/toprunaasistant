@@ -2612,8 +2612,10 @@ export class TopRunEngineService implements OnModuleInit {
     title: string;
     subtitle?: string;
     description: string;
+    bannerUrl?: string;
     eventType: EventType;
     runMode: RunMode;
+    status?: EventStatus;
     startDateIso: string;
     endDateIso: string;
     creatorId?: string;
@@ -2622,6 +2624,7 @@ export class TopRunEngineService implements OnModuleInit {
     weekendMultiplier?: number;
     allowSplitFiltering?: boolean;
     bibPrefix?: string;
+    ebibConfig?: any;
     categories: Array<{ name: string; targetDistanceKm: number; bibPrefix?: string }>;
     challengeTiers: Array<{
       tierName: string;
@@ -2633,30 +2636,36 @@ export class TopRunEngineService implements OnModuleInit {
       rewardDescription: string;
     }>;
   }) {
-    const slug = payload.title
+    const rawSlug = (payload.title || 'giai-chay')
       .toLowerCase()
       .normalize('NFD')
       .replace(/[\u0300-\u036f]/g, '')
       .replace(/[^a-z0-9]+/g, '-')
-      .replace(/(^-|-$)/g, '');
+      .replace(/(^-|-$)/g, '') || 'giai-chay';
+
+    let uniqueSlug = rawSlug;
+    if (this.events.some((e) => e.slug === uniqueSlug)) {
+      uniqueSlug = `${rawSlug}-${Date.now().toString(36).slice(-5)}`;
+    }
 
     const eventBibPrefix = payload.bibPrefix?.trim().toUpperCase() || 'PRO-';
 
     const newEvent: StoredEvent = {
       id: `evt_${Date.now()}`,
-      slug: `${slug}-${Date.now().toString().slice(-4)}`,
+      slug: uniqueSlug,
       title: payload.title,
       subtitle: payload.subtitle || 'Giải chạy đồng bộ Strava API • Chấm điểm 2 tầng Target & Challenge',
-      description: payload.description,
-      bannerUrl: 'https://images.unsplash.com/photo-1513593771513-7b58b6c4af38?auto=format&fit=crop&w=1200&q=80',
-      eventType: payload.eventType || EventType.MINI_CHALLENGE,
+      description: payload.description || 'Giải chạy bộ phong trào trực tuyến trên nền tảng TOPRunAssistant.',
+      bannerUrl: payload.bannerUrl || 'https://images.unsplash.com/photo-1513593771513-7b58b6c4af38?auto=format&fit=crop&w=1200&q=80',
+      eventType: payload.eventType || EventType.VIRTUAL_RACE,
       runMode: payload.runMode || RunMode.ACCUMULATIVE,
-      status: EventStatus.ACTIVE,
+      status: payload.status || EventStatus.ACTIVE,
       startDateIso: payload.startDateIso,
       endDateIso: payload.endDateIso,
       creatorId: payload.creatorId || 'usr_admin_01',
-      participantCount: 1,
+      participantCount: 0,
       bibPrefix: eventBibPrefix,
+      ebibConfig: payload.ebibConfig || null,
       ruleConfig: EventRuleConfigSchema.parse({
         allowedSportTypes: [SportType.RUN, SportType.TRAIL_RUN, SportType.VIRTUAL_RUN],
         minPaceSecPerKm: payload.minPaceSecPerKm ?? 180,
@@ -2667,13 +2676,13 @@ export class TopRunEngineService implements OnModuleInit {
         rideToRunRatio: (payload as any).rideToRunRatio ?? 0.25,
         swimToRunRatio: (payload as any).swimToRunRatio ?? 5.0,
       }),
-      categories: payload.categories.map((c, idx) => ({
+      categories: (payload.categories || []).map((c, idx) => ({
         id: `cat_${Date.now()}_${idx}`,
         name: c.name,
         targetDistanceKm: Number(c.targetDistanceKm),
-        bibPrefix: eventBibPrefix,
+        bibPrefix: c.bibPrefix?.trim().toUpperCase() || eventBibPrefix,
       })),
-      challengeTiers: payload.challengeTiers.map((t, idx) => ({
+      challengeTiers: (payload.challengeTiers || []).map((t, idx) => ({
         id: `tier_${Date.now()}_${idx}`,
         tierName: t.tierName,
         tierLevel: t.tierLevel || 'GOLD',
@@ -2681,7 +2690,7 @@ export class TopRunEngineService implements OnModuleInit {
         thresholdValue: Number(t.thresholdValue),
         targetSpeedDistanceKm: t.targetSpeedDistanceKm ? Number(t.targetSpeedDistanceKm) : undefined,
         awardBadgeUrl: t.awardBadgeUrl || '🏅',
-        rewardDescription: t.rewardDescription,
+        rewardDescription: t.rewardDescription || '',
       })),
       teams: [],
     };

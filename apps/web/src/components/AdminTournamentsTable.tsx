@@ -8,6 +8,7 @@ import {
   Plus,
   Eye,
   Pencil,
+  Copy,
   Trash2,
   Download,
   Calendar,
@@ -28,6 +29,7 @@ export interface AdminTournamentsTableProps {
   selectedEventId: string;
   onSelectEvent: (eventId: string) => void;
   onEditEvent: (eventId: string) => void;
+  onCloneEvent?: (eventId: string) => void;
   onDeleteEvent: (eventId: string, title: string, participantCount: number) => void;
   onOpenCreateModal: () => void;
   onViewRunnerDetail?: (eventId: string) => void;
@@ -38,6 +40,7 @@ export default function AdminTournamentsTable({
   selectedEventId,
   onSelectEvent,
   onEditEvent,
+  onCloneEvent,
   onDeleteEvent,
   onOpenCreateModal,
   onViewRunnerDetail,
@@ -404,6 +407,18 @@ export default function AdminTournamentsTable({
                             <Pencil className="w-3.5 h-3.5" />
                           </button>
 
+                          {/* Clone / Duplicate */}
+                          {onCloneEvent && (
+                            <button
+                              type="button"
+                              onClick={() => onCloneEvent(ev.id)}
+                              title="Nhân bản cấu hình sang giải mới"
+                              className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-800 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 transition cursor-pointer"
+                            >
+                              <Copy className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+
                           {/* Delete */}
                           <button
                             type="button"
@@ -558,6 +573,21 @@ export default function AdminTournamentsTable({
                   >
                     <Compass className="w-3.5 h-3.5" />
                     <span>Xem view chi tiết giải đấu</span>
+                  </button>
+                )}
+
+                {onCloneEvent && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const id = inspectEvent.id;
+                      setInspectEvent(null);
+                      onCloneEvent(id);
+                    }}
+                    className="px-3.5 py-2 rounded-xl border border-emerald-500/30 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 text-xs font-bold flex items-center gap-1.5 transition cursor-pointer"
+                  >
+                    <Copy className="w-3.5 h-3.5" />
+                    <span>Nhân Bản Giải Này</span>
                   </button>
                 )}
 

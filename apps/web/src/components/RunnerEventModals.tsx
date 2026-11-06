@@ -1,5 +1,7 @@
 'use client';
 
+import CreateOrCloneEventModal from './CreateOrCloneEventModal';
+
 import React, { useState, useEffect } from 'react';
 import { Share2, Trophy, X, CheckCircle2, ShieldCheck, Truck } from 'lucide-react';
 import { formatPace } from '@toprun/shared';
@@ -18,6 +20,9 @@ interface RunnerEventModalsProps {
   myShirtSize: string;
   onChangeShirtSize: (size: string) => void;
   showCreateEventModal: boolean;
+  cloneSourceEventId?: string | null;
+  eventsList?: any[];
+  onCloneSuccess?: (created: any) => void;
   onCloseCreateEventModal: () => void;
   newEventForm: any;
   onChangeNewEventForm: (form: any) => void;
@@ -49,6 +54,9 @@ export default function RunnerEventModals({
   myShirtSize,
   onChangeShirtSize,
   showCreateEventModal,
+  cloneSourceEventId = null,
+  eventsList = [],
+  onCloneSuccess,
   onCloseCreateEventModal,
   newEventForm,
   onChangeNewEventForm,
@@ -567,133 +575,21 @@ export default function RunnerEventModals({
         </div>
       )}
 
-      {/* MODAL 3: TẠO GIẢI ĐẤU MỚI (CREATE EVENT MODAL) */}
-      {showCreateEventModal && (
-        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
-          <div className="max-w-xl w-full my-8 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-[#0F1420] p-6 space-y-5 shadow-2xl">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Trophy className="w-5 h-5 text-[#FC4C02]" />
-                <h3 className="text-base font-bold text-slate-900 dark:text-white">
-                  Khởi Tạo Giải Chạy Ảo / Thử Thách Mới
-                </h3>
-              </div>
-              <button
-                type="button"
-                onClick={onCloseCreateEventModal}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-white cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
+      {/* MODAL 3: TẠO HOẶC NHÂN BẢN GIẢI ĐẤU (CREATE / CLONE EVENT MODAL) */}
+      <CreateOrCloneEventModal
+        isOpen={showCreateEventModal}
+        onClose={onCloseCreateEventModal}
+        eventsList={eventsList}
+        initialSourceEventId={cloneSourceEventId}
+        onSuccess={(created) => {
+          if (onCloneSuccess) {
+            onCloneSuccess(created);
+          } else {
+            onCloseCreateEventModal();
+          }
+        }}
+      />
 
-            <form onSubmit={onSubmitCreateNewEvent} className="space-y-4 text-xs">
-              <div>
-                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Tên giải đấu *</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="Ví dụ: TOPRUN SPRING HALF MARATHON 2026"
-                  value={newEventForm.title}
-                  onChange={(e) => onChangeNewEventForm({ ...newEventForm, title: e.target.value })}
-                  className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-[#FC4C02]"
-                />
-              </div>
-
-              <div>
-                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  Thông điệp / Phụ đề
-                </label>
-                <input
-                  type="text"
-                  placeholder="Ví dụ: Giải chạy đón xuân • Chạy bộ vì sức khỏe doanh nghiệp"
-                  value={newEventForm.subtitle}
-                  onChange={(e) => onChangeNewEventForm({ ...newEventForm, subtitle: e.target.value })}
-                  className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-[#FC4C02]"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Ngày bắt đầu *</label>
-                  <input
-                    type="date"
-                    required
-                    value={newEventForm.startDateIso}
-                    onChange={(e) => onChangeNewEventForm({ ...newEventForm, startDateIso: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-[#FC4C02]"
-                  />
-                </div>
-                <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Ngày kết thúc *</label>
-                  <input
-                    type="date"
-                    required
-                    value={newEventForm.endDateIso}
-                    onChange={(e) => onChangeNewEventForm({ ...newEventForm, endDateIso: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-[#FC4C02]"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Pace tối thiểu</label>
-                  <input
-                    type="text"
-                    value={newEventForm.minPaceFormatted}
-                    onChange={(e) => onChangeNewEventForm({ ...newEventForm, minPaceFormatted: e.target.value })}
-                    placeholder="03:30"
-                    className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white font-mono tabular-nums focus:outline-none focus:ring-1 focus:ring-[#FC4C02]"
-                  />
-                </div>
-                <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Pace tối đa</label>
-                  <input
-                    type="text"
-                    value={newEventForm.maxPaceFormatted}
-                    onChange={(e) => onChangeNewEventForm({ ...newEventForm, maxPaceFormatted: e.target.value })}
-                    placeholder="15:00"
-                    className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white font-mono tabular-nums focus:outline-none focus:ring-1 focus:ring-[#FC4C02]"
-                  />
-                </div>
-                <div>
-                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                    Nhân hệ số cuối tuần
-                  </label>
-                  <select
-                    value={newEventForm.weekendMultiplier}
-                    onChange={(e) =>
-                      onChangeNewEventForm({ ...newEventForm, weekendMultiplier: parseFloat(e.target.value) || 1.0 })
-                    }
-                    className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-white font-semibold focus:outline-none focus:ring-1 focus:ring-[#FC4C02]"
-                  >
-                    <option value={1.0}>1.0x (Không nhân)</option>
-                    <option value={1.5}>1.5x (Thứ 7 &amp; CN)</option>
-                    <option value={2.0}>2.0x (Cuối tuần x2)</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="pt-3 border-t border-slate-200 dark:border-slate-800 flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={onCloseCreateEventModal}
-                  className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 font-semibold cursor-pointer"
-                >
-                  Hủy
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 rounded-xl bg-[#FC4C02] hover:bg-[#E34402] text-white font-bold shadow-md shadow-[#FC4C02]/20 transition cursor-pointer"
-                >
-                  Tạo Giải Ngay
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
       {/* MODAL 4: ĐỔI SỐ BIB CÁ NHÂN */}
       {showEditBibModal && (
         <div className="fixed inset-0 z-[70] bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
