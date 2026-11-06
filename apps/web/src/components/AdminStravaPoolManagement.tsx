@@ -21,6 +21,12 @@ import {
   Zap,
 } from 'lucide-react';
 import AthleteAvatar, { AthleteHonorPill } from './AthleteAvatar';
+import {
+  PoolQueueStatsData,
+  PoolQuotaData,
+  StravaAthletePoolMoveSelect,
+  StravaPoolQuotaCard,
+} from './StravaPoolQuotaWidget';
 
 export interface StravaAppSummary {
   totalApps: number;
@@ -58,6 +64,8 @@ export interface StravaAppItem {
   availableSlots: number;
   isFull: boolean;
   athletes: ConnectedAthlete[];
+  rateLimit?: PoolQuotaData | null;
+  queueStats?: PoolQueueStatsData | null;
 }
 
 export default function AdminStravaPoolManagement() {
@@ -576,6 +584,17 @@ export default function AdminStravaPoolManagement() {
                 </div>
               </div>
 
+              <StravaPoolQuotaCard
+                appId={app.id}
+                appName={app.name}
+                connectedCount={app.connectedCount}
+                rateLimit={app.rateLimit}
+                queueStats={app.queueStats}
+                otherApps={apps.filter((oa) => oa.id !== app.id && oa.isActive)}
+                onRefresh={fetchApps}
+                onNotify={setActionMsg}
+              />
+
               {/* Athletes Stack / Trigger */}
               <div className="mt-4 pt-3.5 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-3">
                 <button
@@ -924,6 +943,18 @@ export default function AdminStravaPoolManagement() {
                       <div className="text-[10px] text-emerald-600 dark:text-emerald-400 flex items-center justify-end gap-1 mt-0.5">
                         <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
                         <span>{ath.syncStatus}</span>
+                      </div>
+                      <StravaAthletePoolMoveSelect
+                        userId={ath.userId}
+                        currentAppId={selectedAppAthletes.id}
+                        allApps={apps.filter((a) => a.isActive)}
+                        onMoved={() => {
+                          setSelectedAppAthletes(null);
+                          fetchApps();
+                        }}
+                        onNotify={setActionMsg}
+                      />
+                      <div>
                       </div>
                     </div>
                   </div>

@@ -308,6 +308,71 @@ export class ApiController {
     return this.accountService.getStravaAppAthletes(id);
   }
 
+  @Post('admin/strava-apps/move-athlete')
+  @HttpCode(200)
+  @ApiOperation({
+    summary:
+      '[Admin] Di chuyển thủ công 1 VĐV sang Pool Strava khác (Tách biệt Pool, yêu cầu 1-click Re-auth, giữ nguyên lịch sử chạy)',
+  })
+  async moveAdminStravaAthletePool(
+    @Body() body: { userId: string; targetAppId: string },
+    @Headers('authorization') authHeader?: string
+  ) {
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const decoded = this.accountService.verifyJwt(authHeader.slice(7));
+      if (!decoded || decoded.role !== 'ADMIN') {
+        throw new UnauthorizedException('Chỉ Quản trị viên (ADMIN) mới có quyền di chuyển VĐV giữa các Pool.');
+      }
+    }
+    return this.accountService.moveAthleteToStravaPool(body.userId, body.targetAppId);
+  }
+
+  @Post('admin/strava-apps/:id/evacuate')
+  @HttpCode(200)
+  @ApiOperation({
+    summary:
+      '[Admin] Di tản toàn bộ VĐV khỏi 1 Pool hết hạn / ngừng hoạt động sang Pool khác và tạm dừng Pool cũ',
+  })
+  async evacuateAdminStravaApp(
+    @Param('id') id: string,
+    @Body() body: { targetAppId?: string },
+    @Headers('authorization') authHeader?: string
+  ) {
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const decoded = this.accountService.verifyJwt(authHeader.slice(7));
+      if (!decoded || decoded.role !== 'ADMIN') {
+        throw new UnauthorizedException('Chỉ Quản trị viên (ADMIN) mới có quyền di tản Pool Strava.');
+      }
+    }
+    return this.accountService.evacuateStravaPool(id, body?.targetAppId);
+  }
+
+  @Patch('admin/strava-apps/:id/rate-limits')
+  @ApiOperation({
+    summary:
+      '[Admin] Cấu hình giới hạn Rate Limit (Overall 400/15p & 4000/ngày, Read 200/15p & 2000/ngày) hoặc Reset bộ đếm 15 phút của 1 Pool độc lập',
+  })
+  async updateAdminStravaPoolRateLimits(
+    @Param('id') id: string,
+    @Body()
+    body: {
+      overallLimit15m?: number;
+      overallLimitDaily?: number;
+      readLimit15m?: number;
+      readLimitDaily?: number;
+      resetCurrent15mUsage?: boolean;
+    },
+    @Headers('authorization') authHeader?: string
+  ) {
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const decoded = this.accountService.verifyJwt(authHeader.slice(7));
+      if (!decoded || decoded.role !== 'ADMIN') {
+        throw new UnauthorizedException('Chỉ Quản trị viên (ADMIN) mới có quyền cấu hình Rate Limit Pool.');
+      }
+    }
+    return this.accountService.updateStravaPoolRateLimits(id, body);
+  }
+
   @Get('account/:userId')
   @ApiOperation({
     summary:
@@ -474,7 +539,12 @@ export class ApiController {
       userId,
       triggerType: `MANUAL_SYNC_${windowDays}D`,
       windowDays,
-      status: syncRes.status === 'SUCCESS' ? 'SUCCESS' : 'REQUIRE_SCOPE',
+      status:
+        syncRes.status === 'SUCCESS' || syncRes.status === 'PARTIAL_QUEUED'
+          ? 'SUCCESS'
+          : syncRes.status === 'QUEUED_IN_POOL' || syncRes.status === 'COOLDOWN_ACTIVE'
+            ? 'PARTIAL_WARNING'
+            : 'REQUIRE_SCOPE',
       fetchedCount: (syncRes as any).totalFetchedFromStrava || 0,
       newlySyncedCount: syncRes.syncedActivities.length,
       validCount,
@@ -522,7 +592,10 @@ export class ApiController {
       event_time?: number;
     }
   ) {
-    // Phản hồi dưới 200ms theo chuẩn Strava API và tự động đồng bộ + chấm điểm
+    // Định tuyến sự kiện Webhook theo đúng VĐV (owner_id) và Pool cố định của VĐV đó
+    if (eventPayload && eventPayload.object_type) {
+      return this.engine.handleRealStravaWebhookEvent(eventPayload);
+    }
     if (eventPayload.object_type === 'activity' && eventPayload.aspect_type === 'create') {
       const syncResult = await this.engine.simulateStravaSync({
         userId: 'usr_admin_01',

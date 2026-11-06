@@ -146,12 +146,50 @@ model StravaApp {
   priority              Int                @default(1)
   webhookVerifyToken    String?
   webhookSubscriptionId Int?
+  overallLimit15m        Int                @default(400)
+  overallLimitDaily      Int                @default(4000)
+  overallUsage15m        Int                @default(0)
+  overallUsageDaily      Int                @default(0)
+  readLimit15m           Int                @default(200)
+  readLimitDaily         Int                @default(2000)
+  readUsage15m           Int                @default(0)
+  readUsageDaily         Int                @default(0)
+  window15mKey           String?
+  windowDailyKey         String?
+  lastRateLimitUpdatedAt DateTime?
   createdAt             DateTime           @default(now())
   updatedAt             DateTime           @updatedAt
 
   connections           StravaConnection[]
 
+  queueJobs             StravaPoolJob[]
+
   @@map("strava_apps")
+}
+
+model StravaPoolJob {
+  id             String     @id @default(cuid())
+  stravaAppId    String
+  userId         String
+  athleteId      String?
+  jobType        String     @default("MANUAL_SYNC") // WEBHOOK_ACTIVITY, MANUAL_SYNC, BACKFILL_SYNC
+  priority       Int        @default(2)             // 1 = HIGH (Webhook), 2 = NORMAL (Manual), 3 = LOW (Backfill)
+  status         String     @default("QUEUED")      // QUEUED, PROCESSING, DELAYED, COMPLETED, FAILED
+  activityExtId  String?
+  windowDays     Int        @default(30)
+  scheduledFor   DateTime   @default(now())
+  attempts       Int        @default(0)
+  statusMessage  String?
+  resultJson     Json?
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+  completedAt    DateTime?
+
+  stravaApp      StravaApp  @relation(fields: [stravaAppId], references: [id], onDelete: Cascade)
+
+  @@index([stravaAppId, status, priority, scheduledFor])
+  @@index([userId, status])
+  @@map("strava_pool_jobs")
 }
 
 model StravaConnection {

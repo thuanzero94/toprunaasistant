@@ -28,6 +28,7 @@ import {
 import { formatPace, parsePaceToSeconds } from '@toprun/shared';
 import { useAuth } from '../context/AuthContext';
 import AthleteAvatar, { AthleteHonorPill } from './AthleteAvatar';
+import { AthleteStravaPoolStatusBanner } from './StravaPoolQuotaWidget';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1';
 
@@ -845,6 +846,8 @@ export default function AccountAndStravaPanel({
                 </div>
               </div>
             </div>
+
+            <AthleteStravaPoolStatusBanner stravaStatus={stravaStatus} />
 
             {/* Hướng dẫn cấp quyền nếu thiếu activity:read_all */}
             {!stravaStatus.hasActivityReadScope && (

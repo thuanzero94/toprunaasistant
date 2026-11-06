@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException, OnModuleInit } from '@nestjs/common';
+import { Inject, Injectable, NotFoundException, BadRequestException, OnModuleInit, Optional } from '@nestjs/common';
 import * as fs from 'fs';
 import * as path from 'path';
 import {
@@ -35,6 +35,7 @@ import {
 } from '@toprun/shared';
 import { generateEBibSvg, generateECertificateSvg } from './certificate.service';
 import { prisma } from '@toprun/database';
+import { StravaPoolLimiterService } from './strava-pool-limiter.service';
 
 // ============================================================================
 // INTERFACES DỮ LIỆU ĐẦY ĐỦ TRONG HỆ THỐNG
@@ -346,7 +347,9 @@ export class TopRunEngineService implements OnModuleInit {
     }
   }
 
-  constructor() {
+  constructor(
+    @Optional() @Inject(StravaPoolLimiterService) private readonly poolLimiter?: StravaPoolLimiterService
+  ) {
     this.seedInitialData();
     this.loadCachedStravaActivities();
     this.loadPersistentState();
@@ -354,6 +357,16 @@ export class TopRunEngineService implements OnModuleInit {
 
   async onModuleInit() {
     await this.syncAndHydrateWithDatabase();
+    if (this.poolLimiter) {
+      this.poolLimiter.registerJobProcessor(async (job) => {
+        return this.syncLiveStravaActivities(job.userId, job.windowDays, {
+          triggerType: 'QUEUE_WORKER',
+          bypassCooldown: true,
+          singleActivityExtId: job.activityExtId || undefined,
+          priority: job.jobType === 'WEBHOOK_ACTIVITY' ? 1 : job.jobType === 'MANUAL_SYNC' ? 2 : 3,
+        });
+      });
+    }
   }
 
   /**
@@ -1214,39 +1227,69 @@ export class TopRunEngineService implements OnModuleInit {
    * Gọi trực tiếp Strava API v3 (`GET /api/v3/athlete/activities` & `/api/v3/activities/:id`)
    * bằng Client ID và Token của từng VĐV để kéo Tracklog thật về hệ thống
    */
-  async syncLiveStravaActivities(userId = 'usr_admin_01', windowDays: number = 30) {
+  async syncLiveStravaActivities(
+    userId = 'usr_admin_01',
+    windowDays: number = 30,
+    options?: {
+      triggerType?: 'MANUAL_SYNC' | 'WEBHOOK' | 'QUEUE_WORKER';
+      bypassCooldown?: boolean;
+      singleActivityExtId?: string;
+      priority?: 1 | 2 | 3;
+    }
+  ) {
     process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 
     const user = await this.ensureUser(userId);
+    const triggerType = options?.triggerType || 'MANUAL_SYNC';
+    const priority: 1 | 2 | 3 = options?.priority || (triggerType === 'WEBHOOK' ? 1 : 2);
 
-    // 0. Đọc Token & Strava App được gán của User từ bảng strava_connections trong PostgreSQL
+    // 0. Đọc Token & Pool (StravaApp) cố định của User từ bảng strava_connections trong PostgreSQL
+    let stravaAppId = 'strava_app_01';
+    let poolName = 'Strava App #1 (Primary)';
     let clientId = this.stravaConfig.clientId;
     let clientSecret = this.stravaConfig.clientSecret;
     let userAccessToken: string | null = null;
     let userRefreshToken: string | null = null;
+    let tokenExpiresAt = 0;
+    let dbConn: any = null;
 
     try {
-      const dbConn = await prisma.stravaConnection.findUnique({
+      dbConn = await prisma.stravaConnection.findUnique({
         where: { userId: user.id },
         include: { stravaApp: true },
       });
-      if (dbConn?.accessToken) {
-        userAccessToken = dbConn.accessToken;
-        userRefreshToken = dbConn.refreshToken || null;
+      if (dbConn) {
+        stravaAppId = dbConn.stravaAppId || dbConn.stravaApp?.id || 'strava_app_01';
+        poolName = dbConn.stravaApp?.name || poolName;
+        tokenExpiresAt = Number(dbConn.expiresAt || 0);
         if (dbConn.stravaApp) {
           clientId = dbConn.stravaApp.clientId;
           clientSecret = dbConn.stravaApp.clientSecret;
         }
-      } else if (user.role === 'ADMIN' && (user.id === 'usr_admin_01' || user.email === 'thuanzero94@gmail.com' || user.email === 'admin@toprun.vn')) {
-        // Chỉ duy nhất Admin tài khoản gốc trong môi trường dev/demo mới được fallback về env config
-        userAccessToken = this.stravaConfig.accessToken;
-        userRefreshToken = this.stravaConfig.refreshToken;
+        if (dbConn.accessToken) {
+          userAccessToken = dbConn.accessToken;
+          userRefreshToken = dbConn.refreshToken || null;
+        }
       }
     } catch {
-      if (user.role === 'ADMIN' && (user.id === 'usr_admin_01' || user.email === 'thuanzero94@gmail.com' || user.email === 'admin@toprun.vn')) {
-        userAccessToken = this.stravaConfig.accessToken;
-        userRefreshToken = this.stravaConfig.refreshToken;
-      }
+      // Ignore transient query error
+    }
+
+    // 0.1. Nếu tài khoản vừa được Admin chuyển sang Pool mới (REAUTH_REQUIRED), chặn gọi API bằng token cũ
+    if (dbConn?.syncStatus === 'REAUTH_REQUIRED') {
+      const stateParam = `${user.id}:${stravaAppId}`;
+      const reauthUrl = `https://www.strava.com/oauth/authorize?client_id=${clientId}&response_type=code&redirect_uri=${encodeURIComponent(this.stravaConfig.redirectUri)}&approval_prompt=force&scope=read,activity:read_all&state=${stateParam}`;
+      return {
+        status: 'REAUTH_REQUIRED',
+        athlete: null,
+        poolId: stravaAppId,
+        poolName,
+        authorizeUrl: reauthUrl,
+        message:
+          dbConn.lastErrorMsg ||
+          `Tài khoản của bạn đã được chuyển sang Pool "${poolName}". Vui lòng nhấn "Xác nhận lại kết nối Strava (1-click)" để cấp token mới thuộc Pool này (toàn bộ lịch sử chạy cũ được giữ nguyên).`,
+        syncedActivities: [],
+      };
     }
 
     if (!userAccessToken) {
@@ -1258,8 +1301,59 @@ export class TopRunEngineService implements OnModuleInit {
       };
     }
 
-    // 1. Làm mới Access Token bằng Refresh Token với đúng App credentials đã phân bổ
-    if (userRefreshToken) {
+    // 0.2. Kiểm tra Cooldown 15 phút/User đối với lượt bấm tay "Đồng bộ thủ công" để bảo vệ 200 Read/15p của Pool
+    if (this.poolLimiter && triggerType === 'MANUAL_SYNC' && !options?.bypassCooldown) {
+      const cooldown = this.poolLimiter.checkUserManualSyncCooldown(user.id, false);
+      if (!cooldown.allowed) {
+        return {
+          status: 'COOLDOWN_ACTIVE',
+          athlete: null,
+          poolId: stravaAppId,
+          poolName,
+          remainingCooldownSec: cooldown.remainingSec,
+          poolQuota: this.poolLimiter.getPoolQuota(stravaAppId),
+          message: cooldown.message,
+          syncedActivities: [],
+        };
+      }
+    }
+
+    // 0.3. Kiểm tra Quota độc lập của riêng Pool (stravaAppId):
+    // - Ngưỡng 85% (170/200 Read, 340/400 Overall): Tạm hoãn Manual/Backfill sang khung 15 phút kế tiếp để chừa 15% cho Webhook
+    // - Ngưỡng 95% (190/200 Read, 380/400 Overall): Tạm hoãn toàn bộ sang khung 15 phút kế tiếp
+    if (this.poolLimiter) {
+      const estimatedReads = options?.singleActivityExtId ? 1 : 2;
+      const check = this.poolLimiter.canPoolExecute(stravaAppId, priority, estimatedReads);
+      if (!check.allowed) {
+        const enqueued = await this.poolLimiter.enqueuePoolJob({
+          stravaAppId,
+          userId: user.id,
+          athleteId: dbConn?.athleteId || user.stravaAthleteId,
+          jobType: options?.singleActivityExtId ? 'WEBHOOK_ACTIVITY' : 'MANUAL_SYNC',
+          priority,
+          activityExtId: options?.singleActivityExtId || null,
+          windowDays,
+          delayUntilNextWindow: true,
+        });
+        return {
+          status: 'QUEUED_IN_POOL',
+          athlete: null,
+          poolId: stravaAppId,
+          poolName,
+          jobId: enqueued.job.id,
+          scheduledForIso: enqueued.scheduledForIso,
+          secondsUntilExecution: enqueued.secondsUntilExecution,
+          poolQuota: check.quota,
+          message: check.reason,
+          syncedActivities: [],
+        };
+      }
+    }
+
+    // 1. Bảo vệ Overall Limit (400/15p, 4000/ngày): CHỈ Refresh Token khi đã hết hạn hoặc còn < 5 phút (300s)
+    const nowSec = Math.floor(Date.now() / 1000);
+    const needsRefresh = userRefreshToken && (!tokenExpiresAt || nowSec >= tokenExpiresAt - 300);
+    if (needsRefresh && userRefreshToken) {
       try {
         const refreshRes = await fetch('https://www.strava.com/oauth/token', {
           method: 'POST',
@@ -1271,6 +1365,9 @@ export class TopRunEngineService implements OnModuleInit {
             grant_type: 'refresh_token',
           }),
         });
+        if (this.poolLimiter) {
+          await this.poolLimiter.recordResponseUsage(stravaAppId, refreshRes, false);
+        }
         if (refreshRes.ok) {
           const refreshed: any = await refreshRes.json();
           if (refreshed.access_token) userAccessToken = refreshed.access_token;
@@ -1292,11 +1389,25 @@ export class TopRunEngineService implements OnModuleInit {
       }
     }
 
-    // 2. Lấy thông tin Athlete thật từ Strava
-    const athleteRes = await fetch('https://www.strava.com/api/v3/athlete', {
-      headers: { Authorization: `Bearer ${userAccessToken}` },
-    });
-    const athleteData: any = athleteRes.ok ? await athleteRes.json() : null;
+    // 2. Bảo vệ Read Limit (200/15p, 2000/ngày): Không gọi thừa GET /api/v3/athlete nếu đã có thông tin Athlete trong DB
+    let athleteData: any = dbConn?.athleteId
+      ? {
+          id: dbConn.athleteId,
+          username: dbConn.username,
+          firstname: dbConn.firstname,
+          lastname: dbConn.lastname,
+        }
+      : null;
+
+    if (!athleteData) {
+      const athleteRes = await fetch('https://www.strava.com/api/v3/athlete', {
+        headers: { Authorization: `Bearer ${userAccessToken}` },
+      });
+      if (this.poolLimiter) {
+        await this.poolLimiter.recordResponseUsage(stravaAppId, athleteRes, true);
+      }
+      athleteData = athleteRes.ok ? await athleteRes.json() : null;
+    }
 
     if (athleteData?.id) {
       user.stravaConnected = true;
@@ -1306,30 +1417,56 @@ export class TopRunEngineService implements OnModuleInit {
       this.saveEngineState();
     }
 
-    // 3. Lấy danh sách Activities từ Strava theo cửa sổ thời gian windowDays (mặc định 30 ngày)
-    const afterTimestamp = Math.floor(Date.now() / 1000) - windowDays * 86400;
-    const actsRes = await fetch(
-      `https://www.strava.com/api/v3/athlete/activities?after=${afterTimestamp}&per_page=50`,
-      {
-        headers: { Authorization: `Bearer ${userAccessToken}` },
+    // 3. Nếu là sự kiện Real-time Webhook cho 1 bài chạy cụ thể: Chỉ tốn ĐÚNG 1 Read request lấy bài chạy đó!
+    let stravaList: any[] = [];
+    if (options?.singleActivityExtId) {
+      const singleRes = await fetch(
+        `https://www.strava.com/api/v3/activities/${options.singleActivityExtId}`,
+        {
+          headers: { Authorization: `Bearer ${userAccessToken}` },
+        }
+      );
+      if (this.poolLimiter) {
+        await this.poolLimiter.recordResponseUsage(stravaAppId, singleRes, true);
       }
-    );
+      if (singleRes.ok) {
+        const singleAct = await singleRes.json();
+        stravaList = [singleAct];
+      }
+    } else {
+      // Lấy danh sách Activities từ Strava theo cửa sổ thời gian windowDays (tốn 1 Read request)
+      const afterTimestamp = Math.floor(Date.now() / 1000) - windowDays * 86400;
+      const actsRes = await fetch(
+        `https://www.strava.com/api/v3/athlete/activities?after=${afterTimestamp}&per_page=50`,
+        {
+          headers: { Authorization: `Bearer ${userAccessToken}` },
+        }
+      );
+      if (this.poolLimiter) {
+        await this.poolLimiter.recordResponseUsage(stravaAppId, actsRes, true);
+      }
 
-    if (!actsRes.ok) {
-      const errBody = await actsRes.text();
-      return {
-        status: 'REQUIRE_ACTIVITY_SCOPE',
-        athlete: athleteData,
-        message:
-          'Token mặc định trên trang cài đặt Strava chỉ có phạm vi "read" (chỉ đọc hồ sơ). Hãy nhấn vào đường dẫn authorizeUrl bên dưới (1 click) để cấp quyền "activity:read_all" đọc toàn bộ Tracklog chạy bộ!',
-        authorizeUrl: `https://www.strava.com/oauth/authorize?client_id=${clientId}&response_type=code&redirect_uri=${encodeURIComponent(this.stravaConfig.redirectUri)}&approval_prompt=force&scope=read,activity:read_all&state=${user.id}`,
-        stravaError: errBody,
-        syncedActivities: [],
-      };
+      if (!actsRes.ok) {
+        const errBody = await actsRes.text();
+        const stateParam = `${user.id}:${stravaAppId}`;
+        return {
+          status: 'REQUIRE_ACTIVITY_SCOPE',
+          athlete: athleteData,
+          poolId: stravaAppId,
+          poolName,
+          message:
+            'Token hiện tại chỉ có phạm vi "read" (chỉ đọc hồ sơ). Hãy nhấn vào đường dẫn authorizeUrl bên dưới (1 click) để cấp quyền "activity:read_all" đọc toàn bộ Tracklog chạy bộ!',
+          authorizeUrl: `https://www.strava.com/oauth/authorize?client_id=${clientId}&response_type=code&redirect_uri=${encodeURIComponent(this.stravaConfig.redirectUri)}&approval_prompt=force&scope=read,activity:read_all&state=${stateParam}`,
+          stravaError: errBody,
+          syncedActivities: [],
+        };
+      }
+
+      stravaList = await actsRes.json();
     }
 
-    const stravaList: any[] = await actsRes.json();
     const syncedActivities: StoredActivity[] = [];
+    let deferredCount = 0;
 
     for (const summaryAct of stravaList) {
       const extId = String(summaryAct.id);
@@ -1337,31 +1474,40 @@ export class TopRunEngineService implements OnModuleInit {
         continue;
       }
 
-      // Tự động kiểm tra và chuyển giao quyền sở hữu nếu bài chạy này từng bị gán nhầm sang Admin trước đó
-      const existingAct = this.activities.find((a) => a.externalId === extId);
-      if (existingAct) {
-        if (existingAct.userId !== user.id) {
-          existingAct.userId = user.id;
-          existingAct.userName = user.fullName;
-          existingAct.userAvatar = user.avatarUrl;
-          existingAct.userDepartment = user.departmentOrUnit;
-          this.persistActivityToDb(existingAct).catch(() => {});
-          syncedActivities.push(existingAct);
-        }
+      // Lọc bỏ ngay các bài tập không phải chạy bộ (Ride, Swim, Walk...) TRƯỚC khi gọi /activities/:id để tiết kiệm Read Limit (200/15p)
+      const rawSport = summaryAct.sport_type || summaryAct.type || SportType.RUN;
+      if (normalizeSportCategory(rawSport) !== 'RUN') {
         continue;
       }
 
-      // Gọi chi tiết Activity để lấy splits_metric (từng km)
+      const existingAct = this.activities.find((a) => a.externalId === extId && a.userId === user.id);
+      if (existingAct) {
+        continue;
+      }
+
+      // Nếu summaryAct chưa có splits_metric (tức từ danh sách summary), kiểm tra ngân sách Pool trước khi gọi Detail
       let detailAct = summaryAct;
-      try {
-        const detailRes = await fetch(`https://www.strava.com/api/v3/activities/${summaryAct.id}`, {
-          headers: { Authorization: `Bearer ${userAccessToken}` },
-        });
-        if (detailRes.ok) {
-          detailAct = await detailRes.json();
+      if (!Array.isArray(summaryAct.splits_metric)) {
+        if (this.poolLimiter) {
+          const detailCheck = this.poolLimiter.canPoolExecute(stravaAppId, priority, 1);
+          if (!detailCheck.allowed) {
+            deferredCount++;
+            continue;
+          }
         }
-      } catch {
-        // Dùng summaryAct nếu không lấy được detail
+        try {
+          const detailRes = await fetch(`https://www.strava.com/api/v3/activities/${summaryAct.id}`, {
+            headers: { Authorization: `Bearer ${userAccessToken}` },
+          });
+          if (this.poolLimiter) {
+            await this.poolLimiter.recordResponseUsage(stravaAppId, detailRes, true);
+          }
+          if (detailRes.ok) {
+            detailAct = await detailRes.json();
+          }
+        } catch {
+          // Dùng summaryAct nếu không lấy được detail
+        }
       }
 
       const rawSplits = Array.isArray(detailAct.splits_metric)
@@ -1395,18 +1541,106 @@ export class TopRunEngineService implements OnModuleInit {
       syncedActivities.push(ingested.activity);
     }
 
+    // Nếu có bài chạy bị hoãn do Pool chạm ngưỡng 85% giữa chừng, tự động xếp hàng job BACKFILL_SYNC vào Pool đó
+    if (deferredCount > 0 && this.poolLimiter) {
+      await this.poolLimiter.enqueuePoolJob({
+        stravaAppId,
+        userId: user.id,
+        athleteId: dbConn?.athleteId || user.stravaAthleteId,
+        jobType: 'BACKFILL_SYNC',
+        priority: 3,
+        windowDays,
+        delayUntilNextWindow: true,
+      });
+    }
+
+    if (this.poolLimiter && triggerType === 'MANUAL_SYNC') {
+      this.poolLimiter.markUserManualSynced(user.id);
+    }
+
     this.activities.sort((a, b) => new Date(b.startDateIso).getTime() - new Date(a.startDateIso).getTime());
     this.recalculateUserParticipation(user.id);
     this.saveActivitiesCache();
 
     return {
-      status: 'SUCCESS',
+      status: deferredCount > 0 ? 'PARTIAL_QUEUED' : 'SUCCESS',
       athlete: athleteData,
+      poolId: stravaAppId,
+      poolName,
+      poolQuota: this.poolLimiter ? this.poolLimiter.getPoolQuota(stravaAppId) : null,
       totalFetchedFromStrava: stravaList.length,
       newlySyncedCount: syncedActivities.length,
+      deferredToNextWindowCount: deferredCount,
       syncedActivities,
-      allActivities: this.activities,
+      allActivities: this.activities.filter((a) => a.userId === user.id),
     };
+  }
+
+  /**
+   * Định tuyến sự kiện Strava Webhook Real-time theo đúng VĐV (`owner_id`) và Pool cố định của VĐV đó:
+   * - Chỉ tốn đúng 1 Read request lấy bài chạy mới (`object_id`)
+   * - Ưu tiên mức HIGH (Priority 1, được phép dùng phần 15% ngân sách bảo lưu từ 85% -> 95% của Pool)
+   */
+  async handleRealStravaWebhookEvent(eventPayload: {
+    object_type: 'activity' | 'athlete';
+    object_id: number;
+    aspect_type: 'create' | 'update' | 'delete';
+    owner_id: number;
+    subscription_id?: number;
+  }) {
+    if (eventPayload.object_type !== 'activity') {
+      return { status: 'EVENT_ACKNOWLEDGED_NON_ACTIVITY' };
+    }
+
+    const athleteIdStr = String(eventPayload.owner_id || '');
+    const activityExtId = String(eventPayload.object_id || '');
+
+    if (eventPayload.aspect_type === 'delete' && activityExtId) {
+      this.deletedExternalIds.add(activityExtId);
+      return { status: 'ACTIVITY_DELETE_ACKNOWLEDGED', activityExtId };
+    }
+
+    // Tìm VĐV và Pool cố định của VĐV đó qua owner_id (Strava Athlete ID)
+    const conn = athleteIdStr
+      ? await prisma.stravaConnection.findUnique({
+          where: { athleteId: athleteIdStr },
+          include: { stravaApp: true },
+        })
+      : null;
+
+    if (conn && conn.isActive && conn.syncStatus !== 'REAUTH_REQUIRED' && activityExtId) {
+      const syncRes = await this.syncLiveStravaActivities(conn.userId, 7, {
+        triggerType: 'WEBHOOK',
+        bypassCooldown: true,
+        singleActivityExtId: activityExtId,
+        priority: 1,
+      });
+      return {
+        status: syncRes.status === 'QUEUED_IN_POOL' ? 'WEBHOOK_QUEUED_IN_POOL' : 'WEBHOOK_ACTIVITY_SYNCED',
+        userId: conn.userId,
+        poolId: conn.stravaAppId,
+        poolName: conn.stravaApp?.name || 'Strava Pool',
+        activityExtId,
+        newlySyncedCount: syncRes.newlySyncedCount || 0,
+        poolQuota: (syncRes as any).poolQuota || null,
+      };
+    }
+
+    // Fallback cho kịch bản test mô phỏng trên UI khi owner_id không khớp VĐV thật trong DB
+    if (eventPayload.aspect_type === 'create') {
+      const syncResult = await this.simulateStravaSync({
+        userId: 'usr_admin_01',
+        scenario: 'clean_run',
+      });
+      return {
+        status: 'EVENT_RECEIVED_AND_SCORED',
+        activityId: syncResult.activity.id,
+        validDistanceKm: syncResult.evaluation.validDistanceKm,
+        finalCountedDistanceKm: syncResult.evaluation.finalCountedDistanceKm,
+      };
+    }
+
+    return { status: 'EVENT_ACKNOWLEDGED' };
   }
 
   // --------------------------------------------------------------------------
