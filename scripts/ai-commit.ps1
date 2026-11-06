@@ -138,7 +138,7 @@ $diffSample
     $pinfo.StandardOutputEncoding = [System.Text.Encoding]::UTF8
 
     $proc = [System.Diagnostics.Process]::Start($pinfo)
-    $proc.WaitForExit(30000) # Cho toi da 30 giay
+    [void]$proc.WaitForExit(30000) # Cho toi da 30 giay (tranh tra ve bool True vao pipeline)
 
     $aiOutput = $proc.StandardOutput.ReadToEnd()
     $aiError = $proc.StandardError.ReadToEnd()
@@ -226,17 +226,32 @@ if (-not $NoPush) {
   $currentBranch = (git rev-parse --abbrev-ref HEAD).Trim()
   Write-Host "Dang push len branch '$currentBranch'..." -ForegroundColor Cyan
 
-  git push origin $currentBranch 2>$null
-  if ($LASTEXITCODE -ne 0) {
-    # Thu push voi --set-upstream neu branch moi tao chua co upstream
-    Write-Host "Branch co the chua set upstream, dang thu push voi --set-upstream..." -ForegroundColor Yellow
-    git push --set-upstream origin $currentBranch
-  }
+  $prevEAP = $ErrorActionPreference
+  $ErrorActionPreference = "Continue"
+  try {
+    # Git push mac dinh ghi tien trinh (progress/transfer rate) vao stderr
+    # Chuyen doi sang string stream tranh NativeCommandError cua PowerShell
+    $pushOutput = @(git push origin $currentBranch 2>&1 | ForEach-Object { "$_" })
+    if ($LASTEXITCODE -ne 0) {
+      Write-Host "Branch co the chua set upstream, dang thu push voi --set-upstream..." -ForegroundColor Yellow
+      $pushOutput = @(git push --set-upstream origin $currentBranch 2>&1 | ForEach-Object { "$_" })
+    }
 
-  if ($LASTEXITCODE -eq 0) {
-    Write-Host "[OK] Da push thanh cong len origin/$currentBranch!" -ForegroundColor Green
-  } else {
-    Write-Host "[Warning] Push that bai (co the do ket noi mang hoac chua set quyen remote). Commit van duoc giu local an toan." -ForegroundColor Yellow
+    if ($LASTEXITCODE -eq 0) {
+      Write-Host "[OK] Da push thanh cong len origin/$currentBranch!" -ForegroundColor Green
+      foreach ($line in $pushOutput) {
+        if (-not [string]::IsNullOrWhiteSpace($line)) {
+          Write-Host "  $line" -ForegroundColor Gray
+        }
+      }
+    } else {
+      Write-Host "[Warning] Push that bai (commit van duoc giu local an toan):" -ForegroundColor Yellow
+      foreach ($line in $pushOutput) {
+        Write-Host "  $line" -ForegroundColor Red
+      }
+    }
+  } finally {
+    $ErrorActionPreference = $prevEAP
   }
 }
 
