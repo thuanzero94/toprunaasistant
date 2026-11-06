@@ -545,6 +545,7 @@ export class TopRunEngineService implements OnModuleInit {
             tierName: t.tierName,
             tierLevel: t.tierLevel as any,
             conditionType: t.conditionType as any,
+            sportCategory: ((e.ruleConfig as any)?.challengeSportMap?.[t.id] || 'Run') as any,
             thresholdValue: Number(t.thresholdValue),
             targetSpeedDistanceKm: t.targetSpeedDistanceKm ? Number(t.targetSpeedDistanceKm) : undefined,
             minDailyDistanceKm: t.minDailyDistanceKm ? Number(t.minDailyDistanceKm) : 2.0,
@@ -571,6 +572,18 @@ export class TopRunEngineService implements OnModuleInit {
       const creatorId = this.users.some((u) => u.id === ev.creatorId)
         ? ev.creatorId
         : this.users[0]?.id || 'usr_admin_01';
+
+      const challengeSportMap: Record<string, string> = {};
+      for (const t of ev.challengeTiers || []) {
+        if (!t.id) {
+          t.id = (t as any).tierCode || `tier_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+        }
+        challengeSportMap[t.id] = (t as any).sportCategory || 'Run';
+      }
+      ev.ruleConfig = {
+        ...ev.ruleConfig,
+        challengeSportMap,
+      } as any;
 
       await prisma.event.upsert({
         where: { id: ev.id },
@@ -665,8 +678,8 @@ export class TopRunEngineService implements OnModuleInit {
         });
       }
 
-      // 2. Đồng bộ & Bảo toàn Thử thách mở rộng Challenge Tiers
-      const activeTierIds = ev.challengeTiers
+      // 2. Đồng bộ Thử thách mở rộng Challenge Tiers (Cho phép Admin xoá và tạo lại thử thách mới)
+      const activeTierIds = (ev.challengeTiers || [])
         .map((t: any) => {
           if (!t.id) {
             t.id = (t as any).tierCode || `tier_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
@@ -675,30 +688,14 @@ export class TopRunEngineService implements OnModuleInit {
         })
         .filter(Boolean);
 
-      if (activeTierIds.length > 0) {
-        // Kiểm tra xem có mốc thử thách nào sắp bị xoá mà đã được trao cho VĐV không
-        const awarded = await prisma.participationAward.findMany({
-          where: {
-            challengeTierId: { notIn: activeTierIds },
-            participation: { eventId: ev.id },
-          },
-          include: { challengeTier: true },
-        });
-
-        if (awarded.length > 0) {
-          const distinct = Array.from(new Set(awarded.map((a) => a.challengeTier?.tierName || a.challengeTierId))).join(', ');
-          throw new BadRequestException(
-            `Không thể xoá mốc thử thách "${distinct}" vì đã có ${awarded.length} VĐV đạt được mốc thành tích này.`
-          );
-        }
-
-        await prisma.eventChallengeTier.deleteMany({
-          where: {
-            eventId: ev.id,
-            id: { notIn: activeTierIds },
-          },
-        }).catch(() => {});
-      }
+      await prisma.eventChallengeTier
+        .deleteMany({
+          where:
+            activeTierIds.length > 0
+              ? { eventId: ev.id, id: { notIn: activeTierIds } }
+              : { eventId: ev.id },
+        })
+        .catch(() => {});
 
       for (const tier of ev.challengeTiers) {
         const tierId = tier.id || (tier as any).tierCode || `tier_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
@@ -2471,6 +2468,7 @@ export class TopRunEngineService implements OnModuleInit {
         tierName: tier.tierName,
         tierLevel: tier.tierLevel,
         conditionType: tier.conditionType,
+        sportCategory: (tier as any).sportCategory || 'Run',
         targetSpeedDistanceKm: tier.targetSpeedDistanceKm,
         minDailyDistanceKm: tier.minDailyDistanceKm,
         thresholdValue: tier.thresholdValue,
@@ -2873,17 +2871,28 @@ export class TopRunEngineService implements OnModuleInit {
       event.categories = payload.categories;
     }
     if (payload.challengeTiers !== undefined) {
-      event.challengeTiers = payload.challengeTiers;
+      event.challengeTiers = (payload.challengeTiers || []).map((t: any) => ({
+        ...t,
+        id: t.id || t.tierCode || `tier_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        sportCategory: t.sportCategory || 'Run',
+        awardBadgeUrl: t.awardBadgeUrl || (t.conditionType === 'SPEED_TARGET_TIME' ? '⚡' : '🏆'),
+      }));
     }
-    this.saveEngineState();
     await this.persistEventToDb(event);
 
-    // Tính toán lại tiến độ và BXH cho toàn bộ VĐV thuộc giải đấu này theo quy chế mới
+    // Dọn dẹp các ID thử thách cũ đã bị xoá khỏi danh sách đăng ký của VĐV và tính toán lại tiến độ
+    const validTierIds = new Set((event.challengeTiers || []).map((t: any) => t.id));
     const affectedParts = this.participations.filter((p) => p.eventId === event.id);
+    for (const p of affectedParts) {
+      if (Array.isArray(p.selectedChallengeTierIds)) {
+        p.selectedChallengeTierIds = p.selectedChallengeTierIds.filter((id) => validTierIds.has(id));
+      }
+    }
     const affectedUserIds = Array.from(new Set(affectedParts.map((p) => p.userId)));
     for (const uId of affectedUserIds) {
       this.recalculateUserParticipation(uId);
     }
+    this.saveEngineState();
 
     return event;
   }
@@ -2978,30 +2987,28 @@ export class TopRunEngineService implements OnModuleInit {
 
       const logs: any[] = [];
       for (const a of eventActs.slice().reverse()) {
-        const evEval = evaluateActivitySplits(
-          {
-            externalId: a.externalId,
-            name: a.name,
-            sportType: a.sportType,
-            startDateIso: a.startDateIso,
-            distanceMeters: Math.round(a.rawDistanceKm * 1000),
-            movingTimeSec: a.movingTimeSec,
-            elapsedTimeSec: a.elapsedTimeSec,
-            totalElevationGainMeters: a.totalElevationGainMeters,
-            averageHeartrate: a.averageHeartrate,
-            maxHeartrate: a.maxHeartrate,
-            averageCadenceSpm: a.averageCadenceSpm,
-            isManual: a.isManual,
-            splits: a.splits?.map((s) => ({
-              splitIndex: s.splitIndex,
-              distanceMeters: s.distanceMeters,
-              movingTimeSec: s.movingTimeSec,
-              elevationDiffMeters: s.elevationDiffMeters,
-              averageHeartrate: s.averageHeartrate,
-            })),
-          },
-          ev.ruleConfig
-        );
+        const rawInput = {
+          externalId: a.externalId,
+          name: a.name,
+          sportType: a.sportType,
+          startDateIso: a.startDateIso,
+          distanceMeters: Math.round(a.rawDistanceKm * 1000),
+          movingTimeSec: a.movingTimeSec,
+          elapsedTimeSec: a.elapsedTimeSec,
+          totalElevationGainMeters: a.totalElevationGainMeters,
+          averageHeartrate: a.averageHeartrate,
+          maxHeartrate: a.maxHeartrate,
+          averageCadenceSpm: a.averageCadenceSpm,
+          isManual: a.isManual,
+          splits: a.splits?.map((s) => ({
+            splitIndex: s.splitIndex,
+            distanceMeters: s.distanceMeters,
+            movingTimeSec: s.movingTimeSec,
+            elevationDiffMeters: s.elevationDiffMeters,
+            averageHeartrate: s.averageHeartrate,
+          })),
+        };
+        const evEval = evaluateActivitySplits(rawInput, ev.ruleConfig);
 
         if (evEval.antiCheatStatus !== AntiCheatStatus.REJECTED && evEval.finalCountedDistanceKm > 0) {
           logs.push({
@@ -3011,7 +3018,28 @@ export class TopRunEngineService implements OnModuleInit {
             elevationGainMeters: a.totalElevationGainMeters || 0,
             movingTimeSec: a.movingTimeSec || 0,
             validAvgPaceSecPerKm: evEval.validAvgPaceSecPerKm || a.avgPaceSecPerKm || 0,
+            sportType: a.sportType,
           });
+        } else if (
+          evEval.flagReasons?.includes('SPORT_CONVERSION_DISABLED') &&
+          ev.challengeTiers?.some((t: any) => (t.sportCategory || 'Run') === normalizeSportCategory(a.sportType))
+        ) {
+          // Giải không bật quy đổi chéo cho Target chính, nhưng có Thử thách mở rộng dành riêng cho bộ môn này (Ride/Swim)
+          const chEval = evaluateActivitySplits(rawInput, {
+            ...ev.ruleConfig,
+            enableCrossTrainingConversion: true,
+          });
+          if (chEval.antiCheatStatus !== AntiCheatStatus.REJECTED && chEval.validDistanceKm > 0) {
+            logs.push({
+              activityDateIso: a.startDateIso,
+              validRawDistanceKm: chEval.validDistanceKm,
+              finalMultipliedDistanceKm: 0, // Không cộng vào Target chạy bộ chính
+              elevationGainMeters: a.totalElevationGainMeters || 0,
+              movingTimeSec: a.movingTimeSec || 0,
+              validAvgPaceSecPerKm: chEval.validAvgPaceSecPerKm || a.avgPaceSecPerKm || 0,
+              sportType: a.sportType,
+            });
+          }
         }
       }
 

@@ -409,7 +409,12 @@ export default function RunnerEventModals({
                           <div className="flex items-center gap-2">
                             <span className="text-base">{tier.awardBadgeUrl || '🏆'}</span>
                             <div>
-                              <div className="font-bold text-xs">{tier.tierName}</div>
+                              <div className="font-bold text-xs flex items-center gap-1.5 flex-wrap">
+                                <span>{tier.tierName}</span>
+                                <span className="text-[9px] font-semibold px-1.5 py-0.2 rounded bg-slate-200/70 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                                  {tier.sportCategory === 'Ride' ? '🚴 Đạp xe' : tier.sportCategory === 'Swim' ? '🏊 Bơi lội' : '🏃 Chạy bộ'}
+                                </span>
+                              </div>
                               <div className="text-[10px] text-slate-500 dark:text-slate-400 line-clamp-1">
                                 {tier.rewardDescription}
                               </div>

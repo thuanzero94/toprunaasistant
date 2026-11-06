@@ -405,9 +405,9 @@ export function calculateDualGoalProgress(params: {
     roundKm(targetCategory.targetDistanceKm - effectiveDistanceForTarget)
   );
 
-  // 3. Hàm phụ tính chuỗi ngày chạy liên tiếp dài nhất (Max Streak Days)
-  const computeMaxStreakDays = (minDailyKm = 1.0): number => {
-    const validDays = Array.from(dailyDistanceMap.entries())
+  // 3. Hàm phụ tính chuỗi ngày liên tiếp dài nhất (Max Streak Days) theo từng bộ môn
+  const computeMaxStreakDaysForMap = (dayMap: Map<string, number>, minDailyKm = 1.0): number => {
+    const validDays = Array.from(dayMap.entries())
       .filter(([, km]) => km >= minDailyKm)
       .map(([day]) => day)
       .sort();
@@ -433,28 +433,53 @@ export function calculateDualGoalProgress(params: {
   };
 
   // 4. Đánh giá Tầng CHALLENGE TIERS (Các mốc nhận Award / Huy hiệu mở rộng)
+  // Lưu ý: Thử thách mở rộng chỉ tính đúng bộ môn được chọn (Mặc định: 'Run') và tính theo KM thực tế (validRawDistanceKm), KHÔNG áp dụng quy đổi chéo bộ môn!
   const evaluatedChallenges = challengeTiers.map((tier) => {
+    const requiredSport: SportCategory = tier.sportCategory || 'Run';
+    const tierLogs = activityLogs.filter(
+      (log) => normalizeSportCategory(log.sportType) === requiredSport
+    );
+
+    let tierTotalRawKm = 0;
+    let tierMaxSingleRawKm = 0;
+    let tierTotalElevationGain = 0;
+    const tierDailyDistanceMap = new Map<string, number>();
+
+    for (const log of tierLogs) {
+      const rawKm = log.validRawDistanceKm || 0;
+      tierTotalRawKm += rawKm;
+      if (rawKm > tierMaxSingleRawKm) {
+        tierMaxSingleRawKm = rawKm;
+      }
+      tierTotalElevationGain += log.elevationGainMeters || 0;
+      const dayKey = log.activityDateIso.slice(0, 10);
+      tierDailyDistanceMap.set(dayKey, (tierDailyDistanceMap.get(dayKey) || 0) + rawKm);
+    }
+
+    tierTotalRawKm = roundKm(tierTotalRawKm);
+    tierMaxSingleRawKm = roundKm(tierMaxSingleRawKm);
+
     let currentValue = 0;
     let isUnlocked = false;
 
     switch (tier.conditionType) {
       case ChallengeConditionType.DISTANCE_OVERACHIEVE:
-        currentValue = totalMultipliedKm;
+        currentValue = tierTotalRawKm;
         isUnlocked = currentValue >= tier.thresholdValue;
         break;
 
       case ChallengeConditionType.SINGLE_LONG_RUN:
-        currentValue = maxSingleRunRawKm;
+        currentValue = tierMaxSingleRawKm;
         isUnlocked = currentValue >= tier.thresholdValue;
         break;
 
       case ChallengeConditionType.STREAK_DAYS:
-        currentValue = computeMaxStreakDays(tier.minDailyDistanceKm ?? 2.0);
+        currentValue = computeMaxStreakDaysForMap(tierDailyDistanceMap, tier.minDailyDistanceKm ?? 2.0);
         isUnlocked = currentValue >= tier.thresholdValue;
         break;
 
       case ChallengeConditionType.ELEVATION_GAIN:
-        currentValue = Math.round(totalElevationGain);
+        currentValue = Math.round(tierTotalElevationGain);
         isUnlocked = currentValue >= tier.thresholdValue;
         break;
 
@@ -468,8 +493,8 @@ export function calculateDualGoalProgress(params: {
         const maxTimeSec = tier.thresholdValue * 60;
         const targetPaceSec = requiredKm > 0 ? maxTimeSec / requiredKm : maxTimeSec;
 
-        // Tìm bài chạy hợp lệ có cự ly >= requiredKm đạt chuẩn tốc độ (Pace <= targetPaceSec hoặc Thời gian <= maxTimeSec)
-        const qualifyingRuns = activityLogs.filter((log) => {
+        // Chỉ xét các bài thuộc đúng bộ môn của thử thách (tierLogs) có cự ly thực tế >= requiredKm
+        const qualifyingRuns = tierLogs.filter((log) => {
           if ((log.validRawDistanceKm || 0) < requiredKm) return false;
           const paceSec =
             log.validAvgPaceSecPerKm ||
@@ -511,8 +536,8 @@ export function calculateDualGoalProgress(params: {
               : (bestRun.movingTimeSec || 0) / 60;
           currentValue = Math.round(bestTimeMinutes * 10) / 10;
         } else {
-          // Nếu chưa đạt, hiển thị thời gian của bài chạy cự ly >= requiredKm có tốc độ tốt nhất
-          const candidates = activityLogs.filter((log) => (log.validRawDistanceKm || 0) >= requiredKm);
+          // Nếu chưa đạt, hiển thị thời gian của bài thuộc đúng bộ môn có cự ly >= requiredKm tốc độ tốt nhất
+          const candidates = tierLogs.filter((log) => (log.validRawDistanceKm || 0) >= requiredKm);
           if (candidates.length > 0) {
             const bestCandidate = candidates.reduce((best, cur) => {
               const curPace =
@@ -558,6 +583,7 @@ export function calculateDualGoalProgress(params: {
       tierName: tier.tierName,
       tierLevel: tier.tierLevel,
       conditionType: tier.conditionType,
+      sportCategory: requiredSport,
       thresholdValue: tier.thresholdValue,
       targetSpeedDistanceKm: tier.targetSpeedDistanceKm,
       currentValue,

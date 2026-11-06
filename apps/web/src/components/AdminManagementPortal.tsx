@@ -41,6 +41,7 @@ export interface AdminChallengeTierItem {
   tierName: string;
   tierLevel: string;
   conditionType: string;
+  sportCategory?: 'Run' | 'Ride' | 'Swim';
   thresholdValue: number;
   targetSpeedDistanceKm?: number;
   targetSpeedPaceFormatted?: string;
@@ -866,7 +867,7 @@ export default function AdminManagementPortal({
                     <button
                       type="button"
                       onClick={() => {
-                        const tiers = eventForm.challengeTiers || challengeTiers;
+                        const tiers = Array.isArray(eventForm.challengeTiers) ? eventForm.challengeTiers : challengeTiers;
                         const tierId = `tier_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
                         const newTier: AdminChallengeTierItem = {
                           id: tierId,
@@ -874,9 +875,10 @@ export default function AdminManagementPortal({
                           tierName: '⚡ Thử thách Tốc độ 5KM',
                           tierLevel: 'SPECIAL',
                           conditionType: 'SPEED_TARGET_TIME',
+                          sportCategory: 'Run',
                           targetSpeedDistanceKm: 5,
                           thresholdValue: 25,
-                          rewardDescription: 'Khớp số 5KM trong thời gian <= 25 phút',
+                          rewardDescription: 'Chạy cự ly 5km đạt Pace ≤ 05:00/km (Thời gian ≤ 25:00)',
                         };
                         onChangeEventForm({ ...eventForm, challengeTiers: [...tiers, newTier] });
                       }}
@@ -889,7 +891,7 @@ export default function AdminManagementPortal({
                     <button
                       type="button"
                       onClick={() => {
-                        const tiers = eventForm.challengeTiers || challengeTiers;
+                        const tiers = Array.isArray(eventForm.challengeTiers) ? eventForm.challengeTiers : challengeTiers;
                         const tierId = `tier_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
                         const newTier: AdminChallengeTierItem = {
                           id: tierId,
@@ -897,8 +899,9 @@ export default function AdminManagementPortal({
                           tierName: 'Mốc Thử Thách Mới',
                           tierLevel: 'SILVER',
                           conditionType: 'DISTANCE_OVERACHIEVE',
+                          sportCategory: 'Run',
                           thresholdValue: 100,
-                          rewardDescription: 'Vượt mốc tích luỹ km',
+                          rewardDescription: 'Vượt mốc tích luỹ km chạy bộ thực tế',
                         };
                         onChangeEventForm({ ...eventForm, challengeTiers: [...tiers, newTier] });
                       }}
@@ -911,12 +914,18 @@ export default function AdminManagementPortal({
                 </div>
 
                 <div className="space-y-3">
-                  {(eventForm.challengeTiers || challengeTiers).map((tier: any, idx: number) => {
+                  {(Array.isArray(eventForm.challengeTiers) ? eventForm.challengeTiers : challengeTiers).length === 0 && (
+                    <div className="p-6 text-center rounded-xl border border-dashed border-slate-200 dark:border-slate-800 text-xs text-slate-400">
+                      Hiện chưa có thử thách mở rộng nào. Hãy nhấn <strong>+ Thêm Giải Tốc Độ</strong> hoặc <strong>+ Thêm Thử Thách</strong> rồi bấm Lưu để tạo mới.
+                    </div>
+                  )}
+                  {(Array.isArray(eventForm.challengeTiers) ? eventForm.challengeTiers : challengeTiers).map((tier: any, idx: number) => {
                     const isSpeed = tier.conditionType === 'SPEED_TARGET_TIME';
+                    const tierSport = tier.sportCategory || 'Run';
 
                     return (
                       <div
-                        key={idx}
+                        key={tier.id || idx}
                         className={`p-4 rounded-xl border transition ${
                           isSpeed
                             ? 'border-amber-300 dark:border-amber-800/80 bg-amber-50/20 dark:bg-amber-950/20'
@@ -924,35 +933,39 @@ export default function AdminManagementPortal({
                         }`}
                       >
                         <div className="flex items-start justify-between gap-3 pb-2 border-b border-slate-200/60 dark:border-slate-800">
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 flex-wrap">
                             <div className={`p-1.5 rounded-lg ${isSpeed ? 'bg-amber-500/20 text-amber-500' : 'bg-[#FC4C02]/10 text-[#FC4C02]'}`}>
                               {isSpeed ? <Zap className="w-4 h-4" /> : <Award className="w-4 h-4" />}
                             </div>
                             <span className="font-bold text-xs text-slate-900 dark:text-white">
                               {isSpeed ? '⚡ Giải Tốc Độ (Speed Challenge)' : `Thử thách #${idx + 1}`}
                             </span>
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-slate-200/70 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+                              {tierSport === 'Ride' ? '🚴 Chỉ tính Đạp xe (Không quy đổi)' : tierSport === 'Swim' ? '🏊 Chỉ tính Bơi lội (Không quy đổi)' : '🏃 Chỉ tính Chạy bộ (Không quy đổi)'}
+                            </span>
                           </div>
 
                           <button
                             type="button"
                             onClick={() => {
-                              const tiers = (eventForm.challengeTiers || challengeTiers).filter((_: any, i: number) => i !== idx);
+                              const tiers = (Array.isArray(eventForm.challengeTiers) ? eventForm.challengeTiers : challengeTiers).filter((_: any, i: number) => i !== idx);
                               onChangeEventForm({ ...eventForm, challengeTiers: tiers });
                             }}
+                            title="Xoá thử thách mở rộng này"
                             className="p-1 rounded text-slate-400 hover:text-rose-500 cursor-pointer"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
                         </div>
 
-                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 pt-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3 pt-3">
                           <div className="space-y-1">
                             <label className="text-[10px] font-semibold text-slate-500 uppercase">Tên Huy Hiệu</label>
                             <input
                               type="text"
                               value={tier.tierName}
                               onChange={(e) => {
-                                const tiers = [...(eventForm.challengeTiers || challengeTiers)];
+                                const tiers = [...(Array.isArray(eventForm.challengeTiers) ? eventForm.challengeTiers : challengeTiers)];
                                 tiers[idx] = { ...tiers[idx], tierName: e.target.value };
                                 onChangeEventForm({ ...eventForm, challengeTiers: tiers });
                               }}
@@ -961,19 +974,37 @@ export default function AdminManagementPortal({
                           </div>
 
                           <div className="space-y-1">
+                            <label className="text-[10px] font-semibold text-[#FC4C02] uppercase">Bộ môn áp dụng</label>
+                            <select
+                              value={tierSport}
+                              onChange={(e) => {
+                                const newSport = e.target.value as 'Run' | 'Ride' | 'Swim';
+                                const tiers = [...(Array.isArray(eventForm.challengeTiers) ? eventForm.challengeTiers : challengeTiers)];
+                                tiers[idx] = { ...tiers[idx], sportCategory: newSport };
+                                onChangeEventForm({ ...eventForm, challengeTiers: tiers });
+                              }}
+                              className="w-full px-2.5 py-1.5 text-xs font-bold rounded-lg border border-orange-300 dark:border-orange-800/70 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100"
+                            >
+                              <option value="Run">🏃 Chạy bộ (Mặc định)</option>
+                              <option value="Ride">🚴 Đạp xe (Độc lập)</option>
+                              <option value="Swim">🏊 Bơi lội (Độc lập)</option>
+                            </select>
+                          </div>
+
+                          <div className="space-y-1">
                             <label className="text-[10px] font-semibold text-slate-500 uppercase">Loại điều kiện</label>
                             <select
                               value={tier.conditionType}
                               onChange={(e) => {
-                                const tiers = [...(eventForm.challengeTiers || challengeTiers)];
+                                const tiers = [...(Array.isArray(eventForm.challengeTiers) ? eventForm.challengeTiers : challengeTiers)];
                                 tiers[idx] = { ...tiers[idx], conditionType: e.target.value };
                                 onChangeEventForm({ ...eventForm, challengeTiers: tiers });
                               }}
                               className="w-full px-2.5 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100"
                             >
-                              <option value="DISTANCE_OVERACHIEVE">Vượt mốc km mở rộng</option>
-                              <option value="STREAK_DAYS">Chạy liên tục N ngày</option>
-                              <option value="SINGLE_LONG_RUN">1 buổi chạy dài</option>
+                              <option value="DISTANCE_OVERACHIEVE">Vượt mốc km tích luỹ</option>
+                              <option value="STREAK_DAYS">Chuỗi N ngày liên tục</option>
+                              <option value="SINGLE_LONG_RUN">1 buổi dài nhất</option>
                               <option value="ELEVATION_GAIN">Độ cao leo núi (gain m)</option>
                               <option value="TOP_RANK">Top N BXH</option>
                               <option value="SPEED_TARGET_TIME">⚡ Giải Tốc Độ (Khớp km &amp; thời gian)</option>

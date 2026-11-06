@@ -514,7 +514,7 @@ export default function TopRunWebApp() {
             { name: 'Mốc Target 42KM (Marathoner)', targetDistanceKm: 42, bibPrefix: 'VR42-' },
             { name: 'Mốc Target 50KM (Ultra)', targetDistanceKm: 50, bibPrefix: 'VR50-' },
           ],
-          challengeTiers: ev.challengeTiers || INITIAL_CHALLENGE_TIERS,
+          challengeTiers: Array.isArray(ev.challengeTiers) ? ev.challengeTiers : INITIAL_CHALLENGE_TIERS,
         });
       }
     } catch (err) {
@@ -968,10 +968,16 @@ export default function TopRunWebApp() {
         const tierSpec =
           currentEventData?.challengeTiers?.find((t: any) => t.id === challengeContext.tierId) || challengeContext;
         const condType = tierSpec.conditionType || challengeContext.conditionType;
+        const requiredSport = tierSpec.sportCategory || challengeContext.sportCategory || 'Run';
         const thresholdVal = Number(tierSpec.thresholdValue ?? challengeContext.thresholdValue ?? 0);
         const speedDistKm = Number(tierSpec.targetSpeedDistanceKm ?? challengeContext.targetSpeedDistanceKm ?? 5);
 
-        const annotatedActs = filteredActs.map((act) => {
+        // Chỉ giữ lại các hoạt động đúng bộ môn của thử thách (VD: Thử thách Chạy bộ tuyệt đối không lấy bài Đạp xe / Bơi)
+        const sportFilteredActs = filteredActs.filter(
+          (act) => normalizeSportCategory(act.sportType) === requiredSport
+        );
+
+        const annotatedActs = sportFilteredActs.map((act) => {
           const validKm = Number(act.validDistanceKm || 0);
           const paceSec = Number(act.avgPaceSecPerKm || 0);
           let isQualifying = false;
@@ -1096,10 +1102,42 @@ export default function TopRunWebApp() {
             },
             currentEventData.ruleConfig
           );
-          if (evEval.antiCheatStatus === AntiCheatStatus.REJECTED) return null;
-          validKm = evEval.validDistanceKm;
-          finalKm = evEval.finalCountedDistanceKm;
-          avgPace = evEval.validAvgPaceSecPerKm || a.avgPaceSecPerKm || 0;
+          if (evEval.antiCheatStatus === AntiCheatStatus.REJECTED) {
+            if (
+              evEval.flagReasons?.includes('SPORT_CONVERSION_DISABLED') &&
+              currentEventData?.challengeTiers?.some(
+                (t: any) => (t.sportCategory || 'Run') === normalizeSportCategory(a.sportType)
+              )
+            ) {
+              const chEval = evaluateActivitySplits(
+                {
+                  externalId: a.externalId,
+                  name: a.name,
+                  sportType: a.sportType || 'Run',
+                  startDateIso: a.startDateIso || new Date().toISOString(),
+                  distanceMeters: Math.round((a.rawDistanceKm || a.validDistanceKm || 0) * 1000),
+                  movingTimeSec: a.movingTimeSec || 0,
+                  elapsedTimeSec: a.elapsedTimeSec || a.movingTimeSec || 0,
+                  totalElevationGainMeters: a.elevationGain || 0,
+                  averageHeartrate: a.avgHr || null,
+                  averageCadenceSpm: a.avgCadence || null,
+                  isManual: false,
+                  splits: a.splits,
+                },
+                { ...currentEventData.ruleConfig, enableCrossTrainingConversion: true }
+              );
+              if (chEval.antiCheatStatus === AntiCheatStatus.REJECTED) return null;
+              validKm = chEval.validDistanceKm;
+              finalKm = 0;
+              avgPace = chEval.validAvgPaceSecPerKm || a.avgPaceSecPerKm || 0;
+            } else {
+              return null;
+            }
+          } else {
+            validKm = evEval.validDistanceKm;
+            finalKm = evEval.finalCountedDistanceKm;
+            avgPace = evEval.validAvgPaceSecPerKm || a.avgPaceSecPerKm || 0;
+          }
         }
 
         return {
@@ -1142,7 +1180,7 @@ export default function TopRunWebApp() {
       bibPrefix: myBibNumber.split('-')[0] + '-' || `TOP${myTargetKm}-`,
     },
     challengeTiers:
-      currentEventData?.challengeTiers?.length > 0 ? currentEventData.challengeTiers : INITIAL_CHALLENGE_TIERS,
+      Array.isArray(currentEventData?.challengeTiers) ? currentEventData.challengeTiers : INITIAL_CHALLENGE_TIERS,
     activityLogs: myActivityLogs,
     previouslyCompletedTargetAtIso: '2026-10-25T07:15:00Z',
   });
@@ -2126,6 +2164,13 @@ export default function TopRunWebApp() {
                                   >
                                     {chal.isUnlocked ? 'Đã đạt' : chal.tierLevel}
                                   </span>
+                                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                                    {(chal as any).sportCategory === 'Ride'
+                                      ? '🚴 Đạp xe'
+                                      : (chal as any).sportCategory === 'Swim'
+                                      ? '🏊 Bơi lội'
+                                      : '🏃 Chạy bộ'}
+                                  </span>
                                   <span
                                     className={`text-[10px] font-semibold px-2 py-0.5 rounded ${(chal as any).isRegistered
                                       ? 'bg-[#FC4C02]/15 text-[#FC4C02]'
@@ -2718,7 +2763,7 @@ export default function TopRunWebApp() {
               eventForm={eventForm}
               onChangeEventForm={setEventForm}
               onSaveEventRules={handleSaveEventRules}
-              challengeTiers={adminEventData?.challengeTiers || INITIAL_CHALLENGE_TIERS}
+              challengeTiers={Array.isArray(adminEventData?.challengeTiers) ? adminEventData.challengeTiers : INITIAL_CHALLENGE_TIERS}
               activities={activities}
               onInspectFlaggedActivity={(activityId) => {
                 navigateToTracklogDetail(activityId, 'admin');

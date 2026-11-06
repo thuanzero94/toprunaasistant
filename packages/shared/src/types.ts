@@ -249,6 +249,7 @@ export interface ChallengeTierInfo {
   tierName: string;           // VD: "Chiến Binh Bạc (100KM)", "Thợ Săn Bình Minh (Streak 7 Ngày)", "Tia Chớp 5K"
   tierLevel: 'BRONZE' | 'SILVER' | 'GOLD' | 'DIAMOND' | 'SPECIAL';
   conditionType: ChallengeConditionType;
+  sportCategory?: SportCategory; // Bộ môn áp dụng cho thử thách (Mặc định: 'Run', không tính quy đổi chéo)
   thresholdValue: number;     // VD: 100 (km), 7 (ngày liên tiếp), 25 (phút)
   targetSpeedDistanceKm?: number; // Dùng cho SPEED_TARGET_TIME (VD: 5km, 10km, 21km)
   minDailyDistanceKm?: number;// Dùng cho STREAK_DAYS (VD: mỗi ngày >= 2km)
@@ -285,6 +286,7 @@ export interface DualGoalProgressSummary {
     tierName: string;
     tierLevel: string;
     conditionType: ChallengeConditionType;
+    sportCategory?: SportCategory;
     thresholdValue: number;
     targetSpeedDistanceKm?: number;
     currentValue: number;
