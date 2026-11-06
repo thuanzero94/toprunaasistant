@@ -1476,7 +1476,7 @@ export class TopRunEngineService implements OnModuleInit {
 
       // Lọc bỏ ngay các bài tập không phải chạy bộ (Ride, Swim, Walk...) TRƯỚC khi gọi /activities/:id để tiết kiệm Read Limit (200/15p)
       const rawSport = summaryAct.sport_type || summaryAct.type || SportType.RUN;
-      if (normalizeSportCategory(rawSport) !== 'RUN') {
+      if (normalizeSportCategory(rawSport) !== 'Run') {
         continue;
       }
 

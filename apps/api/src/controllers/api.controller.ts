@@ -18,7 +18,7 @@ import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Response } from 'express';
 import { TopRunEngineService } from '../services/toprun-engine.service';
 import { AccountService } from '../services/account.service';
-import { AntiCheatStatus, ChallengeConditionType, EventType, FulfillmentStatus, RunMode } from '@toprun/shared';
+import { AntiCheatStatus, ChallengeConditionType, EventStatus, EventType, FulfillmentStatus, RunMode } from '@toprun/shared';
 
 @ApiTags('TOPRunAssistant API v1')
 @Controller('api/v1')

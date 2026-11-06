@@ -49,7 +49,9 @@ export interface StravaWindowTiming {
   secondsUntilDailyReset: number;
 }
 
-export interface EvaluatedPoolQuota extends StravaPoolRateSnapshot, StravaWindowTiming {
+export interface EvaluatedPoolQuota
+  extends Omit<StravaPoolRateSnapshot, 'window15mKey' | 'windowDailyKey'>,
+    StravaWindowTiming {
   overall15mPct: number;
   overallDailyPct: number;
   read15mPct: number;
