@@ -308,10 +308,10 @@ export function useAppNavigation({
 
   const navigateToTracklogDetail = useCallback(
     (actId: string, fromTab: string = 'tracklogs') => {
+      setActiveModalState(null);
       setActiveTabState('tracklogs');
       setTracklogViewModeState('detail');
       setSelectedActivityIdState(actId);
-      setActiveModalState(null);
 
       const nextState = {
         tab: 'tracklogs' as NavTab,
@@ -362,10 +362,10 @@ export function useAppNavigation({
   );
 
   const closeModal = useCallback(
-    (modalToClose?: AppModal) => {
-      // If modal is currently in history state, pop it back
+    (modalToClose?: AppModal, directWithoutBack = false) => {
+      // If modal is currently in history state, pop it back (unless direct navigation is requested)
       const currentState = typeof window !== 'undefined' ? window.history.state : null;
-      if (currentState && currentState.modal) {
+      if (!directWithoutBack && currentState && currentState.modal) {
         window.history.back();
       } else {
         // Direct close & clean URL without extra history item

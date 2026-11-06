@@ -2405,6 +2405,7 @@ export class TopRunEngineService implements OnModuleInit {
         multipliedDistanceKm: p.dualGoalProgress.target.currentMultipliedDistanceKm,
         targetProgressPct: p.dualGoalProgress.target.progressPercentage,
         isTargetCompleted: p.dualGoalProgress.target.isCompleted,
+        sportBreakdown: p.dualGoalProgress.sportBreakdown,
         unlockedChallengesCount: p.dualGoalProgress.challenges.filter((c) => c.isUnlocked).length,
         unlockedChallengeBadges: p.dualGoalProgress.challenges
           .filter((c) => c.isUnlocked)

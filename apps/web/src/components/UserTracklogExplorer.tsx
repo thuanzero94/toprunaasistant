@@ -93,6 +93,7 @@ interface Props {
   theme: 'dark' | 'light';
   viewingUser?: { id: string; name: string } | null;
   onClearViewingUser?: () => void;
+  onBackToTournament?: () => void;
 }
 
 export default function UserTracklogExplorer({
@@ -112,6 +113,7 @@ export default function UserTracklogExplorer({
   theme,
   viewingUser,
   onClearViewingUser,
+  onBackToTournament,
 }: Props) {
   const isAdmin = currentUserRole === 'ADMIN';
   const [internalViewMode, setInternalViewMode] = useState<'list' | 'detail'>('list');
@@ -221,6 +223,7 @@ export default function UserTracklogExplorer({
         <TracklogDetailView
           activity={selectedActivity}
           onBackToList={() => setViewMode('list')}
+          onBackToTournament={onBackToTournament}
           onOpenShareModal={onOpenShareModal}
           onToggleHideActivity={onToggleHideActivity}
           onDeleteActivity={onDeleteActivity}

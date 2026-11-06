@@ -203,14 +203,14 @@ export default function TopRunWebApp() {
   const [selectedChallengeModalData, setSelectedChallengeModalData] = useState<any | null>(null);
   const [challengeModalTab, setChallengeModalTab] = useState<'completed' | 'all'>('completed');
   const selectedParticipantDetail = activeModal === 'participant' ? selectedParticipantDetailData : null;
-  const setSelectedParticipantDetail = (data: ParticipantDetailData | null) => {
+  const setSelectedParticipantDetail = (data: ParticipantDetailData | null, useHistoryBack = true) => {
     if (data) {
       setSelectedParticipantDetailData(data);
       openModal('participant');
     } else {
       setSelectedParticipantDetailData(null);
       if (activeModal === 'participant') {
-        closeModal('participant');
+        closeModal('participant', !useHistoryBack);
       }
     }
   };
@@ -834,7 +834,27 @@ export default function TopRunWebApp() {
 
   const handleSelectActivityDetail = useCallback(
     (actId: string, fromOrigin: string = 'tournaments') => {
-      // 1. Nếu bài chạy chưa có trong activities state (ví dụ bài chạy của VĐV khác), fetch ngay từ API
+      // 1. Đóng modal chi tiết VĐV trực tiếp không gọi history.back()
+      setSelectedParticipantDetailData(null);
+
+      // 2. Lấy dữ liệu bài chạy từ modal đang mở (nếu có) nạp ngay vào activities
+      if (selectedParticipantDetailData) {
+        if (selectedParticipantDetailData.userId && selectedParticipantDetailData.userId !== user?.id) {
+          setFilterTracklogUser({
+            id: selectedParticipantDetailData.userId,
+            name: selectedParticipantDetailData.name || 'Vận động viên',
+          });
+        }
+        if (selectedParticipantDetailData.activities && selectedParticipantDetailData.activities.length > 0) {
+          setActivities((prev) => {
+            const prevIds = new Set(prev.map((a) => a.id));
+            const missing = (selectedParticipantDetailData.activities || []).filter((a) => !prevIds.has(a.id));
+            return missing.length > 0 ? [...missing, ...prev] : prev;
+          });
+        }
+      }
+
+      // 3. Nếu bài chạy chưa có trong activities state, fetch thêm từ API
       const existing = activities.find((a) => a.id === actId);
       if (!existing) {
         const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1';
@@ -847,26 +867,20 @@ export default function TopRunWebApp() {
             if (raw) {
               const mapped = mapBackendActivityToUi(raw);
               setActivities((prev) => [mapped, ...prev.filter((p) => p.id !== mapped.id)]);
-              if (raw.userId && raw.userId !== user?.id) {
-                setFilterTracklogUser({ id: raw.userId, name: raw.userName || 'Vận động viên' });
-              }
             }
           })
           .catch(() => {});
-      } else {
-        if (existing.userId && existing.userId !== user?.id) {
-          setFilterTracklogUser({ id: existing.userId, name: existing.userName });
-        }
       }
-      // 2. Chuyển tab sang Tracklog ở view Detail
+
+      // 4. Chuyển ngay lập tức sang tab Tracklogs ở view Detail
       navigateToTracklogDetail(actId, fromOrigin);
     },
-    [activities, mapBackendActivityToUi, navigateToTracklogDetail, user?.id]
+    [activities, mapBackendActivityToUi, navigateToTracklogDetail, selectedParticipantDetailData, user?.id]
   );
 
   const handleViewFullUserTracklogs = useCallback(
     async (targetUserId: string, targetUserName: string) => {
-      setSelectedParticipantDetail(null);
+      setSelectedParticipantDetail(null, false);
       setFilterTracklogUser({ id: targetUserId, name: targetUserName });
       setActiveTab('tracklogs');
       setTracklogViewMode('list');
@@ -958,6 +972,7 @@ export default function TopRunWebApp() {
         challengeTierAchieved: p.challengeTierAchieved,
         role: p.role,
         honorBadge: p.honorBadge,
+        sportBreakdown: p.sportBreakdown,
         activities: filteredActs,
       });
     },
@@ -1922,6 +1937,24 @@ export default function TopRunWebApp() {
                                 : `Còn ${dualGoalProgress.target.remainingDistanceKm} km`}
                             </span>
                           </div>
+
+                          {dualGoalProgress.sportBreakdown && (dualGoalProgress.sportBreakdown.rideConvertedKm > 0 || dualGoalProgress.sportBreakdown.swimConvertedKm > 0) && (
+                            <div className="pt-2 border-t border-slate-200/60 dark:border-slate-800/60 space-y-1">
+                              <div className="text-[11px] font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5 flex-wrap">
+                                <span className="text-[#FC4C02] font-bold">⚡ Quy đổi:</span>
+                                <span className="font-mono">
+                                  Chạy {dualGoalProgress.sportBreakdown.runKm}KM
+                                  {dualGoalProgress.sportBreakdown.rideConvertedKm > 0 && ` + ${dualGoalProgress.sportBreakdown.rideConvertedKm}KM (đạp xe)`}
+                                  {dualGoalProgress.sportBreakdown.swimConvertedKm > 0 && ` + ${dualGoalProgress.sportBreakdown.swimConvertedKm}KM (bơi)`}
+                                </span>
+                              </div>
+                              {dualGoalProgress.sportBreakdown.rideConvertedKm > 0 && (
+                                <div className="text-[10px] text-slate-400 font-mono">
+                                  ({dualGoalProgress.sportBreakdown.rideRawKm}km đạp xe ~ {dualGoalProgress.sportBreakdown.rideConvertedKm}KM target)
+                                </div>
+                              )}
+                            </div>
+                          )}
                         </div>
                       </div>
 
@@ -2363,10 +2396,10 @@ export default function TopRunWebApp() {
                                       </td>
 
                                       {/* Progress Bar */}
-                                      <td className="py-3 px-3 min-w-[120px]">
+                                      <td className="py-3 px-3 min-w-[150px]">
                                         <div className="space-y-1">
                                           <div className="flex items-center justify-between text-[11px] font-mono">
-                                            <span className="text-slate-500 dark:text-slate-400">{multipliedKm}/{targetKm}km</span>
+                                            <span className="font-bold text-slate-800 dark:text-slate-200">{multipliedKm}/{targetKm}km</span>
                                             <span className="font-bold text-[#FC4C02]">{pct}%</span>
                                           </div>
                                           <div className="w-full h-1.5 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
@@ -2377,6 +2410,27 @@ export default function TopRunWebApp() {
                                               style={{ width: `${pct}%` }}
                                             />
                                           </div>
+                                          {/* Cross-training conversion formula */}
+                                          {(() => {
+                                            const sb = p.sportBreakdown;
+                                            if (!sb || (sb.rideConvertedKm === 0 && sb.swimConvertedKm === 0)) return null;
+                                            return (
+                                              <div className="text-[10px] text-slate-500 dark:text-slate-400 font-mono pt-0.5 leading-tight">
+                                                <span>Chạy {sb.runKm}KM</span>
+                                                {sb.rideConvertedKm > 0 && (
+                                                  <span className="text-emerald-600 dark:text-emerald-400 font-medium"> + {sb.rideConvertedKm}KM (đạp)</span>
+                                                )}
+                                                {sb.swimConvertedKm > 0 && (
+                                                  <span className="text-cyan-600 dark:text-cyan-400 font-medium"> + {sb.swimConvertedKm}KM (bơi)</span>
+                                                )}
+                                                {sb.rideConvertedKm > 0 && (
+                                                  <div className="text-[9px] text-slate-400 opacity-80">
+                                                    ({sb.rideRawKm}km đạp xe ~ {sb.rideConvertedKm}KM target)
+                                                  </div>
+                                                )}
+                                              </div>
+                                            );
+                                          })()}
                                         </div>
                                       </td>
 
@@ -2459,7 +2513,7 @@ export default function TopRunWebApp() {
           {activeTab === 'tracklogs' && (
             <UserTracklogExplorer
               activities={activities}
-              selectedActivityId={selectedActivity?.id || selectedActivityId || ''}
+              selectedActivityId={selectedActivityId}
               currentUserId={user?.id}
               currentUserRole={user?.role}
               viewMode={tracklogViewMode}
@@ -2476,6 +2530,7 @@ export default function TopRunWebApp() {
               theme={theme}
               viewingUser={filterTracklogUser}
               onClearViewingUser={() => setFilterTracklogUser(null)}
+              onBackToTournament={() => navigateToTournamentDetail(selectedEventId, 'my-events')}
             />
           )}
 
@@ -2627,7 +2682,6 @@ export default function TopRunWebApp() {
         participant={selectedParticipantDetail}
         onClose={() => setSelectedParticipantDetail(null)}
         onSelectActivity={(actId) => {
-          setSelectedParticipantDetail(null);
           handleSelectActivityDetail(actId, 'tournaments');
         }}
         onViewFullUserTracklogs={handleViewFullUserTracklogs}

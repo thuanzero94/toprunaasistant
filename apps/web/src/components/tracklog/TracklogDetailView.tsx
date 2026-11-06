@@ -3,6 +3,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ArrowLeft,
+  Trophy,
   Share2,
   Eye,
   EyeOff,
@@ -35,6 +36,7 @@ import AthleteAvatar, { AthleteHonorPill } from '../AthleteAvatar';
 interface TracklogDetailViewProps {
   activity: TracklogActivityItem;
   onBackToList: () => void;
+  onBackToTournament?: () => void;
   onOpenShareModal: () => void;
   onToggleHideActivity: (id: string) => Promise<void> | void;
   onDeleteActivity: (id: string) => Promise<void> | void;
@@ -46,6 +48,7 @@ interface TracklogDetailViewProps {
 export default function TracklogDetailView({
   activity,
   onBackToList,
+  onBackToTournament,
   onOpenShareModal,
   onToggleHideActivity,
   onDeleteActivity,
@@ -93,7 +96,7 @@ export default function TracklogDetailView({
   }, [activity.polyline]);
 
   const splitCoordinates = useMemo(() => {
-    if (routeCoordinates.length === 0) return [];
+    if (routeCoordinates.length === 0 || !Array.isArray(activity.splits)) return [];
     const totalSplits = activity.splits.length;
     return activity.splits.map((sp, idx) => {
       const ratio = (idx + 1) / Math.max(totalSplits, 1);
@@ -340,15 +343,26 @@ export default function TracklogDetailView({
          ===================================================================== */}
       <div className="rounded-2xl bg-white dark:bg-[#0F1420] border border-slate-200/80 dark:border-slate-800/80 p-4 sm:p-5 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         {/* Left: Back button + Title */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5 flex-wrap">
           <button
             type="button"
             onClick={onBackToList}
             className="px-3.5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-[#FC4C02] text-slate-700 dark:text-slate-200 hover:text-white font-bold text-xs sm:text-sm flex items-center gap-2 transition cursor-pointer shadow-xs shrink-0"
           >
             <ArrowLeft className="w-4 h-4" />
-            <span>Quay lại</span>
+            <span>Quay lại danh sách</span>
           </button>
+          {onBackToTournament && (
+            <button
+              type="button"
+              onClick={onBackToTournament}
+              className="px-3.5 py-2.5 rounded-xl bg-orange-50 dark:bg-[#FC4C02]/15 text-[#FC4C02] hover:bg-[#FC4C02] hover:text-white font-bold text-xs sm:text-sm flex items-center gap-1.5 transition cursor-pointer shadow-xs shrink-0 border border-orange-200/80 dark:border-[#FC4C02]/30"
+              title="Quay lại bảng xếp hạng & chi tiết giải đấu"
+            >
+              <Trophy className="w-4 h-4" />
+              <span>← Quay lại giải đấu</span>
+            </button>
+          )}
 
           <div className="min-w-0">
             <div className="flex items-center gap-1.5 text-xs text-slate-400 mb-1">
