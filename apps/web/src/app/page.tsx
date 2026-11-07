@@ -47,6 +47,8 @@ import TopRunLogo from '../components/TopRunLogo';
 import MobileBottomNav from '../components/MobileBottomNav';
 import AthleteAvatar, { AthleteHonorPill } from '../components/AthleteAvatar';
 import AthleteDeepDashboard from '../components/dashboard/AthleteDeepDashboard';
+import TournamentHeroAndTier1Card from '../components/tournament/TournamentHeroAndTier1Card';
+import TournamentChallengeTable from '../components/tournament/TournamentChallengeTable';
 import {
   useAppNavigation,
   NavTab,
@@ -1237,6 +1239,114 @@ export default function TopRunWebApp() {
     }),
   };
 
+  const handleToggleChallengeRegistration = useCallback(
+    async (tierId: string, nextRegistered: boolean) => {
+      if (!user?.id || !selectedEventId) return;
+      const nextTierIds = nextRegistered
+        ? Array.from(new Set([...myRegisteredChallengeIds, tierId]))
+        : myRegisteredChallengeIds.filter((id) => id !== tierId);
+
+      try {
+        const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1';
+        const token = typeof window !== 'undefined' ? localStorage.getItem('toprun_auth_token') : null;
+        const res = await fetch(`${apiBase}/events/${encodeURIComponent(selectedEventId)}/register`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({
+            userId: user.id,
+            categoryId: userEventParticipation?.categoryId || '',
+            selectedChallengeTierIds: nextTierIds,
+            shirtSize: myShirtSize || 'L',
+            recipientName: user.fullName || '',
+            phone: '',
+            shippingAddress: '',
+          }),
+        });
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.message || 'Không thể cập nhật đăng ký thử thách.');
+        }
+        await Promise.all([
+          fetchEventDetails(selectedEventId),
+          fetchEventsList(),
+          fetchUserProfileAndTrophyCase(),
+        ]);
+        const tierObj = dualGoalProgress.challenges.find((c) => c.tierId === tierId);
+        setSyncBannerMessage(
+          nextRegistered
+            ? `✅ Đã đăng ký tham gia thử thách "${tierObj?.tierName || tierId}"!`
+            : `Đã huỷ đăng ký thử thách "${tierObj?.tierName || tierId}".`
+        );
+      } catch (err: any) {
+        alert(err.message || 'Lỗi khi cập nhật thử thách.');
+      }
+    },
+    [
+      user?.id,
+      user?.fullName,
+      selectedEventId,
+      myRegisteredChallengeIds,
+      userEventParticipation?.categoryId,
+      myShirtSize,
+      fetchEventDetails,
+      fetchEventsList,
+      fetchUserProfileAndTrophyCase,
+      dualGoalProgress.challenges,
+    ]
+  );
+
+  const handleQuickChangeTargetCategory = useCallback(
+    async (categoryId: string, targetDistanceKm: number) => {
+      if (!user?.id || !selectedEventId) return;
+      try {
+        const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1';
+        const token = typeof window !== 'undefined' ? localStorage.getItem('toprun_auth_token') : null;
+        const res = await fetch(`${apiBase}/events/${encodeURIComponent(selectedEventId)}/register`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({
+            userId: user.id,
+            categoryId,
+            selectedChallengeTierIds: myRegisteredChallengeIds,
+            shirtSize: myShirtSize || 'L',
+            recipientName: user.fullName || '',
+            phone: '',
+            shippingAddress: '',
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data.message || 'Không thể đổi mốc cự ly mục tiêu.');
+        }
+        setMyTargetKm(data.targetDistanceKm || targetDistanceKm);
+        await Promise.all([
+          fetchEventDetails(selectedEventId),
+          fetchEventsList(),
+          fetchUserProfileAndTrophyCase(),
+        ]);
+        setSyncBannerMessage(`🎯 Đã đổi mục tiêu Tầng 1 sang mốc ${data.targetDistanceKm || targetDistanceKm}KM!`);
+      } catch (err: any) {
+        alert(err.message || 'Lỗi khi đổi mục tiêu.');
+      }
+    },
+    [
+      user?.id,
+      user?.fullName,
+      selectedEventId,
+      myRegisteredChallengeIds,
+      myShirtSize,
+      fetchEventDetails,
+      fetchEventsList,
+      fetchUserProfileAndTrophyCase,
+    ]
+  );
+
   const myEventsList: MyEventItem[] = useMemo(() => {
     if (!user?.id) return [];
     return eventsList
@@ -1975,384 +2085,30 @@ export default function TopRunWebApp() {
                 />
               ) : (
                 <>
-                  {/* Clean Event Header Card */}
-                  <div className="rounded-2xl bg-white dark:bg-[#0F1420] border border-slate-200/80 dark:border-slate-800/80 p-6 sm:p-7 shadow-sm">
-                    <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
-                      <div className="space-y-3 max-w-2xl">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                            {currentEventData?.status === 'ACTIVE' ? 'Đang diễn ra' : currentEventData?.status === 'UPCOMING' ? 'Sắp diễn ra' : 'Bản nháp'}
-                          </span>
-                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-semibold bg-[#FC4C02]/10 text-[#FC4C02]">
-                            <Flame className="w-3.5 h-3.5" />
-                            {(currentEventData?.ruleConfig?.weekendMultiplier || 1.0) > 1.0
-                              ? `Cuối tuần x${currentEventData.ruleConfig.weekendMultiplier} 🔥`
-                              : 'Tính điểm 1:1 theo km thực chạy'}
-                          </span>
-                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
-                            <ShieldCheck className="w-3.5 h-3.5" />
-                            Pace: {formatPace(currentEventData?.ruleConfig?.minPaceSecPerKm ?? 180)} – {formatPace(currentEventData?.ruleConfig?.maxPaceSecPerKm ?? 900)}
-                          </span>
-                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
-                            Min: {currentEventData?.ruleConfig?.minActivityDistanceKm ?? 1.0}km/bài
-                          </span>
-                          {currentEventData?.ruleConfig?.enableCrossTrainingConversion && (
-                            <span
-                              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold bg-cyan-50 dark:bg-cyan-950/50 text-cyan-700 dark:text-cyan-300 border border-cyan-200 dark:border-cyan-800/60"
-                              title={`Quy đổi: 1km bơi = ${currentEventData.ruleConfig.swimToRunRatio ?? 5}km chạy • ${(1 / (currentEventData.ruleConfig.rideToRunRatio ?? 0.25))}km đạp = 1km chạy`}
-                            >
-                              <span>🏊 1km bơi = {currentEventData.ruleConfig.swimToRunRatio ?? 5}km</span>
-                              <span>•</span>
-                              <span>🚴 4km đạp = 1km</span>
-                            </span>
-                          )}
-                        </div>
+                  {/* 1. THẺ GỘP: HEADER GIẢI + TIẾN ĐỘ TẦNG 1 FINISHER + 3 NÚT (ĐỔI CỰ LY, E-BIB, QUY TẮC) */}
+                  <TournamentHeroAndTier1Card
+                    currentEventData={currentEventData}
+                    dualGoalProgress={dualGoalProgress}
+                    myBibNumber={myBibNumber}
+                    myTargetKm={myTargetKm}
+                    myShirtSize={myShirtSize}
+                    onOpenRegisterModal={() => setShowRegisterModal(true)}
+                    onOpenEBibModal={() => setShowEBibModal(true)}
+                    onQuickChangeTargetCategory={handleQuickChangeTargetCategory}
+                  />
 
-                        <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white">
-                          {currentEventData?.title || 'TOPRun Virtual Race 2026'}
-                        </h2>
-                        <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
-                          {currentEventData?.subtitle || currentEventData?.description || 'Giải chạy tích lũy trực tuyến đồng bộ Strava API.'}
-                        </p>
-                      </div>
-
-                      <div className="flex flex-wrap sm:flex-nowrap lg:flex-col gap-2.5 shrink-0">
-                        <button
-                          type="button"
-                          onClick={() => setShowRegisterModal(true)}
-                          className="px-4 py-2.5 rounded-xl bg-[#FC4C02] hover:bg-[#E34402] text-white font-semibold text-xs sm:text-sm flex items-center justify-center gap-2 shadow-sm transition cursor-pointer"
-                        >
-                          <Settings className="w-4 h-4" />
-                          <span>Đổi cự ly mục tiêu / Size áo</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setShowEBibModal(true)}
-                          className="px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-semibold text-xs sm:text-sm flex items-center justify-center gap-2 transition cursor-pointer"
-                        >
-                          <Award className="w-4 h-4 text-[#FC4C02]" />
-                          <span>Xem E-BIB ({myBibNumber}) &amp; Chứng nhận</span>
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Dual-Goal Progress Grid */}
-                  <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-                    {/* TIER 1: TARGET FINISHER */}
-                    <div className="lg:col-span-5 rounded-2xl bg-white dark:bg-[#0F1420] border border-slate-200/80 dark:border-slate-800/80 p-6 flex flex-col justify-between space-y-6 shadow-sm">
-                      <div className="space-y-4">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <div className="w-8 h-8 rounded-lg bg-[#FC4C02]/10 text-[#FC4C02] flex items-center justify-center">
-                              <Target className="w-4 h-4" />
-                            </div>
-                            <div>
-                              <div className="text-[11px] font-bold uppercase tracking-wider text-[#FC4C02]">
-                                Tầng 1 • Mục tiêu Finisher
-                              </div>
-                              <h3 className="text-base font-bold text-slate-900 dark:text-white">
-                                {dualGoalProgress.target.categoryName}
-                              </h3>
-                            </div>
-                          </div>
-                          <span className="px-2.5 py-1 rounded-md bg-slate-100 dark:bg-slate-800 font-mono text-xs font-semibold text-slate-700 dark:text-slate-300">
-                            {myBibNumber}
-                          </span>
-                        </div>
-
-                        {/* Metric Box */}
-                        <div className="p-5 rounded-xl bg-slate-50 dark:bg-slate-900/70 border border-slate-200/70 dark:border-slate-800 space-y-3">
-                          <div className="flex items-baseline justify-between">
-                            <div>
-                              <span className="text-3xl sm:text-4xl font-extrabold font-mono text-slate-900 dark:text-white">
-                                {dualGoalProgress.target.currentMultipliedDistanceKm}
-                              </span>
-                              <span className="text-sm text-slate-500 dark:text-slate-400 font-mono ml-1">
-                                / {dualGoalProgress.target.targetDistanceKm} km
-                              </span>
-                            </div>
-                            <span className="text-base font-bold font-mono text-emerald-600 dark:text-emerald-400">
-                              {dualGoalProgress.target.progressPercentage}%
-                            </span>
-                          </div>
-
-                          <div className="w-full h-2.5 rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden">
-                            <div
-                              className="h-full rounded-full bg-[#FC4C02] transition-all duration-500"
-                              style={{ width: `${dualGoalProgress.target.progressPercentage}%` }}
-                            />
-                          </div>
-
-                          <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 pt-1">
-                            <span>Quãng đường gốc: {dualGoalProgress.target.currentRawDistanceKm} km</span>
-                            <span className="font-semibold text-emerald-600 dark:text-emerald-400">
-                              {dualGoalProgress.target.isCompleted
-                                ? 'Đã hoàn thành mục tiêu'
-                                : `Còn ${dualGoalProgress.target.remainingDistanceKm} km`}
-                            </span>
-                          </div>
-
-                          {dualGoalProgress.sportBreakdown && (dualGoalProgress.sportBreakdown.rideConvertedKm > 0 || dualGoalProgress.sportBreakdown.swimConvertedKm > 0) && (
-                            <div className="pt-2 border-t border-slate-200/60 dark:border-slate-800/60 space-y-1">
-                              <div className="text-[11px] font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5 flex-wrap">
-                                <span className="text-[#FC4C02] font-bold">⚡ Quy đổi:</span>
-                                <span className="font-mono">
-                                  Chạy {dualGoalProgress.sportBreakdown.runKm}KM
-                                  {dualGoalProgress.sportBreakdown.rideConvertedKm > 0 && ` + ${dualGoalProgress.sportBreakdown.rideConvertedKm}KM (đạp xe)`}
-                                  {dualGoalProgress.sportBreakdown.swimConvertedKm > 0 && ` + ${dualGoalProgress.sportBreakdown.swimConvertedKm}KM (bơi)`}
-                                </span>
-                              </div>
-                              {dualGoalProgress.sportBreakdown.rideConvertedKm > 0 && (
-                                <div className="text-[10px] text-slate-400 font-mono">
-                                  ({dualGoalProgress.sportBreakdown.rideRawKm}km đạp xe ~ {dualGoalProgress.sportBreakdown.rideConvertedKm}KM target)
-                                </div>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Finisher Perks Checklist */}
-                      <div className="space-y-2.5 pt-4 border-t border-slate-100 dark:border-slate-800/80 text-xs">
-                        <div className="flex items-center justify-between">
-                          <span className="text-slate-600 dark:text-slate-400 flex items-center gap-2">
-                            <CheckCircle2
-                              className={`w-4 h-4 ${dualGoalProgress.target.eCertUnlocked ? 'text-emerald-500' : 'text-slate-400'
-                                }`}
-                            />
-                            Chứng nhận điện tử (E-Certificate)
-                          </span>
-                          <span
-                            className={`font-semibold ${dualGoalProgress.target.eCertUnlocked
-                              ? 'text-emerald-600 dark:text-emerald-400'
-                              : 'text-slate-400'
-                              }`}
-                          >
-                            {dualGoalProgress.target.eCertUnlocked ? 'Đã mở khóa' : 'Chưa mở khóa'}
-                          </span>
-                        </div>
-
-                        <div className="flex items-center justify-between">
-                          <span className="text-slate-600 dark:text-slate-400 flex items-center gap-2">
-                            <Truck
-                              className={`w-4 h-4 ${dualGoalProgress.target.raceKitQualified ? 'text-emerald-500' : 'text-slate-400'
-                                }`}
-                            />
-                            Huy chương thật &amp; Áo Finisher (Size {myShirtSize})
-                          </span>
-                          <span
-                            className={`font-semibold ${dualGoalProgress.target.raceKitQualified
-                              ? 'text-emerald-600 dark:text-emerald-400'
-                              : 'text-slate-400'
-                              }`}
-                          >
-                            {dualGoalProgress.target.raceKitQualified ? 'Đủ điều kiện nhận' : 'Đang tích lũy'}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* TIER 2: CHALLENGE AWARDS */}
-                    <div className="lg:col-span-7 rounded-2xl bg-white dark:bg-[#0F1420] border border-slate-200/80 dark:border-slate-800/80 p-6 space-y-5 shadow-sm">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2.5">
-                          <div className="w-8 h-8 rounded-lg bg-amber-500/10 text-amber-500 flex items-center justify-center">
-                            <Trophy className="w-4 h-4" />
-                          </div>
-                          <div>
-                            <div className="text-[11px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">
-                              Tầng 2 • Thử thách mở rộng
-                            </div>
-                            <h3 className="text-base font-bold text-slate-900 dark:text-white">
-                              Huy hiệu thành tích đặc biệt (Challenge Awards)
-                            </h3>
-                          </div>
-                        </div>
-
-                        <div className="text-right">
-                          <span className="text-xs text-slate-500 dark:text-slate-400">Đã mở khóa</span>
-                          <div className="text-lg font-extrabold font-mono text-slate-900 dark:text-white">
-                            {dualGoalProgress.challenges.filter((c) => c.isUnlocked).length} /{' '}
-                            {dualGoalProgress.challenges.length}
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                        {dualGoalProgress.challenges.map((chal) => (
-                          <div
-                            key={chal.tierId}
-                            className={`p-4 rounded-xl border transition-all flex flex-col justify-between space-y-3 ${chal.isUnlocked
-                              ? 'bg-amber-50/40 dark:bg-amber-950/15 border-amber-300/80 dark:border-amber-700/60'
-                              : 'bg-slate-50/70 dark:bg-slate-900/50 border-slate-200/70 dark:border-slate-800'
-                              }`}
-                          >
-                            <div className="space-y-1.5">
-                              <div className="flex items-center justify-between gap-2">
-                                <div className="flex items-center gap-1.5">
-                                  <span
-                                    className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded ${chal.isUnlocked
-                                      ? 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300'
-                                      : 'bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
-                                      }`}
-                                  >
-                                    {chal.isUnlocked ? 'Đã đạt' : chal.tierLevel}
-                                  </span>
-                                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
-                                    {(chal as any).sportCategory === 'Ride'
-                                      ? '🚴 Đạp xe'
-                                      : (chal as any).sportCategory === 'Swim'
-                                      ? '🏊 Bơi lội'
-                                      : '🏃 Chạy bộ'}
-                                  </span>
-                                  <span
-                                    className={`text-[10px] font-semibold px-2 py-0.5 rounded ${(chal as any).isRegistered
-                                      ? 'bg-[#FC4C02]/15 text-[#FC4C02]'
-                                      : 'bg-slate-100 dark:bg-slate-800/80 text-slate-400'
-                                      }`}
-                                  >
-                                    {(chal as any).isRegistered ? 'Đã đăng ký' : 'Chưa đăng ký'}
-                                  </span>
-                                </div>
-                                <Medal
-                                  className={`w-4 h-4 ${chal.isUnlocked ? 'text-amber-500' : 'text-slate-400 dark:text-slate-600'
-                                    }`}
-                                />
-                              </div>
-                              <h4 className="text-sm font-bold text-slate-900 dark:text-white">
-                                {chal.tierName}
-                              </h4>
-                              <p className="text-xs text-slate-500 dark:text-slate-400 line-clamp-2">
-                                {chal.rewardDescription}
-                              </p>
-                            </div>
-
-                            <div className="space-y-1.5 pt-1">
-                              {chal.conditionType === ChallengeConditionType.SPEED_TARGET_TIME ? (
-                                <div className="space-y-1">
-                                  <div className="flex items-center justify-between text-xs font-mono font-medium">
-                                    <span className="text-amber-700 dark:text-amber-300 font-semibold text-[11px]">
-                                      {chal.isUnlocked
-                                        ? `Đã đạt: ${chal.currentValue > 0 ? `${chal.currentValue} phút` : 'Đạt chuẩn'}`
-                                        : `Cự ly: ${chal.targetSpeedDistanceKm || 5} km • Thời gian ≤ ${chal.thresholdValue} phút`}
-                                    </span>
-                                    <span
-                                      className={
-                                        chal.isUnlocked
-                                          ? 'text-amber-600 dark:text-amber-400 font-bold'
-                                          : 'text-slate-400 text-[11px]'
-                                      }
-                                    >
-                                      {chal.isUnlocked ? '100%' : 'Chưa đạt'}
-                                    </span>
-                                  </div>
-                                  <div className="w-full h-1.5 rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden">
-                                    <div
-                                      className={`h-full rounded-full transition-all duration-500 ${chal.isUnlocked ? 'bg-amber-500' : 'bg-slate-400 dark:bg-slate-600'
-                                        }`}
-                                      style={{ width: `${chal.isUnlocked ? 100 : 0}%` }}
-                                    />
-                                  </div>
-                                </div>
-                              ) : (
-                                <div className="space-y-1.5">
-                                  <div className="flex justify-between text-xs font-mono font-medium">
-                                    <span className="text-slate-600 dark:text-slate-300">
-                                      {chal.currentValue} / {chal.thresholdValue}{' '}
-                                      {chal.conditionType === ChallengeConditionType.STREAK_DAYS
-                                        ? 'ngày'
-                                        : chal.conditionType === ChallengeConditionType.ELEVATION_GAIN
-                                          ? 'm'
-                                          : 'km'}
-                                    </span>
-                                    <span
-                                      className={
-                                        chal.isUnlocked
-                                          ? 'text-amber-600 dark:text-amber-400 font-bold'
-                                          : 'text-slate-400'
-                                      }
-                                    >
-                                      {chal.progressPercentage}%
-                                    </span>
-                                  </div>
-                                  <div className="w-full h-1.5 rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden">
-                                    <div
-                                      className={`h-full rounded-full transition-all duration-500 ${chal.isUnlocked ? 'bg-amber-500' : 'bg-slate-400 dark:bg-slate-600'
-                                        }`}
-                                      style={{ width: `${chal.progressPercentage}%` }}
-                                    />
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-
-                            {/* Nút Xem BXH & Danh sách VĐV tham gia Thử Thách Mở Rộng */}
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const chInfo = currentEventData?.challengeLeaderboards?.find(
-                                  (cl: any) => cl.tierId === chal.tierId
-                                ) || {
-                                  tierId: chal.tierId,
-                                  tierName: chal.tierName,
-                                  tierLevel: chal.tierLevel,
-                                  conditionType: chal.conditionType,
-                                  targetSpeedDistanceKm: chal.targetSpeedDistanceKm,
-                                  awardBadgeUrl: chal.awardBadgeUrl,
-                                  thresholdValue: chal.thresholdValue,
-                                  totalParticipants: (chal as any).isRegistered ? 1 : 0,
-                                  completedCount: chal.isUnlocked ? 1 : 0,
-                                  completedLeaderboard: chal.isUnlocked
-                                    ? [
-                                        {
-                                          rank: 1,
-                                          userId: user?.id,
-                                          userName: user?.fullName || 'Bạn',
-                                          userAvatar: user?.avatarUrl,
-                                          department: user?.departmentOrUnit || 'Runner',
-                                          bibNumber: myBibNumber,
-                                          isUnlocked: true,
-                                          currentValue: chal.currentValue,
-                                          thresholdValue: chal.thresholdValue,
-                                        },
-                                      ]
-                                    : [],
-                                  allParticipants: (chal as any).isRegistered
-                                    ? [
-                                        {
-                                          userId: user?.id,
-                                          userName: user?.fullName || 'Bạn',
-                                          userAvatar: user?.avatarUrl,
-                                          department: user?.departmentOrUnit || 'Runner',
-                                          bibNumber: myBibNumber,
-                                          isUnlocked: chal.isUnlocked,
-                                          currentValue: chal.currentValue,
-                                          thresholdValue: chal.thresholdValue,
-                                        },
-                                      ]
-                                    : [],
-                                };
-                                setSelectedChallengeModalData(chInfo);
-                                setChallengeModalTab('completed');
-                              }}
-                              className="w-full mt-2 py-1.5 px-3 rounded-lg text-xs font-semibold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 flex items-center justify-center gap-1.5 transition cursor-pointer"
-                            >
-                              <Users className="w-3.5 h-3.5 text-[#FC4C02]" />
-                              <span>
-                                Xem BXH &amp; VĐV ({
-                                  currentEventData?.challengeLeaderboards?.find(
-                                    (cl: any) => cl.tierId === chal.tierId
-                                  )?.totalParticipants ?? ((chal as any).isRegistered ? 1 : 0)
-                                })
-                              </span>
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
+                  {/* 2. BẢNG TẦNG 2: THỬ THÁCH MỞ RỘNG (GỌN GÀNG, CÓ NÚT ĐĂNG KÝ / HUỶ NHANH) */}
+                  <TournamentChallengeTable
+                    challenges={dualGoalProgress.challenges}
+                    challengeLeaderboards={currentEventData?.challengeLeaderboards}
+                    user={user}
+                    myBibNumber={myBibNumber}
+                    onOpenChallengeLeaderboard={(chInfo) => {
+                      setSelectedChallengeModalData(chInfo);
+                      setChallengeModalTab('completed');
+                    }}
+                    onToggleChallengeRegistration={handleToggleChallengeRegistration}
+                  />
 
                   {/* REAL-TIME LEADERBOARD */}
                   <div className="rounded-2xl bg-white dark:bg-[#0F1420] border border-slate-200/80 dark:border-slate-800/80 p-6 space-y-5 shadow-sm">

@@ -3230,7 +3230,13 @@ export class TopRunEngineService implements OnModuleInit {
     if (!event) throw new NotFoundException('Không tìm thấy giải đấu');
 
     const user = await this.ensureUser(payload.userId);
-    const category = event.categories.find((c) => c.id === payload.categoryId || c.name === payload.categoryId) || event.categories[0];
+    const category =
+      event.categories.find(
+        (c) =>
+          c.id === payload.categoryId ||
+          c.name === payload.categoryId ||
+          (Number(payload.categoryId) > 0 && c.targetDistanceKm === Number(payload.categoryId))
+      ) || event.categories[0];
     const team = event.teams.find((t) => t.id === payload.teamId) || null;
 
     const existing = this.participations.find((p) => p.eventId === event.id && p.userId === user.id);
