@@ -73,6 +73,9 @@ export interface TracklogActivityItem {
   polyline: string;
   kudos: number;
   liked: boolean;
+  userAvatar?: string;
+  kudoUsers?: any[];
+  comments?: any[];
   splits: TracklogSplitItem[];
 }
 
@@ -80,6 +83,8 @@ interface Props {
   activities: TracklogActivityItem[];
   selectedActivityId: string;
   currentUserId?: string;
+  currentUserName?: string;
+  currentUserAvatar?: string;
   currentUserRole?: string;
   viewMode?: 'list' | 'detail';
   onViewModeChange?: (mode: 'list' | 'detail') => void;
@@ -100,6 +105,8 @@ export default function UserTracklogExplorer({
   activities,
   selectedActivityId,
   currentUserId,
+  currentUserName,
+  currentUserAvatar,
   currentUserRole,
   viewMode: controlledViewMode,
   onViewModeChange,
@@ -528,12 +535,15 @@ export default function UserTracklogExplorer({
           </button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="max-w-3xl mx-auto space-y-5">
           {filteredActivities.map((act) => (
             <TracklogActivityCard
               key={act.id}
               activity={act}
               isSelected={act.id === selectedActivityId}
+              currentUserId={currentUserId}
+              currentUserName={currentUserName}
+              currentUserAvatar={currentUserAvatar}
               onClick={() => {
                 onSelectActivity(act.id);
                 setViewMode('detail');

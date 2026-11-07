@@ -682,14 +682,50 @@ export class ApiController {
 
   @Post('activities/:id/kudos')
   @ApiOperation({ summary: 'Thả tim (Kudos) cho buổi chạy' })
-  toggleKudo(@Param('id') id: string, @Body() body: { userId?: string }) {
-    return this.engine.toggleKudo(id, body.userId || 'usr_admin_01');
+  async toggleKudo(
+    @Param('id') id: string,
+    @Body() body: { userId?: string },
+    @Headers('authorization') authHeader?: string
+  ) {
+    let uid = body?.userId;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const decoded = this.accountService.verifyJwt(authHeader.slice(7));
+      if (decoded?.userId) uid = decoded.userId;
+    }
+    return await this.engine.toggleKudo(id, uid || '');
   }
 
   @Post('activities/:id/comments')
   @ApiOperation({ summary: 'Bình luận vào buổi chạy' })
-  async addComment(@Param('id') id: string, @Body() body: { userId?: string; content: string }) {
-    return await this.engine.addComment(id, body.userId || 'usr_admin_01', body.content);
+  async addComment(
+    @Param('id') id: string,
+    @Body() body: { userId?: string; content: string },
+    @Headers('authorization') authHeader?: string
+  ) {
+    let uid = body?.userId;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const decoded = this.accountService.verifyJwt(authHeader.slice(7));
+      if (decoded?.userId) uid = decoded.userId;
+    }
+    return await this.engine.addComment(id, uid || '', body.content);
+  }
+
+  @Delete('activities/:id/comments/:commentId')
+  @ApiOperation({ summary: 'Xoá bình luận trên buổi chạy (Chủ bình luận, Chủ bài viết, hoặc Admin)' })
+  async deleteComment(
+    @Param('id') id: string,
+    @Param('commentId') commentId: string,
+    @Query('userId') queryUserId?: string,
+    @Headers('authorization') authHeader?: string
+  ) {
+    let uid = queryUserId || '';
+    let role = 'RUNNER';
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const decoded = this.accountService.verifyJwt(authHeader.slice(7));
+      if (decoded?.userId) uid = decoded.userId;
+      if (decoded?.role) role = decoded.role;
+    }
+    return await this.engine.deleteComment(id, commentId, uid, role);
   }
 
   // ==========================================================================

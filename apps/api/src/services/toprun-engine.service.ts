@@ -3446,15 +3446,39 @@ export class TopRunEngineService implements OnModuleInit {
       list = this.activities.filter((a) => !a.isHidden || Boolean(viewerUserId && a.userId === viewerUserId));
     }
 
-    return list.map((a) => {
-      const u = this.users.find((user) => user.id === a.userId);
+    return list.map((a) => this.enrichActivitySocial(a, viewerUserId));
+  }
+
+  private enrichActivitySocial(a: StoredActivity, viewerUserId?: string) {
+    const u = this.users.find((user) => user.id === a.userId);
+    const kudoUserIds = Array.isArray(a.kudoedByUserIds) ? a.kudoedByUserIds : [];
+    const kudoUsers = kudoUserIds.map((uid) => {
+      const ku = this.users.find((x) => x.id === uid);
       return {
-        ...a,
-        userName: u?.fullName || a.userName,
-        userAvatar: u?.avatarUrl || a.userAvatar,
-        userDepartment: u?.departmentOrUnit || a.userDepartment,
+        userId: uid,
+        userName: ku?.fullName || 'Runner',
+        userAvatar: ku?.avatarUrl || '',
       };
     });
+    const enrichedComments = (a.comments || []).map((cm) => {
+      const cu = this.users.find((x) => x.id === cm.userId);
+      return {
+        ...cm,
+        userName: cu?.fullName || cm.userName || 'Runner',
+        userAvatar: cu?.avatarUrl || (cm as any).userAvatar || '',
+      };
+    });
+
+    return {
+      ...a,
+      userName: u?.fullName || a.userName,
+      userAvatar: u?.avatarUrl || a.userAvatar,
+      userDepartment: u?.departmentOrUnit || a.userDepartment,
+      kudosCount: kudoUserIds.length,
+      likedByMe: Boolean(viewerUserId && kudoUserIds.includes(viewerUserId)),
+      kudoUsers,
+      comments: enrichedComments,
+    };
   }
 
   getActivityById(id: string) {
@@ -3929,33 +3953,146 @@ export class TopRunEngineService implements OnModuleInit {
   // 5. TƯƠNG TÁC MẠNG XÃ HỘI (KUDOS, COMMENTS) & CÂU LẠC BỘ
   // --------------------------------------------------------------------------
 
-  toggleKudo(activityId: string, userId: string) {
+  async toggleKudo(activityId: string, userId: string) {
+    if (!userId) {
+      throw new BadRequestException('Vui lòng đăng nhập để thả Kudos.');
+    }
     const act = this.getActivityById(activityId);
+    if (!Array.isArray(act.kudoedByUserIds)) {
+      act.kudoedByUserIds = [];
+    }
     const idx = act.kudoedByUserIds.indexOf(userId);
-    if (idx >= 0) {
+    const isRemoving = idx >= 0;
+    if (isRemoving) {
       act.kudoedByUserIds.splice(idx, 1);
-      act.kudosCount = Math.max(0, act.kudosCount - 1);
     } else {
       act.kudoedByUserIds.push(userId);
-      act.kudosCount += 1;
     }
+    act.kudosCount = act.kudoedByUserIds.length;
     this.saveEngineState();
-    return act;
+
+    // Write-through to PostgreSQL
+    try {
+      if (isRemoving) {
+        await prisma.activityKudo
+          .delete({
+            where: {
+              activityId_userId: {
+                activityId: act.id,
+                userId,
+              },
+            },
+          })
+          .catch(() => {});
+      } else {
+        await prisma.activityKudo
+          .upsert({
+            where: {
+              activityId_userId: {
+                activityId: act.id,
+                userId,
+              },
+            },
+            update: {},
+            create: {
+              activityId: act.id,
+              userId,
+            },
+          })
+          .catch(() => {});
+      }
+      await prisma.activity
+        .update({
+          where: { id: act.id },
+          data: { kudosCount: act.kudosCount },
+        })
+        .catch(() => {});
+    } catch {}
+
+    return this.enrichActivitySocial(act, userId);
   }
 
   async addComment(activityId: string, userId: string, content: string) {
+    if (!userId) {
+      throw new BadRequestException('Vui lòng đăng nhập để bình luận.');
+    }
+    const trimmed = (content || '').trim();
+    if (!trimmed) {
+      throw new BadRequestException('Nội dung bình luận không được để trống.');
+    }
     const act = this.getActivityById(activityId);
     const user = await this.ensureUser(userId);
+    if (!Array.isArray(act.comments)) {
+      act.comments = [];
+    }
+    const cmtId = `cmt_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
     const cmt = {
-      id: `cmt_${Date.now()}`,
+      id: cmtId,
       userId: user.id,
       userName: user.fullName,
-      content,
+      userAvatar: user.avatarUrl || '',
+      content: trimmed,
       createdAtIso: new Date().toISOString(),
     };
     act.comments.push(cmt);
     this.saveEngineState();
+
+    try {
+      await prisma.activityComment.create({
+        data: {
+          id: cmtId,
+          activityId: act.id,
+          userId: user.id,
+          content: trimmed,
+        },
+      });
+      await prisma.activity
+        .update({
+          where: { id: act.id },
+          data: { commentCount: act.comments.length },
+        })
+        .catch(() => {});
+    } catch {}
+
     return cmt;
+  }
+
+  async deleteComment(
+    activityId: string,
+    commentId: string,
+    requesterUserId: string,
+    requesterRole?: string
+  ) {
+    const act = this.getActivityById(activityId);
+    if (!Array.isArray(act.comments)) {
+      act.comments = [];
+    }
+    const target = act.comments.find((c) => c.id === commentId);
+    if (!target) {
+      throw new NotFoundException('Không tìm thấy bình luận.');
+    }
+    const canDelete =
+      requesterRole === 'ADMIN' ||
+      target.userId === requesterUserId ||
+      act.userId === requesterUserId;
+    if (!canDelete) {
+      throw new BadRequestException('Bạn không có quyền xoá bình luận này.');
+    }
+
+    act.comments = act.comments.filter((c) => c.id !== commentId);
+    this.saveEngineState();
+
+    try {
+      await prisma.activityComment.delete({ where: { id: commentId } }).catch(() => {});
+      await prisma.activity
+        .update({
+          where: { id: act.id },
+          data: { commentCount: act.comments.length },
+        })
+        .catch(() => {});
+    } catch {}
+
+    return { deleted: true, commentId, commentsCount: act.comments.length };
   }
 
   getClubs() {

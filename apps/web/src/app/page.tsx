@@ -49,6 +49,7 @@ import AthleteAvatar, { AthleteHonorPill } from '../components/AthleteAvatar';
 import AthleteDeepDashboard from '../components/dashboard/AthleteDeepDashboard';
 import TournamentHeroAndTier1Card from '../components/tournament/TournamentHeroAndTier1Card';
 import TournamentChallengeTable from '../components/tournament/TournamentChallengeTable';
+import TournamentLeaderboardSection from '../components/tournament/TournamentLeaderboardSection';
 import {
   useAppNavigation,
   NavTab,
@@ -777,6 +778,7 @@ export default function TopRunWebApp() {
       id: sa.id,
       userId: sa.userId || '',
       userName: sa.userName || 'Vận Động Viên',
+      userAvatar: sa.userAvatar || '',
       department: sa.userDepartment || 'Runner Community',
       source: sa.source || 'STRAVA SYNC',
       externalId: sa.externalId,
@@ -806,8 +808,10 @@ export default function TopRunWebApp() {
       antiCheatStatus: sa.antiCheatStatus || AntiCheatStatus.VALID,
       flagReasons: Array.isArray(sa.flagReasons) ? sa.flagReasons : [],
       polyline: sa.mapPolyline || SAMPLE_POLYLINE_HOANKIEM,
-      kudos: Number(sa.kudosCount ?? 1),
-      liked: Boolean(sa.likedByMe ?? true),
+      kudos: Number(sa.kudosCount ?? 0),
+      liked: Boolean(sa.likedByMe ?? false),
+      kudoUsers: Array.isArray(sa.kudoUsers) ? sa.kudoUsers : [],
+      comments: Array.isArray(sa.comments) ? sa.comments : [],
       isHidden,
       splits: Array.isArray(sa.splits) && sa.splits.length > 0 ? sa.splits : [],
     };
@@ -2110,331 +2114,15 @@ export default function TopRunWebApp() {
                     onToggleChallengeRegistration={handleToggleChallengeRegistration}
                   />
 
-                  {/* REAL-TIME LEADERBOARD */}
-                  <div className="rounded-2xl bg-white dark:bg-[#0F1420] border border-slate-200/80 dark:border-slate-800/80 p-6 space-y-5 shadow-sm">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-800/80 pb-4">
-                      <div>
-                        <h3 className="text-base font-bold text-slate-900 dark:text-white">
-                          Bảng xếp hạng giải đấu
-                        </h3>
-                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                          Cập nhật theo thời gian thực sau khi kiểm duyệt tốc độ từng km
-                        </p>
-                      </div>
-
-                      <div className="inline-flex p-1 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-200/70 dark:border-slate-800 self-start sm:self-auto">
-                        <button
-                          type="button"
-                          onClick={() => setLeaderboardMode('individual')}
-                          className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${leaderboardMode === 'individual'
-                            ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-sm'
-                            : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
-                            }`}
-                        >
-                          Cá nhân
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setLeaderboardMode('team')}
-                          className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${leaderboardMode === 'team'
-                            ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-sm'
-                            : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
-                            }`}
-                        >
-                          Đội nhóm / Phòng ban
-                        </button>
-                      </div>
-                    </div>
-
-                    {leaderboardMode === 'individual' ? (
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-left border-collapse">
-                          <thead>
-                            <tr className="border-b border-slate-200/70 dark:border-slate-800 text-[11px] font-semibold uppercase text-slate-400">
-                              <th className="py-3 px-3 text-center w-12">Hạng</th>
-                              <th className="py-3 px-3">Vận động viên</th>
-                              <th className="py-3 px-3">Mã BIB</th>
-                              <th className="py-3 px-3">Mục tiêu</th>
-                              <th className="py-3 px-3">Thực chạy</th>
-                              <th className="py-3 px-3">Điểm tính giải</th>
-                              <th className="py-3 px-3">Tiến độ</th>
-                              <th className="py-3 px-3">Trạng thái</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 text-sm">
-                            {(!currentEventData?.individualLeaderboard || currentEventData.individualLeaderboard.length === 0) ? (
-                              <tr>
-                                <td colSpan={8} className="py-10 text-center text-slate-400">
-                                  <Award className="w-8 h-8 mx-auto text-slate-300 dark:text-slate-600 mb-2" />
-                                  <div className="text-xs font-semibold">Chưa có vận động viên nào tham gia giải đấu này</div>
-                                  <div className="text-[11px] text-slate-500 mt-0.5">Hãy là người đầu tiên đăng ký chinh phục mục tiêu!</div>
-                                </td>
-                              </tr>
-                            ) : (
-                              currentEventData.individualLeaderboard
-                                .slice()
-                                .sort((a: any, b: any) => (b.multipliedDistanceKm ?? 0) - (a.multipliedDistanceKm ?? 0))
-                                .map((p: any, index: number) => {
-                                  const rank = index + 1;
-                                  const isGold = rank === 1;
-                                  const isSilver = rank === 2;
-                                  const isBronze = rank === 3;
-                                  const isMe = user?.id ? p.userId === user.id : false;
-                                  const targetKm = Number(p.targetDistanceKm || 50);
-                                  const rawKm = Number(p.rawDistanceKm || 0);
-                                  const multipliedKm = Number(p.multipliedDistanceKm || 0);
-                                  const pct = targetKm > 0 ? Math.min(100, Math.round((multipliedKm / targetKm) * 100)) : 0;
-                                  const isFinisher = Boolean(p.isTargetCompleted || pct >= 100);
-
-                                  return (
-                                    <tr
-                                      key={p.participationId || p.bibNumber || index}
-                                      onClick={() => handleOpenParticipantDetail({ ...p, rank })}
-                                      className={`transition cursor-pointer ${
-                                        isMe
-                                          ? 'bg-[#FC4C02]/10 dark:bg-[#FC4C02]/15 hover:bg-[#FC4C02]/20'
-                                          : 'hover:bg-slate-50 dark:hover:bg-slate-800/40'
-                                      }`}
-                                    >
-                                      {/* Rank Medal */}
-                                      <td className="py-3 px-3 text-center font-mono font-bold">
-                                        {isGold ? (
-                                          <span className="w-7 h-7 rounded-xl bg-amber-400 text-slate-950 font-black font-mono text-xs flex items-center justify-center shadow-md shadow-amber-400/20 mx-auto">
-                                            1
-                                          </span>
-                                        ) : isSilver ? (
-                                          <span className="w-7 h-7 rounded-xl bg-slate-300 text-slate-900 font-black font-mono text-xs flex items-center justify-center shadow-xs mx-auto">
-                                            2
-                                          </span>
-                                        ) : isBronze ? (
-                                          <span className="w-7 h-7 rounded-xl bg-amber-700 text-white font-black font-mono text-xs flex items-center justify-center shadow-xs mx-auto">
-                                            3
-                                          </span>
-                                        ) : (
-                                          <span className="text-xs font-bold font-mono text-slate-400">
-                                            #{rank}
-                                          </span>
-                                        )}
-                                      </td>
-
-                                      {/* Runner Info with Avatar */}
-                                      <td className="py-3 px-3">
-                                        <div className="flex items-center gap-3">
-                                          <div className="shrink-0 my-1">
-                                            <AthleteAvatar
-                                              user={{
-                                                id: p.userId,
-                                                fullName: p.userName,
-                                                avatarUrl: p.userAvatar,
-                                                departmentOrUnit: p.department,
-                                                role: p.role,
-                                                honorBadge: p.honorBadge,
-                                              }}
-                                              rank={rank}
-                                              size="sm"
-                                              showBadge={true}
-                                              showWings={true}
-                                              showSharkCrown={true}
-                                            />
-                                          </div>
-                                          <div className="min-w-0">
-                                            <div className="flex items-center gap-1.5 flex-wrap">
-                                              <span className="font-bold text-slate-900 dark:text-white truncate">
-                                                {p.userName}
-                                              </span>
-                                              <AthleteHonorPill
-                                                user={{
-                                                  id: p.userId,
-                                                  fullName: p.userName,
-                                                  avatarUrl: p.userAvatar,
-                                                  departmentOrUnit: p.department,
-                                                  role: p.role,
-                                                  honorBadge: p.honorBadge,
-                                                }}
-                                                rank={rank}
-                                              />
-                                              {isMe && (
-                                                <span className="px-1.5 py-0.2 rounded-md text-[9px] font-black bg-[#FC4C02] text-white">
-                                                  BẠN
-                                                </span>
-                                              )}
-                                            </div>
-                                            <div className="text-[11px] text-slate-400 truncate">
-                                              {p.department || 'Runner Community'}
-                                            </div>
-                                          </div>
-                                        </div>
-                                      </td>
-
-                                      {/* BIB */}
-                                      <td className="py-3 px-3">
-                                        <span className="font-mono text-xs font-bold px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-[#FC4C02] border border-slate-200/60 dark:border-slate-700/60">
-                                          {p.bibNumber}
-                                        </span>
-                                      </td>
-
-                                      {/* Target */}
-                                      <td className="py-3 px-3 font-mono text-xs font-semibold text-slate-700 dark:text-slate-300">
-                                        {targetKm} KM
-                                      </td>
-
-                                      {/* Raw Km */}
-                                      <td className="py-3 px-3 font-mono text-xs text-slate-500 dark:text-slate-400">
-                                        {rawKm} km
-                                      </td>
-
-                                      {/* Multiplied Km */}
-                                      <td className="py-3 px-3">
-                                        <div className="font-mono font-black text-slate-900 dark:text-white text-sm">
-                                          {multipliedKm} <span className="text-[11px] font-normal text-slate-400">km</span>
-                                        </div>
-                                        {(() => {
-                                          const userActs = activities.filter(
-                                            (a) => a.userId === p.userId && !a.isHidden && a.validDistanceKm > 0
-                                          );
-                                          const runDist = userActs
-                                            .filter((a) => normalizeSportCategory(a.sportType) === 'Run')
-                                            .reduce((s, a) => s + (a.finalCountedDistanceKm || a.validDistanceKm), 0);
-                                          const rideRaw = userActs
-                                            .filter((a) => normalizeSportCategory(a.sportType) === 'Ride')
-                                            .reduce((s, a) => s + a.validDistanceKm, 0);
-                                          const rideConv = userActs
-                                            .filter((a) => normalizeSportCategory(a.sportType) === 'Ride')
-                                            .reduce((s, a) => s + (a.finalCountedDistanceKm || a.validDistanceKm), 0);
-                                          const swimRaw = userActs
-                                            .filter((a) => normalizeSportCategory(a.sportType) === 'Swim')
-                                            .reduce((s, a) => s + a.validDistanceKm, 0);
-                                          const swimConv = userActs
-                                            .filter((a) => normalizeSportCategory(a.sportType) === 'Swim')
-                                            .reduce((s, a) => s + (a.finalCountedDistanceKm || a.validDistanceKm), 0);
-
-                                          if (rideConv === 0 && swimConv === 0) return null;
-
-                                          return (
-                                            <div className="flex items-center gap-1.5 flex-wrap text-[10px] text-slate-500 dark:text-slate-400 mt-0.5">
-                                              {runDist > 0 && <span>🏃 {roundKm(runDist)}km</span>}
-                                              {rideConv > 0 && (
-                                                <span className="text-emerald-600 dark:text-emerald-400 font-medium">
-                                                  🚴 +{roundKm(rideConv)}km <span className="opacity-75">({roundKm(rideRaw)}km đạp)</span>
-                                                </span>
-                                              )}
-                                              {swimConv > 0 && (
-                                                <span className="text-cyan-600 dark:text-cyan-400 font-medium">
-                                                  🏊 +{roundKm(swimConv)}km <span className="opacity-75">({roundKm(swimRaw)}km bơi)</span>
-                                                </span>
-                                              )}
-                                            </div>
-                                          );
-                                        })()}
-                                      </td>
-
-                                      {/* Progress Bar */}
-                                      <td className="py-3 px-3 min-w-[150px]">
-                                        <div className="space-y-1">
-                                          <div className="flex items-center justify-between text-[11px] font-mono">
-                                            <span className="font-bold text-slate-800 dark:text-slate-200">{multipliedKm}/{targetKm}km</span>
-                                            <span className="font-bold text-[#FC4C02]">{pct}%</span>
-                                          </div>
-                                          <div className="w-full h-1.5 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
-                                            <div
-                                              className={`h-full rounded-full transition-all duration-300 ${
-                                                isFinisher ? 'bg-emerald-500' : 'bg-[#FC4C02]'
-                                              }`}
-                                              style={{ width: `${pct}%` }}
-                                            />
-                                          </div>
-                                          {/* Cross-training conversion formula */}
-                                          {(() => {
-                                            const sb = p.sportBreakdown;
-                                            if (!sb || (sb.rideConvertedKm === 0 && sb.swimConvertedKm === 0)) return null;
-                                            return (
-                                              <div className="text-[10px] text-slate-500 dark:text-slate-400 font-mono pt-0.5 leading-tight">
-                                                <span>Chạy {sb.runKm}KM</span>
-                                                {sb.rideConvertedKm > 0 && (
-                                                  <span className="text-emerald-600 dark:text-emerald-400 font-medium"> + {sb.rideConvertedKm}KM (đạp)</span>
-                                                )}
-                                                {sb.swimConvertedKm > 0 && (
-                                                  <span className="text-cyan-600 dark:text-cyan-400 font-medium"> + {sb.swimConvertedKm}KM (bơi)</span>
-                                                )}
-                                                {sb.rideConvertedKm > 0 && (
-                                                  <div className="text-[9px] text-slate-400 opacity-80">
-                                                    ({sb.rideRawKm}km đạp xe ~ {sb.rideConvertedKm}KM target)
-                                                  </div>
-                                                )}
-                                              </div>
-                                            );
-                                          })()}
-                                        </div>
-                                      </td>
-
-                                      {/* Status */}
-                                      <td className="py-3 px-3">
-                                        {isFinisher ? (
-                                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60">
-                                            <CheckCircle2 className="w-3 h-3" />
-                                            Finisher 🏆
-                                          </span>
-                                        ) : (
-                                          <span className="inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">
-                                            Còn {Math.max(0, roundKm(targetKm - multipliedKm))} km
-                                          </span>
-                                        )}
-                                      </td>
-                                    </tr>
-                                  );
-                                })
-                            )}
-                          </tbody>
-                        </table>
-                      </div>
-                    ) : (
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        {[
-                          {
-                            rank: 1,
-                            name: 'Khối Công Nghệ & R&D (Engineering)',
-                            members: 18,
-                            totalKm: 418.6,
-                          },
-                          {
-                            rank: 2,
-                            name: 'Khối Vận Hành & Chuỗi Cung Ứng (Operations)',
-                            members: 22,
-                            totalKm: 375.2,
-                          },
-                          {
-                            rank: 3,
-                            name: 'Khối Kinh Doanh & Thương Mại (Commercial)',
-                            members: 16,
-                            totalKm: 290.8,
-                          },
-                        ].map((team) => (
-                          <div
-                            key={team.name}
-                            className="p-5 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200/70 dark:border-slate-800 space-y-3"
-                          >
-                            <div className="flex items-center justify-between">
-                              <span className="text-xs font-bold uppercase text-[#FC4C02]">
-                                Hạng #{team.rank}
-                              </span>
-                              <span className="text-xs text-slate-500">{team.members} thành viên</span>
-                            </div>
-                            <h4 className="font-bold text-slate-900 dark:text-white text-sm">
-                              {team.name}
-                            </h4>
-                            <div className="flex items-baseline justify-between pt-2 border-t border-slate-200/70 dark:border-slate-800">
-                              <span className="text-2xl font-extrabold font-mono text-slate-900 dark:text-white">
-                                {team.totalKm} km
-                              </span>
-                              <span className="text-xs text-slate-500 font-mono">
-                                TB: {roundKm(team.totalKm / team.members)} km/người
-                              </span>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
+                  {/* 3. BẢNG XẾP HẠNG GIẢI ĐẤU (CÓ DẠNG THẺ DỌC RIÊNG CHO MOBILE & BẢNG CHO DESKTOP) */}
+                  <TournamentLeaderboardSection
+                    currentEventData={currentEventData}
+                    user={user}
+                    activities={activities}
+                    leaderboardMode={leaderboardMode}
+                    onChangeLeaderboardMode={setLeaderboardMode}
+                    onOpenParticipantDetail={handleOpenParticipantDetail}
+                  />
                 </>
               )}
             </div>
@@ -2448,6 +2136,8 @@ export default function TopRunWebApp() {
               activities={activities}
               selectedActivityId={selectedActivityId}
               currentUserId={user?.id}
+              currentUserName={user?.fullName}
+              currentUserAvatar={user?.avatarUrl || undefined}
               currentUserRole={user?.role}
               viewMode={tracklogViewMode}
               onViewModeChange={setTracklogViewMode}
