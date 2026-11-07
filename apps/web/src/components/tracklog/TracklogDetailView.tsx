@@ -170,12 +170,14 @@ export default function TracklogDetailView({
     }
 
     const cartoApiKey = (process.env.NEXT_PUBLIC_CARTO_API_KEY || '').trim();
-    const cartoAuthQuery = cartoApiKey ? `?key=${cartoApiKey}` : '';
+    // CARTO Basemaps API keys are alphanumeric keys issued specifically by carto.com/basemaps/apikey,
+    // not CARTO Workspace cloud JWT tokens (which start with 'eyJ').
+    const hasValidCartoKey = Boolean(cartoApiKey && !cartoApiKey.startsWith('eyJ'));
 
-    let tileUrl = `https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png${cartoAuthQuery}`;
-    let subdomains = 'abcd';
+    let tileUrl = '';
+    let subdomains = '';
     let maxZoom = 19;
-    let attribution = '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions" target="_blank" rel="noreferrer">CARTO</a>';
+    let attribution = '';
 
     if (mapStyle === 'satellite') {
       tileUrl = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
@@ -183,7 +185,28 @@ export default function TracklogDetailView({
       maxZoom = 19;
       attribution = 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community';
     } else if (mapStyle === 'dark') {
-      tileUrl = `https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png${cartoAuthQuery}`;
+      if (hasValidCartoKey) {
+        tileUrl = `https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png?key=${cartoApiKey}`;
+        subdomains = 'abcd';
+        attribution = '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions" target="_blank" rel="noreferrer">CARTO</a>';
+      } else {
+        // High-performance ArcGIS Canvas Dark (100% Free, NO watermark, NO API key required)
+        tileUrl = 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}';
+        subdomains = '';
+        attribution = 'Tiles &copy; Esri &mdash; Esri, DeLorme, NAVTEQ';
+      }
+    } else {
+      // mapStyle === 'street'
+      if (hasValidCartoKey) {
+        tileUrl = `https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png?key=${cartoApiKey}`;
+        subdomains = 'abcd';
+        attribution = '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions" target="_blank" rel="noreferrer">CARTO</a>';
+      } else {
+        // High-definition ArcGIS World Street Map (100% Free, NO watermark, NO API key required)
+        tileUrl = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}';
+        subdomains = '';
+        attribution = 'Tiles &copy; Esri &mdash; Source: Esri, DeLorme, NAVTEQ, TomTom';
+      }
     }
 
     tileLayerRef.current = L.tileLayer(tileUrl, {
