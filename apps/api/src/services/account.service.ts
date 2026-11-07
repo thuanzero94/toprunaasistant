@@ -1589,13 +1589,13 @@ export class AccountService implements OnModuleInit {
     const isTokenExpired = conn.expiresAt < nowSec;
     const scopesArr = (conn.scopes || 'read').split(',').map((s: string) => s.trim());
     const hasActivityReadScope =
-      scopesArr.includes('activity:read') || scopesArr.includes('activity:read_all');
+      conn.syncStatus !== 'REQUIRE_ACTIVITY_SCOPE' &&
+      (scopesArr.includes('activity:read') || scopesArr.includes('activity:read_all'));
 
     let statusBadgeText = 'Đã kết nối & Sẵn sàng đồng bộ';
     if (conn.syncStatus === 'REAUTH_REQUIRED') {
       statusBadgeText = 'Đã chuyển Pool • Cần Xác nhận lại kết nối Strava (1-click)';
-    } else
-    if (!hasActivityReadScope) {
+    } else if (!hasActivityReadScope || conn.syncStatus === 'REQUIRE_ACTIVITY_SCOPE') {
       statusBadgeText = 'Đã kết nối Hồ sơ • Cần cấp quyền đọc Tracklog (activity:read_all)';
     } else if (isTokenExpired) {
       statusBadgeText = 'Access Token hết hạn (Sẽ tự động Refresh khi đồng bộ)';
@@ -1623,6 +1623,109 @@ export class AccountService implements OnModuleInit {
       isTokenExpired,
       lastSyncAtIso: conn.lastSyncAt ? new Date(conn.lastSyncAt).toISOString() : null,
       lastErrorMsg: conn.lastErrorMsg,
+      authorizeUrl,
+    };
+  }
+
+  /**
+   * Kiểm tra định kỳ xem Token Strava của User có còn đủ quyền `activity:read_all` hay không.
+   * Áp dụng Cooldown 15 phút để bảo vệ Rate Limit của Strava Pool.
+   */
+  async checkUserStravaScope(userId: string) {
+    const conn = await prisma.stravaConnection.findUnique({
+      where: { userId },
+      include: { stravaApp: true },
+    });
+    if (!conn || !conn.isActive || conn.syncStatus === 'DISCONNECTED') {
+      return { isConnected: false, hasActivityReadScope: false, syncStatus: 'DISCONNECTED', authorizeUrl: '' };
+    }
+
+    const assignedApp = conn.stravaApp;
+    const poolClientId = assignedApp?.clientId || this.stravaClientId;
+    const stateParam = assignedApp?.id ? `${userId}:${assignedApp.id}` : userId;
+    const authorizeUrl = `https://www.strava.com/oauth/authorize?client_id=${poolClientId}&response_type=code&redirect_uri=${encodeURIComponent(
+      this.stravaRedirectUri
+    )}&approval_prompt=force&scope=read,activity:read_all&state=${stateParam}`;
+
+    // Nếu đã bị đánh dấu REQUIRE_ACTIVITY_SCOPE thì báo ngay
+    if (conn.syncStatus === 'REQUIRE_ACTIVITY_SCOPE') {
+      return {
+        isConnected: true,
+        hasActivityReadScope: false,
+        syncStatus: 'REQUIRE_ACTIVITY_SCOPE',
+        athleteName: `${conn.firstname || ''} ${conn.lastname || ''}`.trim() || 'Strava Runner',
+        authorizeUrl,
+      };
+    }
+
+    const nowSec = Math.floor(Date.now() / 1000);
+    const lastCheckSec = conn.updatedAt ? Math.floor(new Date(conn.updatedAt).getTime() / 1000) : 0;
+
+    // Nếu token đã hết hạn 6h -> làm mới ngầm
+    let accessToken = conn.accessToken;
+    if (conn.expiresAt < nowSec && conn.refreshToken) {
+      try {
+        const refreshed: any = await this.refreshStravaTokenAndVerify(userId);
+        accessToken = refreshed.accessToken || refreshed.stravaStatus?.accessToken;
+      } catch {
+        return {
+          isConnected: true,
+          hasActivityReadScope: false,
+          syncStatus: 'REQUIRE_ACTIVITY_SCOPE',
+          athleteName: `${conn.firstname || ''} ${conn.lastname || ''}`.trim() || 'Strava Runner',
+          authorizeUrl,
+        };
+      }
+    }
+
+    // Nếu lần test trước đó cách > 15 phút, gọi thử Strava activities để kiểm tra quyền sống
+    if (nowSec - lastCheckSec >= 900 && accessToken) {
+      try {
+        const actsCheck = await fetch('https://www.strava.com/api/v3/athlete/activities?per_page=1', {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
+        if (conn.stravaAppId) {
+          await this.poolLimiter.recordResponseUsage(conn.stravaAppId, actsCheck, true);
+        }
+        if (!actsCheck.ok) {
+          await prisma.stravaConnection.update({
+            where: { userId },
+            data: {
+              syncStatus: 'REQUIRE_ACTIVITY_SCOPE',
+              lastErrorMsg: 'Token thiếu quyền đọc bài chạy activity:read_all.',
+            },
+          });
+          return {
+            isConnected: true,
+            hasActivityReadScope: false,
+            syncStatus: 'REQUIRE_ACTIVITY_SCOPE',
+            athleteName: `${conn.firstname || ''} ${conn.lastname || ''}`.trim() || 'Strava Runner',
+            authorizeUrl,
+          };
+        } else {
+          await prisma.stravaConnection.update({
+            where: { userId },
+            data: {
+              syncStatus: 'CONNECTED',
+              scopes: 'read,activity:read_all',
+            },
+          });
+        }
+      } catch {
+        // Network error, ignore
+      }
+    }
+
+    const scopesArr = (conn.scopes || 'read').split(',').map((s: string) => s.trim());
+    const hasActivityReadScope =
+      conn.syncStatus !== 'REQUIRE_ACTIVITY_SCOPE' &&
+      (scopesArr.includes('activity:read') || scopesArr.includes('activity:read_all'));
+
+    return {
+      isConnected: true,
+      hasActivityReadScope,
+      syncStatus: conn.syncStatus,
+      athleteName: `${conn.firstname || ''} ${conn.lastname || ''}`.trim() || 'Strava Runner',
       authorizeUrl,
     };
   }

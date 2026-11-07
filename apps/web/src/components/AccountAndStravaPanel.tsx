@@ -953,47 +953,45 @@ export default function AccountAndStravaPanel({
 
             {/* Các nút thao tác đồng bộ */}
             <div className="flex flex-wrap items-center gap-2.5">
-              <a
-                href={stravaStatus.authorizeUrl}
-                className="px-4 py-2.5 rounded-xl bg-[#FC4C02] hover:bg-[#E34402] text-white text-xs font-semibold flex items-center gap-2 shadow-sm transition cursor-pointer"
-              >
-                <Link2 className="w-4 h-4" />
-                <span>
-                  {stravaStatus.hasActivityReadScope
-                    ? 'Kết nối lại Strava'
-                    : 'Cấp quyền đọc bài chạy Strava'}
-                </span>
-              </a>
+              {/* CHỈ hiển thị nút Kết nối lại khi chưa kết nối HOẶC bị mất quyền activity:read_all */}
+              {(!stravaStatus.isConnected || !stravaStatus.hasActivityReadScope) && (
+                <a
+                  href={stravaStatus.authorizeUrl}
+                  className="px-4 py-2.5 rounded-xl bg-[#FC4C02] hover:bg-[#E34402] text-white text-xs font-semibold flex items-center gap-2 shadow-sm transition cursor-pointer"
+                >
+                  <Link2 className="w-4 h-4" />
+                  <span>
+                    {!stravaStatus.isConnected
+                      ? 'Kết nối Strava'
+                      : 'Kết nối lại Strava / Cấp quyền đọc bài chạy'}
+                  </span>
+                </a>
+              )}
 
-              <button
-                type="button"
-                onClick={() => handleSyncLiveStrava(7)}
-                disabled={loading}
-                className="px-3.5 py-2.5 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 hover:opacity-90 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer disabled:opacity-50"
-              >
-                <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-                <span>Đồng bộ 7 ngày qua</span>
-              </button>
+              {/* Khi đã kết nối & đủ quyền: hiển thị các nút thao tác đồng bộ thủ công */}
+              {stravaStatus.isConnected && stravaStatus.hasActivityReadScope && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => handleSyncLiveStrava(7)}
+                    disabled={loading}
+                    className="px-3.5 py-2.5 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 hover:opacity-90 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer disabled:opacity-50"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+                    <span>Đồng bộ 7 ngày qua</span>
+                  </button>
 
-              <button
-                type="button"
-                onClick={() => handleSyncLiveStrava(30)}
-                disabled={loading}
-                className="px-3.5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer disabled:opacity-50"
-              >
-                <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-                <span>Đồng bộ 30 ngày qua</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={handleRefreshToken}
-                disabled={loading}
-                className="px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/60 text-slate-600 dark:text-slate-300 text-xs font-medium flex items-center gap-1.5 transition cursor-pointer"
-              >
-                <KeyRound className="w-3.5 h-3.5" />
-                <span>Làm mới phiên</span>
-              </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSyncLiveStrava(30)}
+                    disabled={loading}
+                    className="px-3.5 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer disabled:opacity-50"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+                    <span>Đồng bộ 30 ngày qua</span>
+                  </button>
+                </>
+              )}
 
               {stravaStatus.isConnected && (
                 <button

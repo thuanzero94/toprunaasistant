@@ -18,6 +18,7 @@ import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Response } from 'express';
 import { TopRunEngineService } from '../services/toprun-engine.service';
 import { AccountService } from '../services/account.service';
+import { prisma } from '@toprun/database';
 import { AntiCheatStatus, ChallengeConditionType, EventStatus, EventType, FulfillmentStatus, RunMode } from '@toprun/shared';
 
 @ApiTags('TOPRunAssistant API v1')
@@ -423,6 +424,14 @@ export class ApiController {
     return this.accountService.getAccountDetails(userId);
   }
 
+  @Get('account/:userId/strava-scope-check')
+  @ApiOperation({
+    summary: 'Kiểm tra định kỳ trạng thái quyền đọc bài chạy Strava (scope activity:read_all) của tài khoản',
+  })
+  async checkStravaScope(@Param('userId') userId: string) {
+    return this.accountService.checkUserStravaScope(userId);
+  }
+
   @Patch('account/:userId/profile')
   @ApiOperation({
     summary:
@@ -520,7 +529,7 @@ export class ApiController {
   @Get('strava/callback')
   @ApiOperation({
     summary:
-      'Nhận OAuth2 Callback từ Strava, lưu Token vào PostgreSQL, tự động đồng bộ 30 ngày gần nhất và Redirect về giao diện Web',
+      'Nhận OAuth2 Callback từ Strava, lưu Token vào PostgreSQL, tự động cứu hộ bài chạy Webhook đang chờ và Redirect về giao diện Web (Không tự động kéo 30 ngày cũ)',
   })
   async handleStravaOAuthCallback(
     @Query('code') code: string,
@@ -535,29 +544,59 @@ export class ApiController {
     if (stravaAvatar) {
       await this.engine.updateUserProfile(callbackData.userId, { avatarUrl: stravaAvatar });
     }
-    const syncRes = await this.engine.syncLiveStravaActivities(callbackData.userId, 30).catch(() => ({
-      syncedActivities: [],
-      totalFetchedFromStrava: 0,
-      status: 'ERROR',
-    }));
-    const syncedCount = (syncRes as any).syncedActivities?.length || 0;
-    const validCount = (syncRes as any).syncedActivities?.filter((a: any) => a.antiCheatStatus === 'VALID')?.length || syncedCount;
+
+    // 1. Theo yêu cầu: KHÔNG tự động kéo 30 ngày lịch sử để bảo toàn dữ liệu giải đấu
+    // 2. Tự động kiểm tra và cứu hộ các bài chạy Webhook bị gián đoạn (PENDING_REAUTH) nếu có
+    let syncedPendingCount = 0;
+    try {
+      const pendingLogs = await prisma.stravaSyncLog.findMany({
+        where: {
+          userId: callbackData.userId,
+          status: 'PENDING_REAUTH',
+        },
+        take: 10,
+        orderBy: { createdAt: 'desc' },
+      });
+
+      for (const pl of pendingLogs) {
+        const extId = (pl.detailsJson as any)?.activityExtId;
+        if (extId) {
+          await this.engine.syncLiveStravaActivities(callbackData.userId, 7, {
+            triggerType: 'WEBHOOK',
+            bypassCooldown: true,
+            singleActivityExtId: extId,
+            priority: 1,
+          });
+          syncedPendingCount++;
+        }
+        await prisma.stravaSyncLog.update({
+          where: { id: pl.id },
+          data: { status: 'RESOLVED_AFTER_REAUTH' },
+        });
+      }
+    } catch {
+      // Bỏ qua lỗi transient trong quá trình cứu hộ bài chạy cũ
+    }
 
     await this.accountService.recordSyncLog({
       userId: callbackData.userId,
-      triggerType: 'OAUTH_CALLBACK_30D',
-      windowDays: 30,
+      triggerType: 'OAUTH_CALLBACK',
+      windowDays: 0,
       status: 'SUCCESS',
-      fetchedCount: (syncRes as any).totalFetchedFromStrava || syncedCount,
-      newlySyncedCount: syncedCount,
-      validCount,
-      flaggedOrCutCount: syncedCount - validCount,
-      summaryMessage: `Liên kết OAuth2 Strava (scope: read,activity:read_all) thành công! Đã tự động đồng bộ ${syncedCount} hoạt động chạy bộ trong 30 ngày gần nhất.`,
+      fetchedCount: syncedPendingCount,
+      newlySyncedCount: syncedPendingCount,
+      validCount: syncedPendingCount,
+      flaggedOrCutCount: 0,
+      summaryMessage: `Liên kết OAuth2 Strava thành công! Hệ thống ở trạng thái sẵn sàng nhận bài chạy mới theo thời gian thực qua Webhook.${
+        syncedPendingCount > 0
+          ? ` Đã tự động cứu hộ ${syncedPendingCount} bài chạy bị gián đoạn trước đó.`
+          : ' Bạn có thể chủ động bấm "Đồng bộ 7 ngày" hoặc "30 ngày" nếu muốn tải thêm tracklog cũ.'
+      }`,
     });
 
     const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3005';
     return res.redirect(
-      `${frontendUrl}/?tab=account&strava=connected&synced=${syncedCount}&userId=${callbackData.userId}`
+      `${frontendUrl}/?tab=account&strava=connected&synced=${syncedPendingCount}&userId=${callbackData.userId}`
     );
   }
 

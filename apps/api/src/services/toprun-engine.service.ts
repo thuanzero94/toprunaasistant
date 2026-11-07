@@ -1894,12 +1894,70 @@ export class TopRunEngineService implements OnModuleInit {
       : null;
 
     if (conn && conn.isActive && conn.syncStatus !== 'REAUTH_REQUIRED' && activityExtId) {
+      // Nếu tài khoản đang chờ cấp lại quyền activity:read_all, đưa ngay bài chạy vào hàng đợi cứu hộ
+      if (conn.syncStatus === 'REQUIRE_ACTIVITY_SCOPE') {
+        await prisma.stravaSyncLog.create({
+          data: {
+            userId: conn.userId,
+            triggerType: 'WEBHOOK_PENDING_AUTH',
+            windowDays: 0,
+            status: 'PENDING_REAUTH',
+            fetchedCount: 1,
+            newlySyncedCount: 0,
+            validCount: 0,
+            flaggedOrCutCount: 0,
+            summaryMessage: `Nhận bài chạy Strava #${activityExtId} qua Webhook nhưng tài khoản đang chờ cấp lại quyền activity:read_all. Đã lưu vào hàng đợi cứu hộ.`,
+            detailsJson: { activityExtId },
+          },
+        }).catch(() => {});
+        return {
+          status: 'WEBHOOK_QUEUED_PENDING_REAUTH',
+          userId: conn.userId,
+          activityExtId,
+          message: 'Bài chạy đã được lưu vào hàng đợi cứu hộ và sẽ tự động đồng bộ ngay khi VĐV kết nối lại Strava.',
+        };
+      }
+
       const syncRes = await this.syncLiveStravaActivities(conn.userId, 7, {
         triggerType: 'WEBHOOK',
         bypassCooldown: true,
         singleActivityExtId: activityExtId,
         priority: 1,
       });
+
+      // Nếu khi kéo bài chạy phát hiện lỗi thiếu quyền (401 Unauthorized), lập tức đánh dấu tài khoản & lưu cứu hộ
+      if (syncRes.status === 'REQUIRE_ACTIVITY_SCOPE') {
+        await prisma.stravaSyncLog.create({
+          data: {
+            userId: conn.userId,
+            triggerType: 'WEBHOOK_PENDING_AUTH',
+            windowDays: 0,
+            status: 'PENDING_REAUTH',
+            fetchedCount: 1,
+            newlySyncedCount: 0,
+            validCount: 0,
+            flaggedOrCutCount: 0,
+            summaryMessage: `Nhận bài chạy Strava #${activityExtId} qua Webhook nhưng Token thiếu quyền activity:read_all. Đã lưu vào hàng đợi cứu hộ.`,
+            detailsJson: { activityExtId },
+          },
+        }).catch(() => {});
+
+        await prisma.stravaConnection.update({
+          where: { userId: conn.userId },
+          data: {
+            syncStatus: 'REQUIRE_ACTIVITY_SCOPE',
+            lastErrorMsg: 'Thiếu quyền activity:read_all để đọc bài chạy từ Webhook. Cần kết nối lại.',
+          },
+        }).catch(() => {});
+
+        return {
+          status: 'WEBHOOK_QUEUED_PENDING_REAUTH',
+          userId: conn.userId,
+          activityExtId,
+          message: 'Token thiếu quyền đọc bài chạy. Bài chạy đã được đưa vào hàng đợi cứu hộ.',
+        };
+      }
+
       return {
         status: syncRes.status === 'QUEUED_IN_POOL' ? 'WEBHOOK_QUEUED_IN_POOL' : 'WEBHOOK_ACTIVITY_SYNCED',
         userId: conn.userId,
