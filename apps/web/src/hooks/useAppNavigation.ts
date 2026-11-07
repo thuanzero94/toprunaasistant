@@ -209,13 +209,29 @@ export function useAppNavigation({
       setActiveTabState(targetTab);
       setActiveModalState(null);
 
-      // Keep subtab if navigating to tournaments, or default to my-events
+      // Reset sub-detail view when switching tabs
+      let nextSubTab: TournamentSubTab = runnerEventSubTab;
+      if (targetTab === 'tournaments') {
+        if (runnerEventSubTab === 'detail') {
+          nextSubTab = tournamentFrom === 'explore' ? 'explore' : 'my-events';
+          setRunnerEventSubTabState(nextSubTab);
+        }
+      }
+
+      let nextView: TracklogViewMode = tracklogViewMode;
+      if (targetTab === 'tracklogs') {
+        if (tracklogViewMode === 'detail') {
+          nextView = 'list';
+          setTracklogViewModeState('list');
+        }
+      }
+
       const nextState = {
         tab: targetTab,
-        subTab: targetTab === 'tournaments' ? runnerEventSubTab : undefined,
+        subTab: targetTab === 'tournaments' ? nextSubTab : undefined,
         eventId: targetTab === 'tournaments' ? selectedEventId : undefined,
         from: tournamentFrom,
-        view: targetTab === 'tracklogs' ? tracklogViewMode : undefined,
+        view: targetTab === 'tracklogs' ? nextView : undefined,
         activityId: targetTab === 'tracklogs' ? selectedActivityId : undefined,
         modal: null,
       };
@@ -275,19 +291,15 @@ export function useAppNavigation({
     [buildSearchString]
   );
 
-  // Smart Back from Tournament Detail
+  // Deterministic Back from Tournament Detail (never calls erratic window.history.back())
   const navigateBackFromTournamentDetail = useCallback(() => {
-    // If browser history has an entry, check if we can pop back
-    if (typeof window !== 'undefined' && window.history.length > 1) {
-      window.history.back();
+    setActiveModalState(null);
+    if (tournamentFrom === 'dashboard') {
+      navigateToTab('dashboard');
+    } else if (tournamentFrom === 'explore') {
+      navigateToTournamentSubTab('explore');
     } else {
-      // Fallback: navigate smoothly to the origin subtab or explore
-      const targetSubTab = tournamentFrom === 'my-events' ? 'my-events' : 'explore';
-      if (tournamentFrom === 'dashboard') {
-        navigateToTab('dashboard');
-      } else {
-        navigateToTournamentSubTab(targetSubTab);
-      }
+      navigateToTournamentSubTab('my-events');
     }
   }, [navigateToTab, navigateToTournamentSubTab, tournamentFrom]);
 
@@ -325,12 +337,10 @@ export function useAppNavigation({
     [buildSearchString]
   );
 
+  // Deterministic Back from Tracklog Detail
   const navigateBackFromTracklogDetail = useCallback(() => {
-    if (typeof window !== 'undefined' && window.history.length > 1) {
-      window.history.back();
-    } else {
-      navigateToTracklogs();
-    }
+    setActiveModalState(null);
+    navigateToTracklogs();
   }, [navigateToTracklogs]);
 
   // Modal Safe Management
@@ -362,26 +372,20 @@ export function useAppNavigation({
   );
 
   const closeModal = useCallback(
-    (modalToClose?: AppModal, directWithoutBack = false) => {
-      // If modal is currently in history state, pop it back (unless direct navigation is requested)
-      const currentState = typeof window !== 'undefined' ? window.history.state : null;
-      if (!directWithoutBack && currentState && currentState.modal) {
-        window.history.back();
-      } else {
-        // Direct close & clean URL without extra history item
-        setActiveModalState(null);
-        const nextState = {
-          tab: activeTab,
-          subTab: runnerEventSubTab,
-          eventId: selectedEventId,
-          from: tournamentFrom,
-          view: tracklogViewMode,
-          activityId: selectedActivityId,
-          modal: null,
-        };
-        const newUrl = buildSearchString(nextState);
-        window.history.replaceState(nextState, '', newUrl);
-      }
+    (modalToClose?: AppModal) => {
+      // Direct close & clean URL without popping history or navigating away
+      setActiveModalState(null);
+      const nextState = {
+        tab: activeTab,
+        subTab: runnerEventSubTab,
+        eventId: selectedEventId,
+        from: tournamentFrom,
+        view: tracklogViewMode,
+        activityId: selectedActivityId,
+        modal: null,
+      };
+      const newUrl = buildSearchString(nextState);
+      window.history.replaceState(nextState, '', newUrl);
     },
     [
       activeTab,
@@ -417,7 +421,17 @@ export function useAppNavigation({
     navigateToTournamentDetail,
     navigateBackFromTournamentDetail,
     tracklogViewMode,
-    setTracklogViewMode: setTracklogViewModeState,
+    setTracklogViewMode: (mode: TracklogViewMode) => {
+      setActiveModalState(null);
+      setTracklogViewModeState(mode);
+      const nextState = {
+        tab: 'tracklogs' as NavTab,
+        view: mode,
+        activityId: mode === 'detail' ? selectedActivityId : undefined,
+        modal: null,
+      };
+      window.history.pushState(nextState, '', buildSearchString(nextState));
+    },
     selectedActivityId,
     setSelectedActivityId: setSelectedActivityIdState,
     navigateToTracklogs,

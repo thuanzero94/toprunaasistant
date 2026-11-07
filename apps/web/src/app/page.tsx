@@ -211,14 +211,14 @@ export default function TopRunWebApp() {
   const [selectedChallengeModalData, setSelectedChallengeModalData] = useState<any | null>(null);
   const [challengeModalTab, setChallengeModalTab] = useState<'completed' | 'all'>('completed');
   const selectedParticipantDetail = activeModal === 'participant' ? selectedParticipantDetailData : null;
-  const setSelectedParticipantDetail = (data: ParticipantDetailData | null, useHistoryBack = true) => {
+  const setSelectedParticipantDetail = (data: ParticipantDetailData | null) => {
     if (data) {
       setSelectedParticipantDetailData(data);
       openModal('participant');
     } else {
       setSelectedParticipantDetailData(null);
       if (activeModal === 'participant') {
-        closeModal('participant', !useHistoryBack);
+        closeModal('participant');
       }
     }
   };
@@ -915,7 +915,7 @@ export default function TopRunWebApp() {
 
   const handleViewFullUserTracklogs = useCallback(
     async (targetUserId: string, targetUserName: string) => {
-      setSelectedParticipantDetail(null, false);
+      setSelectedParticipantDetail(null);
       setFilterTracklogUser({ id: targetUserId, name: targetUserName });
       setActiveTab('tracklogs');
       setTracklogViewMode('list');
@@ -2153,7 +2153,7 @@ export default function TopRunWebApp() {
               theme={theme}
               viewingUser={filterTracklogUser}
               onClearViewingUser={() => setFilterTracklogUser(null)}
-              onBackToTournament={() => navigateToTournamentDetail(selectedEventId, 'my-events')}
+              onBackToTournament={() => navigateToTournamentDetail(selectedEventId, tournamentFrom || 'my-events')}
             />
           )}
 
