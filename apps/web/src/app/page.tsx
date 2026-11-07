@@ -1891,7 +1891,7 @@ export default function TopRunWebApp() {
          ===================================================================== */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Banner cảnh báo toàn hệ thống khi Strava thiếu quyền đọc hoạt động */}
-        <StravaReauthWarningBanner userId={user?.id} apiBase={apiBase} />
+        <StravaReauthWarningBanner userId={user?.id} />
 
         {/* Clean Contextual Top Workspace Header */}
         <header className="sticky top-0 z-20 bg-white/85 dark:bg-[#090D16]/85 backdrop-blur-md border-b border-slate-200/80 dark:border-slate-800/80 px-4 sm:px-8 h-16 flex items-center justify-between gap-4">
