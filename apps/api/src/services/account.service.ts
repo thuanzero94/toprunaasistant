@@ -164,6 +164,7 @@ export class AccountService implements OnModuleInit {
       });
 
       // Liên kết Strava App #1 với Athlete #126278000 (Nguyễn Hữu Thuận)
+      // CHÚ Ý: Trong nhánh `update`, TUYỆT ĐỐI KHÔNG ghi đè accessToken/refreshToken vì sẽ xoá mất token OAuth thật của VĐV khi server restart!
       await prisma.stravaConnection.upsert({
         where: { userId: adminUser.id },
         update: {
@@ -174,8 +175,6 @@ export class AccountService implements OnModuleInit {
           country: 'Vietnam',
           profilePicUrl:
             'https://dgalywyr863hv.cloudfront.net/pictures/athletes/126278000/57450920/1/large.jpg',
-          accessToken: this.defaultStravaAccessToken,
-          refreshToken: this.defaultStravaRefreshToken,
           stravaAppId: defaultApp.id,
         },
         create: {
