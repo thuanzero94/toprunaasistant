@@ -21,6 +21,9 @@ import {
 import {
   AntiCheatStatus,
   formatPace,
+  formatSportSpeed,
+  formatSportDistance,
+  getSpeedSplitLabel,
   roundKm,
   isActivityInEventRange,
   toVietnamDateString,
