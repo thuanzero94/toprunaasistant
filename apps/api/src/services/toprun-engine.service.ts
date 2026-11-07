@@ -50,6 +50,7 @@ export interface UserProfile {
   departmentOrUnit: string;
   role: UserRole;
   honorBadge?: string | null;
+  canDeepSync?: boolean;
   totalDistanceKm: number;
   totalActivities: number;
   pr5kSec: number | null;
@@ -420,6 +421,7 @@ export class TopRunEngineService implements OnModuleInit {
       departmentOrUnit: dbU.departmentOrUnit || 'Runner Community',
       role: dbU.role as any as UserRole,
       honorBadge: dbU.honorBadge || null,
+      canDeepSync: Boolean(dbU.canDeepSync),
       totalDistanceKm: Number(dbU.totalDistanceKm || 0),
       totalActivities: Number(dbU.totalActivities || 0),
       pr5kSec: dbU.pr5kSec ?? null,
@@ -1399,10 +1401,13 @@ export class TopRunEngineService implements OnModuleInit {
     userId = 'usr_admin_01',
     windowDays: number = 30,
     options?: {
-      triggerType?: 'MANUAL_SYNC' | 'WEBHOOK' | 'QUEUE_WORKER';
+      triggerType?: 'MANUAL_SYNC' | 'WEBHOOK' | 'QUEUE_WORKER' | 'DEEP_SYNC';
       bypassCooldown?: boolean;
       singleActivityExtId?: string;
       priority?: 1 | 2 | 3;
+      startDate?: string;
+      endDate?: string;
+      isAllTime?: boolean;
     }
   ): Promise<any> {
     const lockKey = `${userId}:${options?.singleActivityExtId || 'LIST'}`;
@@ -1422,17 +1427,35 @@ export class TopRunEngineService implements OnModuleInit {
     userId = 'usr_admin_01',
     windowDays: number = 30,
     options?: {
-      triggerType?: 'MANUAL_SYNC' | 'WEBHOOK' | 'QUEUE_WORKER';
+      triggerType?: 'MANUAL_SYNC' | 'WEBHOOK' | 'QUEUE_WORKER' | 'DEEP_SYNC';
       bypassCooldown?: boolean;
       singleActivityExtId?: string;
       priority?: 1 | 2 | 3;
+      startDate?: string;
+      endDate?: string;
+      isAllTime?: boolean;
     }
   ) {
     process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 
     const user = await this.ensureUser(userId);
-    const triggerType = options?.triggerType || 'MANUAL_SYNC';
+    const triggerType = options?.triggerType || (options?.isAllTime || options?.startDate || windowDays > 30 ? 'DEEP_SYNC' : 'MANUAL_SYNC');
     const priority: 1 | 2 | 3 = options?.priority || (triggerType === 'WEBHOOK' ? 1 : 2);
+
+    // Kiểm tra phân quyền: Nếu đồng bộ sâu (> 30 ngày, hoặc chọn ngày, hoặc all-time) thì chỉ user được cấu hình (canDeepSync) hoặc Admin mới được phép
+    const isDeepSync = windowDays > 30 || Boolean(options?.startDate) || Boolean(options?.isAllTime) || triggerType === 'DEEP_SYNC';
+    if (isDeepSync) {
+      const hasPermission = user.role === UserRole.ADMIN || Boolean(user.canDeepSync);
+      if (!hasPermission) {
+        return {
+          status: 'FORBIDDEN_DEEP_SYNC',
+          athlete: null,
+          message:
+            'Chức năng đồng bộ Strava khoảng thời gian dài hơn (trên 30 ngày hoặc theo khoảng ngày) yêu cầu quyền "Đồng bộ sâu" được cấp bởi Quản trị viên.',
+          syncedActivities: [],
+        };
+      }
+    }
 
     // 0. Đọc Token & Pool (StravaApp) cố định của User từ bảng strava_connections trong PostgreSQL
     let stravaAppId = 'strava_app_01';
@@ -1625,35 +1648,78 @@ export class TopRunEngineService implements OnModuleInit {
         stravaList = [singleAct];
       }
     } else {
-      // Lấy danh sách Activities từ Strava theo cửa sổ thời gian windowDays (tốn 1 Read request)
-      const afterTimestamp = Math.floor(Date.now() / 1000) - windowDays * 86400;
-      const actsRes = await fetch(
-        `https://www.strava.com/api/v3/athlete/activities?after=${afterTimestamp}&per_page=50`,
-        {
-          headers: { Authorization: `Bearer ${userAccessToken}` },
+      // Xác định khoảng thời gian afterTimestamp & beforeTimestamp
+      let afterTimestamp: number;
+      let beforeTimestamp = Math.floor(Date.now() / 1000);
+
+      if (options?.isAllTime) {
+        afterTimestamp = 0; // Kéo toàn bộ lịch sử từ trước tới nay
+      } else if (options?.startDate) {
+        afterTimestamp = Math.floor(new Date(options.startDate).getTime() / 1000);
+        if (options?.endDate) {
+          const endD = new Date(options.endDate);
+          endD.setHours(23, 59, 59, 999);
+          beforeTimestamp = Math.floor(endD.getTime() / 1000);
         }
-      );
-      if (this.poolLimiter) {
-        await this.poolLimiter.recordResponseUsage(stravaAppId, actsRes, true);
+      } else {
+        afterTimestamp = Math.floor(Date.now() / 1000) - windowDays * 86400;
       }
 
-      if (!actsRes.ok) {
-        const errBody = await actsRes.text();
-        const stateParam = `${user.id}:${stravaAppId}`;
-        return {
-          status: 'REQUIRE_ACTIVITY_SCOPE',
-          athlete: athleteData,
-          poolId: stravaAppId,
-          poolName,
-          message:
-            'Token hiện tại chỉ có phạm vi "read" (chỉ đọc hồ sơ). Hãy nhấn vào đường dẫn authorizeUrl bên dưới (1 click) để cấp quyền "activity:read_all" đọc toàn bộ Tracklog chạy bộ!',
-          authorizeUrl: `https://www.strava.com/oauth/authorize?client_id=${clientId}&response_type=code&redirect_uri=${encodeURIComponent(this.stravaConfig.redirectUri)}&approval_prompt=force&scope=read,activity:read_all&state=${stateParam}`,
-          stravaError: errBody,
-          syncedActivities: [],
-        };
-      }
+      // Phân trang tự động (Pagination) tải toàn bộ bài chạy trong khoảng thời gian
+      const maxPages = isDeepSync ? 10 : 2;
+      let page = 1;
+      let keepFetching = true;
+      stravaList = [];
 
-      stravaList = await actsRes.json();
+      while (keepFetching && page <= maxPages) {
+        if (this.poolLimiter) {
+          const pageCheck = this.poolLimiter.canPoolExecute(stravaAppId, priority, 1);
+          if (!pageCheck.allowed) {
+            break;
+          }
+        }
+
+        const actsUrl = `https://www.strava.com/api/v3/athlete/activities?after=${afterTimestamp}&before=${beforeTimestamp}&per_page=100&page=${page}`;
+        const actsRes = await fetch(actsUrl, {
+          headers: { Authorization: `Bearer ${userAccessToken}` },
+        });
+
+        if (this.poolLimiter) {
+          await this.poolLimiter.recordResponseUsage(stravaAppId, actsRes, true);
+        }
+
+        if (!actsRes.ok) {
+          if (page === 1) {
+            const errBody = await actsRes.text();
+            const stateParam = `${user.id}:${stravaAppId}`;
+            return {
+              status: 'REQUIRE_ACTIVITY_SCOPE',
+              athlete: athleteData,
+              poolId: stravaAppId,
+              poolName,
+              message:
+                'Token hiện tại chỉ có phạm vi "read" (chỉ đọc hồ sơ). Hãy nhấn vào đường dẫn authorizeUrl bên dưới (1 click) để cấp quyền "activity:read_all" đọc toàn bộ Tracklog chạy bộ!',
+              authorizeUrl: `https://www.strava.com/oauth/authorize?client_id=${clientId}&response_type=code&redirect_uri=${encodeURIComponent(this.stravaConfig.redirectUri)}&approval_prompt=force&scope=read,activity:read_all&state=${stateParam}`,
+              stravaError: errBody,
+              syncedActivities: [],
+            };
+          }
+          break;
+        }
+
+        const pageActs = await actsRes.json();
+        if (!Array.isArray(pageActs) || pageActs.length === 0) {
+          keepFetching = false;
+          break;
+        }
+
+        stravaList.push(...pageActs);
+        if (pageActs.length < 100) {
+          keepFetching = false;
+        } else {
+          page++;
+        }
+      }
     }
 
     const syncedActivities: StoredActivity[] = [];
@@ -1700,28 +1766,31 @@ export class TopRunEngineService implements OnModuleInit {
         continue;
       }
 
-      // Nếu summaryAct chưa có splits_metric (tức từ danh sách summary), kiểm tra ngân sách Pool trước khi gọi Detail
+      // 2-Step Smart Sync: Nếu summaryAct chưa có splits_metric, kiểm tra ngân sách Pool trước khi gọi Detail
       let detailAct = summaryAct;
       if (!Array.isArray(summaryAct.splits_metric)) {
+        let canFetchDetail = true;
         if (this.poolLimiter) {
           const detailCheck = this.poolLimiter.canPoolExecute(stravaAppId, priority, 1);
           if (!detailCheck.allowed) {
+            canFetchDetail = false;
             deferredCount++;
-            continue;
           }
         }
-        try {
-          const detailRes = await fetch(`https://www.strava.com/api/v3/activities/${summaryAct.id}`, {
-            headers: { Authorization: `Bearer ${userAccessToken}` },
-          });
-          if (this.poolLimiter) {
-            await this.poolLimiter.recordResponseUsage(stravaAppId, detailRes, true);
+        if (canFetchDetail) {
+          try {
+            const detailRes = await fetch(`https://www.strava.com/api/v3/activities/${summaryAct.id}`, {
+              headers: { Authorization: `Bearer ${userAccessToken}` },
+            });
+            if (this.poolLimiter) {
+              await this.poolLimiter.recordResponseUsage(stravaAppId, detailRes, true);
+            }
+            if (detailRes.ok) {
+              detailAct = await detailRes.json();
+            }
+          } catch {
+            // Dùng summaryAct nếu không lấy được detail
           }
-          if (detailRes.ok) {
-            detailAct = await detailRes.json();
-          }
-        } catch {
-          // Dùng summaryAct nếu không lấy được detail
         }
       }
 
@@ -2770,6 +2839,14 @@ export class TopRunEngineService implements OnModuleInit {
     const user = this.users.find((u) => u.id === userId);
     if (user) {
       user.honorBadge = honorBadge;
+      this.saveEngineState();
+    }
+  }
+
+  updateUserDeepSyncPermission(userId: string, canDeepSync: boolean) {
+    const user = this.users.find((u) => u.id === userId);
+    if (user) {
+      user.canDeepSync = Boolean(canDeepSync);
       this.saveEngineState();
     }
   }

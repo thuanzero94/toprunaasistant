@@ -200,6 +200,47 @@ export class ApiController {
     return result;
   }
 
+  @Patch('admin/users/:id/deep-sync-permission')
+  @ApiOperation({ summary: 'Cập nhật quyền đồng bộ Strava chuyên sâu (khoảng thời gian dài hoặc tùy chọn ngày)' })
+  async updateAdminUserDeepSyncPermission(
+    @Param('id') targetUserId: string,
+    @Body() body: { canDeepSync: boolean },
+    @Headers('authorization') authHeader?: string
+  ) {
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const decoded = this.accountService.verifyJwt(authHeader.slice(7));
+      if (!decoded || decoded.role !== 'ADMIN') {
+        throw new UnauthorizedException('Chỉ Quản trị viên (ADMIN) mới có quyền cấp quyền đồng bộ sâu.');
+      }
+    }
+    const result = await this.accountService.updateUserDeepSyncPermission(targetUserId, body.canDeepSync);
+    this.engine.updateUserDeepSyncPermission(targetUserId, body.canDeepSync);
+    return result;
+  }
+
+  @Post('admin/users/:id/sync-strava')
+  @ApiOperation({ summary: 'Quản trị viên kích hoạt đồng bộ Strava trực tiếp cho một vận động viên bất kỳ' })
+  async adminTriggerUserStravaSync(
+    @Param('id') targetUserId: string,
+    @Body() body: { windowDays?: number; startDate?: string; endDate?: string; isAllTime?: boolean },
+    @Headers('authorization') authHeader?: string
+  ) {
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const decoded = this.accountService.verifyJwt(authHeader.slice(7));
+      if (!decoded || decoded.role !== 'ADMIN') {
+        throw new UnauthorizedException('Chỉ Quản trị viên (ADMIN) mới có quyền đồng bộ hộ người dùng khác.');
+      }
+    }
+    const windowDays = body?.windowDays || 30;
+    const syncRes = await this.engine.syncLiveStravaActivities(targetUserId, windowDays, {
+      triggerType: 'DEEP_SYNC',
+      startDate: body?.startDate,
+      endDate: body?.endDate,
+      isAllTime: body?.isAllTime,
+    });
+    return syncRes;
+  }
+
   @Delete('admin/users/:id')
   @ApiOperation({ summary: 'Xoá tài khoản người dùng (Admin only)' })
   async deleteAdminUser(
@@ -523,35 +564,54 @@ export class ApiController {
   @Post('strava/sync-live')
   @HttpCode(200)
   @ApiOperation({
-    summary: 'Đồng bộ trực tiếp các buổi chạy thật từ tài khoản Strava đã kết nối (Chọn 7 ngày hoặc 30 ngày)',
+    summary: 'Đồng bộ trực tiếp các buổi chạy thật từ tài khoản Strava đã kết nối (Hỗ trợ 7, 30 ngày hoặc khoảng thời gian mở rộng nếu được cấp quyền)',
   })
-  async syncLiveStrava(@Body() body: { userId?: string; windowDays?: number }) {
+  async syncLiveStrava(@Body() body: {
+    userId?: string;
+    windowDays?: number;
+    startDate?: string;
+    endDate?: string;
+    isAllTime?: boolean;
+  }) {
     const userId = body?.userId || 'usr_admin_01';
     const windowDays = body?.windowDays || 30;
-    const syncRes = await this.engine.syncLiveStravaActivities(userId, windowDays);
+    const isDeep = windowDays > 30 || Boolean(body?.startDate) || Boolean(body?.isAllTime);
 
-    const validCount = syncRes.syncedActivities.filter(
-      (a: any) => a.antiCheatStatus === AntiCheatStatus.VALID
-    ).length;
-    const flaggedCount = syncRes.syncedActivities.length - validCount;
+    const syncRes = await this.engine.syncLiveStravaActivities(userId, windowDays, {
+      triggerType: isDeep ? 'DEEP_SYNC' : 'MANUAL_SYNC',
+      startDate: body?.startDate,
+      endDate: body?.endDate,
+      isAllTime: body?.isAllTime,
+    });
+
+    const validCount = Array.isArray(syncRes.syncedActivities)
+      ? syncRes.syncedActivities.filter((a: any) => a.antiCheatStatus === AntiCheatStatus.VALID).length
+      : 0;
+    const flaggedCount = Array.isArray(syncRes.syncedActivities) ? syncRes.syncedActivities.length - validCount : 0;
+
+    let triggerDescription = `${windowDays}D`;
+    if (body?.isAllTime) triggerDescription = 'ALL_TIME';
+    else if (body?.startDate) triggerDescription = `CUSTOM_${body.startDate}_${body.endDate || 'NOW'}`;
 
     await this.accountService.recordSyncLog({
       userId,
-      triggerType: `MANUAL_SYNC_${windowDays}D`,
+      triggerType: isDeep ? `DEEP_SYNC_${triggerDescription}` : `MANUAL_SYNC_${windowDays}D`,
       windowDays,
       status:
         syncRes.status === 'SUCCESS' || syncRes.status === 'PARTIAL_QUEUED'
           ? 'SUCCESS'
           : syncRes.status === 'QUEUED_IN_POOL' || syncRes.status === 'COOLDOWN_ACTIVE'
             ? 'PARTIAL_WARNING'
-            : 'REQUIRE_SCOPE',
+            : syncRes.status === 'FORBIDDEN_DEEP_SYNC'
+              ? 'FORBIDDEN'
+              : 'REQUIRE_SCOPE',
       fetchedCount: (syncRes as any).totalFetchedFromStrava || 0,
-      newlySyncedCount: syncRes.syncedActivities.length,
+      newlySyncedCount: Array.isArray(syncRes.syncedActivities) ? syncRes.syncedActivities.length : 0,
       validCount,
       flaggedOrCutCount: flaggedCount,
       summaryMessage:
         syncRes.status === 'SUCCESS'
-          ? `Đồng bộ thủ công (${windowDays} ngày gần nhất) hoàn tất: Tải về ${(syncRes as any).totalFetchedFromStrava || 0} hoạt động từ Strava, ghi nhận ${syncRes.syncedActivities.length} bài chạy mới (${validCount} hợp lệ, ${flaggedCount} cắt Split).`
+          ? `Đồng bộ Strava (${isDeep ? 'Chuyên sâu ' + triggerDescription : windowDays + ' ngày'}) hoàn tất: Tải về ${(syncRes as any).totalFetchedFromStrava || 0} hoạt động từ Strava, ghi nhận ${syncRes.syncedActivities.length} bài chạy mới (${validCount} hợp lệ, ${flaggedCount} cắt Split).`
           : syncRes.message || 'Cần cấp quyền activity:read_all trên Strava.',
     });
 

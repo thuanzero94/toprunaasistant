@@ -98,6 +98,8 @@ interface AdminManagementPortalProps {
   onRefreshUsers: () => void;
   onUpdateUserRole: (userId: string, newRole: string) => void;
   onUpdateUserHonorBadge?: (userId: string, honorBadge: string | null) => void;
+  onUpdateUserDeepSyncPermission?: (userId: string, canDeepSync: boolean) => void;
+  onAdminTriggerStravaSync?: (userId: string, windowDays: number, isAllTime?: boolean) => Promise<any> | void;
   onDeleteUser: (userId: string, userName: string) => void;
   adminEventSaveMsg: string | null;
   eventsList: any[];
@@ -129,6 +131,8 @@ export default function AdminManagementPortal({
   onRefreshUsers,
   onUpdateUserRole,
   onUpdateUserHonorBadge,
+  onUpdateUserDeepSyncPermission,
+  onAdminTriggerStravaSync,
   onDeleteUser,
   adminEventSaveMsg,
   eventsList,
@@ -148,6 +152,11 @@ export default function AdminManagementPortal({
   onViewRunnerDetail,
 }: AdminManagementPortalProps) {
   const [pendingDeleteUserId, setPendingDeleteUserId] = useState<string | null>(null);
+  const [adminSyncingUser, setAdminSyncingUser] = useState<any | null>(null);
+  const [adminSyncDays, setAdminSyncDays] = useState<number>(30);
+  const [adminSyncIsAllTime, setAdminSyncIsAllTime] = useState(false);
+  const [adminSyncLoading, setAdminSyncLoading] = useState(false);
+  const [adminSyncResult, setAdminSyncResult] = useState<string | null>(null);
   const [raceViewMode, setRaceViewMode] = useState<'list' | 'edit'>('list');
   const [deleteNoticeModal, setDeleteNoticeModal] = useState<{ title: string; count: number } | null>(null);
   const [pendingDeleteEvent, setPendingDeleteEvent] = useState<{ id: string; title: string } | null>(null);
@@ -299,6 +308,7 @@ export default function AdminManagementPortal({
                     <th className="py-3 px-3">Size áo / Địa chỉ</th>
                     <th className="py-3 px-3">Vai trò hệ thống</th>
                     <th className="py-3 px-3">Danh hiệu VIP</th>
+                    <th className="py-3 px-3 text-center">Đồng bộ sâu Strava</th>
                     <th className="py-3 px-3">Ngày tạo</th>
                     <th className="py-3 px-3 text-right">Thao tác</th>
                   </tr>
@@ -398,6 +408,34 @@ export default function AdminManagementPortal({
                               <option value="ELITE_ATHLETE">⚡ VĐV Đỉnh cao (Elite)</option>
                             </select>
                           </td>
+                          <td className="py-3 px-3 text-center">
+                            {u.role === 'ADMIN' ? (
+                              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300">
+                                Toàn quyền (Admin)
+                              </span>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  onUpdateUserDeepSyncPermission &&
+                                  onUpdateUserDeepSyncPermission(u.id, !u.canDeepSync)
+                                }
+                                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition inline-flex items-center gap-1.5 cursor-pointer shadow-2xs ${
+                                  u.canDeepSync
+                                    ? 'bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300'
+                                    : 'bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+                                }`}
+                                title={u.canDeepSync ? 'Nhấp để thu hồi quyền đồng bộ sâu' : 'Nhấp để cấp quyền đồng bộ sâu'}
+                              >
+                                <span
+                                  className={`w-2 h-2 rounded-full ${
+                                    u.canDeepSync ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'
+                                  }`}
+                                />
+                                <span>{u.canDeepSync ? 'Đã cấp' : 'Chưa cấp'}</span>
+                              </button>
+                            )}
+                          </td>
                           <td className="py-3 px-3 text-xs font-mono tabular-nums text-slate-500">
                             {u.createdAt ? new Date(u.createdAt).toLocaleDateString('vi-VN') : '—'}
                           </td>
@@ -423,19 +461,34 @@ export default function AdminManagementPortal({
                                 </button>
                               </div>
                             ) : (
-                              <button
-                                type="button"
-                                disabled={isCurrentAdmin}
-                                onClick={() => setPendingDeleteUserId(u.id)}
-                                title={isCurrentAdmin ? 'Không thể tự xoá tài khoản đang đăng nhập' : 'Xoá người dùng'}
-                                className={`p-1.5 rounded-lg border transition ${
-                                  isCurrentAdmin
-                                    ? 'border-slate-200 dark:border-slate-800 text-slate-300 dark:text-slate-600 cursor-not-allowed opacity-50'
-                                    : 'border-rose-200 dark:border-rose-900/60 hover:bg-rose-50 dark:hover:bg-rose-950/40 text-rose-500 cursor-pointer'
-                                }`}
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
+                              <div className="inline-flex items-center gap-1.5 justify-end">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setAdminSyncingUser(u);
+                                    setAdminSyncResult(null);
+                                    setAdminSyncDays(30);
+                                    setAdminSyncIsAllTime(false);
+                                  }}
+                                  className="p-1.5 rounded-lg border border-orange-200 dark:border-[#FC4C02]/30 text-[#FC4C02] hover:bg-[#FC4C02] hover:text-white transition cursor-pointer"
+                                  title="Đồng bộ Strava cho VĐV này"
+                                >
+                                  <RefreshCw className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={isCurrentAdmin}
+                                  onClick={() => setPendingDeleteUserId(u.id)}
+                                  title={isCurrentAdmin ? 'Không thể tự xoá tài khoản đang đăng nhập' : 'Xoá người dùng'}
+                                  className={`p-1.5 rounded-lg border transition ${
+                                    isCurrentAdmin
+                                      ? 'border-slate-200 dark:border-slate-800 text-slate-300 dark:text-slate-600 cursor-not-allowed opacity-50'
+                                      : 'border-rose-200 dark:border-rose-900/60 hover:bg-rose-50 dark:hover:bg-rose-950/40 text-rose-500 cursor-pointer'
+                                  }`}
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
                             )}
                           </td>
                         </tr>
@@ -445,6 +498,124 @@ export default function AdminManagementPortal({
               </table>
             </div>
           </div>
+
+          {/* MODAL ADMIN ĐỒNG BỘ STRAVA CHO VĐV */}
+          {adminSyncingUser && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in">
+              <div className="w-full max-w-md rounded-2xl bg-white dark:bg-[#0F1420] border border-slate-200 dark:border-slate-800 p-6 shadow-2xl space-y-4">
+                <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+                  <div className="flex items-center gap-2">
+                    <RefreshCw className="w-4 h-4 text-[#FC4C02]" />
+                    <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                      Đồng bộ Strava cho VĐV
+                    </h3>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setAdminSyncingUser(null)}
+                    className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+
+                <div className="space-y-2 text-xs">
+                  <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex items-center gap-3">
+                    <AthleteAvatar user={adminSyncingUser} size="sm" showBadge={false} />
+                    <div>
+                      <div className="font-bold text-slate-900 dark:text-white">
+                        {adminSyncingUser.fullName || adminSyncingUser.email}
+                      </div>
+                      <div className="text-[11px] font-mono text-slate-400">ID: {adminSyncingUser.id}</div>
+                    </div>
+                  </div>
+
+                  <p className="text-slate-500 dark:text-slate-400 leading-relaxed">
+                    Chọn khoảng thời gian đồng bộ. Với tư cách Quản trị viên, bạn có thể đồng bộ các mốc dài hạn hoặc toàn bộ lịch sử chạy của VĐV này.
+                  </p>
+
+                  <div className="grid grid-cols-2 gap-2 pt-2">
+                    {[
+                      { days: 7, label: '7 ngày qua' },
+                      { days: 30, label: '30 ngày qua' },
+                      { days: 90, label: '90 ngày (3 tháng)' },
+                      { days: 180, label: '180 ngày (6 tháng)' },
+                      { days: 365, label: '365 ngày (1 năm)' },
+                      { allTime: true, label: 'Toàn bộ lịch sử' },
+                    ].map((opt, i) => {
+                      const isSelected = opt.allTime ? adminSyncIsAllTime : !adminSyncIsAllTime && adminSyncDays === opt.days;
+                      return (
+                        <button
+                          key={i}
+                          type="button"
+                          onClick={() => {
+                            if (opt.allTime) {
+                              setAdminSyncIsAllTime(true);
+                            } else {
+                              setAdminSyncIsAllTime(false);
+                              setAdminSyncDays(opt.days || 30);
+                            }
+                          }}
+                          className={`py-2 px-2.5 rounded-xl text-xs font-semibold border transition cursor-pointer text-center ${
+                            isSelected
+                              ? 'bg-[#FC4C02] text-white border-[#FC4C02]'
+                              : 'bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                          }`}
+                        >
+                          {opt.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {adminSyncResult && (
+                  <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200 text-xs font-medium">
+                    {adminSyncResult}
+                  </div>
+                )}
+
+                <div className="pt-2 flex items-center justify-end gap-2 border-t border-slate-100 dark:border-slate-800">
+                  <button
+                    type="button"
+                    onClick={() => setAdminSyncingUser(null)}
+                    className="px-3.5 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                  >
+                    Đóng
+                  </button>
+                  <button
+                    type="button"
+                    disabled={adminSyncLoading}
+                    onClick={async () => {
+                      if (!adminSyncingUser || !onAdminTriggerStravaSync) return;
+                      setAdminSyncLoading(true);
+                      setAdminSyncResult(null);
+                      try {
+                        const res: any = await onAdminTriggerStravaSync(
+                          adminSyncingUser.id,
+                          adminSyncDays,
+                          adminSyncIsAllTime
+                        );
+                        if (res?.status === 'SUCCESS' || res?.status === 'PARTIAL_QUEUED') {
+                          setAdminSyncResult(`Đã đồng bộ thành công! Tìm thấy ${res.totalFetchedFromStrava || 0} bài tập, thêm mới ${res.newlySyncedCount || 0} bài.`);
+                        } else {
+                          setAdminSyncResult(res?.message || 'Đồng bộ hoàn tất');
+                        }
+                      } catch (e: any) {
+                        setAdminSyncResult(e.message || 'Lỗi khi đồng bộ');
+                      } finally {
+                        setAdminSyncLoading(false);
+                      }
+                    }}
+                    className="px-4 py-2 rounded-xl bg-[#FC4C02] hover:bg-[#E34402] text-white text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-xs disabled:opacity-50"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${adminSyncLoading ? 'animate-spin' : ''}`} />
+                    <span>{adminSyncLoading ? 'Đang kéo Strava...' : 'Kích hoạt ngay'}</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

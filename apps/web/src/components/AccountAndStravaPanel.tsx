@@ -5,13 +5,18 @@ import {
   Activity,
   AlertCircle,
   Award,
+  Calendar,
   Camera,
+  Check,
   CheckCircle2,
+  ChevronRight,
   Clock,
   ExternalLink,
+  FileUp,
   HeartPulse,
   Image as ImageIcon,
   KeyRound,
+  Layers,
   Link2,
   Lock,
   LogOut,
@@ -20,10 +25,12 @@ import {
   Save,
   ShieldCheck,
   Shirt,
+  Sparkles,
   Timer,
   Unlink,
   Upload,
   User,
+  X,
 } from 'lucide-react';
 import { formatPace, parsePaceToSeconds } from '@toprun/shared';
 import { useAuth } from '../context/AuthContext';
@@ -37,11 +44,13 @@ type SubTab = 'profile' | 'strava' | 'security';
 export default function AccountAndStravaPanel({
   onActivitiesSynced,
   onProfileUpdated,
+  onGpxUpload,
   initialSubTab = 'profile',
   initialUserId,
 }: {
   onActivitiesSynced?: (msg: string) => void;
   onProfileUpdated?: (user: any) => void;
+  onGpxUpload?: (e: React.ChangeEvent<HTMLInputElement>) => void;
   initialSubTab?: SubTab;
   initialUserId?: string;
 }) {
@@ -233,13 +242,55 @@ export default function AccountAndStravaPanel({
     }
   };
 
-  const handleSyncLiveStrava = async (windowDays: 7 | 30) => {
+  const [deepSyncStartDate, setDeepSyncStartDate] = useState('');
+  const [deepSyncEndDate, setDeepSyncEndDate] = useState('');
+  const [deepSyncModal, setDeepSyncModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    stage: 'syncing' | 'success' | 'error';
+    fetchedCount?: number;
+    newlySyncedCount?: number;
+    validCount?: number;
+    message?: string;
+  } | null>(null);
+
+  const handleSyncLiveStrava = async (
+    params:
+      | {
+          windowDays?: number;
+          startDate?: string;
+          endDate?: string;
+          isAllTime?: boolean;
+          label?: string;
+        }
+      | number
+  ) => {
+    const opts = typeof params === 'number' ? { windowDays: params } : params;
+    const isDeep = Boolean(
+      opts.isAllTime || opts.startDate || (opts.windowDays && opts.windowDays > 30)
+    );
     try {
       setLoading(true);
+      if (isDeep) {
+        setDeepSyncModal({
+          isOpen: true,
+          title: opts.label || 'Đồng bộ Strava chuyên sâu',
+          stage: 'syncing',
+          message:
+            'Đang kết nối Strava API, rà soát lịch sử bài chạy và lưu trữ trực tiếp vào hệ thống...',
+        });
+      }
+
       const res = await fetch(`${API_BASE}/strava/sync-live`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json; charset=utf-8' },
-        body: JSON.stringify({ userId: currentUserId, windowDays }),
+        body: JSON.stringify({
+          userId: currentUserId,
+          windowDays: opts.windowDays || 30,
+          startDate: opts.startDate,
+          endDate: opts.endDate,
+          isAllTime: opts.isAllTime,
+        }),
       });
       const data = await res.json();
       if (data.accountDetails) {
@@ -248,18 +299,55 @@ export default function AccountAndStravaPanel({
         await fetchAccountFromBackend(currentUserId);
       }
 
-      if (data.status === 'SUCCESS') {
-        const msg = `Đồng bộ Strava (${windowDays} ngày) hoàn tất: tìm thấy ${data.totalFetchedFromStrava} hoạt động, thêm mới ${data.newlySyncedCount} bài chạy.`;
+      if (data.status === 'SUCCESS' || data.status === 'PARTIAL_QUEUED') {
+        const msg = `Đồng bộ Strava hoàn tất: tìm thấy ${data.totalFetchedFromStrava || 0} hoạt động, thêm mới ${data.newlySyncedCount || 0} bài chạy.`;
         setNotification({ type: 'success', text: msg });
         if (onActivitiesSynced) onActivitiesSynced(msg);
+        if (isDeep) {
+          setDeepSyncModal({
+            isOpen: true,
+            title: opts.label || 'Đồng bộ Strava chuyên sâu',
+            stage: 'success',
+            fetchedCount: data.totalFetchedFromStrava || 0,
+            newlySyncedCount: data.newlySyncedCount || 0,
+            validCount: data.newlySyncedCount || 0,
+            message: msg,
+          });
+        }
+      } else if (data.status === 'FORBIDDEN_DEEP_SYNC') {
+        setNotification({ type: 'error', text: data.message });
+        if (isDeep) {
+          setDeepSyncModal({
+            isOpen: true,
+            title: 'Từ chối quyền truy cập',
+            stage: 'error',
+            message: data.message,
+          });
+        }
       } else {
-        setNotification({ type: 'warning', text: data.message });
+        setNotification({ type: 'warning', text: data.message || 'Không thể hoàn tất đồng bộ.' });
+        if (isDeep) {
+          setDeepSyncModal({
+            isOpen: true,
+            title: 'Thông báo đồng bộ',
+            stage: 'error',
+            message: data.message,
+          });
+        }
       }
     } catch (err: any) {
       setNotification({
         type: 'error',
         text: `Không thể kết nối máy chủ đồng bộ Strava: ${err.message}`,
       });
+      if (isDeep) {
+        setDeepSyncModal({
+          isOpen: true,
+          title: 'Lỗi kết nối',
+          stage: 'error',
+          message: err.message,
+        });
+      }
     } finally {
       setLoading(false);
     }
@@ -919,6 +1007,129 @@ export default function AccountAndStravaPanel({
                 </button>
               )}
             </div>
+
+            {/* KHỐI ĐỒNG BỘ STRAVA CHUYÊN SÂU (DÀNH CHO USER ĐƯỢC CẤP QUYỀN HOẶC ADMIN) */}
+            {(authUser?.role === 'ADMIN' || Boolean(accountData?.user?.canDeepSync) || Boolean((authUser as any)?.canDeepSync)) && (
+              <div className="mt-4 pt-5 border-t border-slate-100 dark:border-slate-800/80 space-y-4">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-amber-500 shrink-0" />
+                    <h4 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">
+                      Đồng bộ Strava chuyên sâu (Khoảng thời gian mở rộng)
+                    </h4>
+                  </div>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                    Quyền đồng bộ sâu đã kích hoạt
+                  </span>
+                </div>
+
+                <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                  Tải toàn bộ bài chạy lịch sử nhiều tháng hoặc theo khoảng ngày cụ thể. Hệ thống sử dụng cơ chế nạp thông minh 2 bước và tự động kiểm soát hạn mức Strava API Pool để đảm bảo an toàn.
+                </p>
+
+                {/* Các mốc Preset nhanh */}
+                <div>
+                  <div className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 mb-2">
+                    Chọn nhanh các mốc thời gian:
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+                    {[
+                      { days: 60, label: '60 ngày (2 tháng)' },
+                      { days: 90, label: '90 ngày (3 tháng)' },
+                      { days: 180, label: '180 ngày (6 tháng)' },
+                      { days: 365, label: '365 ngày (1 năm)' },
+                      { allTime: true, label: 'Toàn bộ lịch sử' },
+                    ].map((p, idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() =>
+                          handleSyncLiveStrava({
+                            windowDays: p.days,
+                            isAllTime: p.allTime,
+                            label: `Đồng bộ ${p.label}`,
+                          })
+                        }
+                        disabled={loading}
+                        className="px-2.5 py-2 rounded-xl text-xs font-bold bg-slate-50 dark:bg-slate-900 hover:bg-[#FC4C02] text-slate-700 dark:text-slate-200 hover:text-white border border-slate-200/80 dark:border-slate-800 transition cursor-pointer shadow-2xs text-center disabled:opacity-50"
+                      >
+                        {p.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Bộ lọc Date Range tuỳ biến */}
+                <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200/70 dark:border-slate-800 space-y-3">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800 dark:text-slate-200">
+                    <Calendar className="w-3.5 h-3.5 text-[#FC4C02]" />
+                    <span>Hoặc chọn khoảng ngày tuỳ biến (Custom Date Range):</span>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-3">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] font-medium text-slate-500">Từ ngày:</span>
+                      <input
+                        type="date"
+                        value={deepSyncStartDate}
+                        onChange={(e) => setDeepSyncStartDate(e.target.value)}
+                        className="px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs text-slate-900 dark:text-slate-100 font-medium focus:outline-none focus:border-[#FC4C02]"
+                      />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] font-medium text-slate-500">Đến ngày:</span>
+                      <input
+                        type="date"
+                        value={deepSyncEndDate}
+                        onChange={(e) => setDeepSyncEndDate(e.target.value)}
+                        className="px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs text-slate-900 dark:text-slate-100 font-medium focus:outline-none focus:border-[#FC4C02]"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!deepSyncStartDate) return;
+                        handleSyncLiveStrava({
+                          startDate: deepSyncStartDate,
+                          endDate: deepSyncEndDate || undefined,
+                          label: `Đồng bộ từ ${deepSyncStartDate} đến ${deepSyncEndDate || 'hôm nay'}`,
+                        });
+                      }}
+                      disabled={loading || !deepSyncStartDate}
+                      className="px-3.5 py-1.5 rounded-lg bg-[#FC4C02] hover:bg-[#E34402] text-white text-xs font-bold transition cursor-pointer disabled:opacity-50 shadow-xs"
+                    >
+                      Bắt đầu đồng bộ khoảng ngày
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* KHỐI NHẬP FILE GPX / FIT / TCX THỦ CÔNG */}
+            {onGpxUpload && (
+              <div className="mt-4 pt-5 border-t border-slate-100 dark:border-slate-800/80 space-y-3">
+                <div className="flex items-center gap-2">
+                  <FileUp className="w-4 h-4 text-[#FC4C02] shrink-0" />
+                  <h4 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">
+                    Nhập bài chạy thủ công từ file (GPX / FIT / TCX)
+                  </h4>
+                </div>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Nếu bài tập của bạn được ghi lại trên Garmin, Suunto, Coros hoặc thiết bị khác, bạn có thể tải trực tiếp file tracklog vào TOPRun tại đây.
+                </p>
+                <div>
+                  <label className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-xs font-bold text-slate-700 dark:text-slate-200 inline-flex items-center gap-2 transition cursor-pointer shadow-2xs">
+                    <FileUp className="w-4 h-4 text-[#FC4C02]" />
+                    <span>Chọn file GPX / FIT / TCX để tải lên</span>
+                    <input
+                      type="file"
+                      accept=".gpx,.fit,.tcx"
+                      onChange={onGpxUpload}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Cột phải: Lịch sử đồng bộ gần đây */}
@@ -1114,6 +1325,88 @@ export default function AccountAndStravaPanel({
           <span>Đăng xuất tài khoản</span>
         </button>
       </div>
+
+      {/* MODAL TIẾN TRÌNH ĐỒNG BỘ STRAVA CHUYÊN SÂU */}
+      {deepSyncModal?.isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-in fade-in">
+          <div className="relative w-full max-w-md rounded-2xl bg-white dark:bg-[#0F1420] border border-slate-200 dark:border-slate-800 p-6 shadow-2xl space-y-5 text-center">
+            {deepSyncModal.stage === 'syncing' ? (
+              <div className="space-y-4">
+                <div className="w-16 h-16 rounded-2xl bg-[#FC4C02]/10 text-[#FC4C02] flex items-center justify-center mx-auto">
+                  <RefreshCw className="w-8 h-8 animate-spin" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                    {deepSyncModal.title}
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                    {deepSyncModal.message}
+                  </p>
+                </div>
+                <div className="p-3 rounded-xl bg-orange-50 dark:bg-[#FC4C02]/10 border border-orange-200/60 dark:border-[#FC4C02]/20 text-[11px] text-[#FC4C02] font-medium">
+                  Vui lòng giữ cửa sổ này trong giây lát trong khi hệ thống kết nối Strava API...
+                </div>
+              </div>
+            ) : deepSyncModal.stage === 'success' ? (
+              <div className="space-y-4">
+                <div className="w-16 h-16 rounded-2xl bg-emerald-500/10 text-emerald-500 flex items-center justify-center mx-auto">
+                  <CheckCircle2 className="w-8 h-8" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                    Đồng bộ thành công!
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
+                    {deepSyncModal.message}
+                  </p>
+                </div>
+                <div className="grid grid-cols-2 gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+                  <div>
+                    <div className="text-[11px] text-slate-400">Tìm thấy trên Strava</div>
+                    <div className="text-lg font-bold font-mono text-slate-900 dark:text-white mt-0.5">
+                      {deepSyncModal.fetchedCount || 0}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-[11px] text-slate-400">Thêm mới thành công</div>
+                    <div className="text-lg font-bold font-mono text-emerald-500 mt-0.5">
+                      +{deepSyncModal.newlySyncedCount || 0}
+                    </div>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setDeepSyncModal(null)}
+                  className="w-full py-2.5 rounded-xl bg-[#FC4C02] hover:bg-[#E34402] text-white text-xs font-bold transition cursor-pointer shadow-xs"
+                >
+                  Xong &amp; Đóng
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="w-16 h-16 rounded-2xl bg-rose-500/10 text-rose-500 flex items-center justify-center mx-auto">
+                  <AlertCircle className="w-8 h-8" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                    {deepSyncModal.title}
+                  </h3>
+                  <p className="text-xs text-rose-600 dark:text-rose-400 mt-1">
+                    {deepSyncModal.message}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setDeepSyncModal(null)}
+                  className="w-full py-2.5 rounded-xl bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 text-xs font-bold transition cursor-pointer"
+                >
+                  Đóng
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

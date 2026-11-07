@@ -92,13 +92,11 @@ interface Props {
   onToggleHideActivity: (id: string) => Promise<void> | void;
   onDeleteActivity: (id: string) => Promise<void> | void;
   onOpenShareModal: () => void;
-  onGpxUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
-  onSyncStravaLive: () => Promise<void>;
-  isSyncingStrava: boolean;
   theme: 'dark' | 'light';
   viewingUser?: { id: string; name: string } | null;
   onClearViewingUser?: () => void;
   onBackToTournament?: () => void;
+  onGoToAccountSettings?: () => void;
 }
 
 export default function UserTracklogExplorer({
@@ -114,13 +112,11 @@ export default function UserTracklogExplorer({
   onToggleHideActivity,
   onDeleteActivity,
   onOpenShareModal,
-  onGpxUpload,
-  onSyncStravaLive,
-  isSyncingStrava,
   theme,
   viewingUser,
   onClearViewingUser,
   onBackToTournament,
+  onGoToAccountSettings,
 }: Props) {
   const isAdmin = currentUserRole === 'ADMIN';
   const [internalViewMode, setInternalViewMode] = useState<'list' | 'detail'>('list');
@@ -472,9 +468,9 @@ export default function UserTracklogExplorer({
           </div>
         </div>
 
-        {/* Search Input + Quick Actions (Nhập GPX & Đồng bộ Strava) */}
-        <div className="flex flex-wrap items-center gap-2 flex-1 justify-end min-w-[240px]">
-          <div className="relative flex-1 min-w-[180px] max-w-xs">
+        {/* Search Input */}
+        <div className="flex items-center gap-2 flex-1 justify-end min-w-[200px]">
+          <div className="relative w-full max-w-sm">
             <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
             <input
               type="text"
@@ -484,27 +480,6 @@ export default function UserTracklogExplorer({
               className="w-full pl-9 pr-3.5 py-1.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-hidden focus:border-[#FC4C02]"
             />
           </div>
-
-          <label className="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-xs font-semibold text-slate-700 dark:text-slate-300 inline-flex items-center gap-1.5 transition cursor-pointer shrink-0">
-            <FileUp className="w-3.5 h-3.5 text-[#FC4C02]" />
-            <span>Nhập GPX</span>
-            <input
-              type="file"
-              accept=".gpx,.fit,.tcx"
-              onChange={onGpxUpload}
-              className="hidden"
-            />
-          </label>
-
-          <button
-            type="button"
-            onClick={onSyncStravaLive}
-            disabled={isSyncingStrava}
-            className="px-3.5 py-1.5 rounded-xl bg-[#FC4C02] hover:bg-[#E34402] text-white text-xs font-bold inline-flex items-center gap-1.5 shadow-sm transition cursor-pointer shrink-0"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${isSyncingStrava ? 'animate-spin' : ''}`} />
-            <span>{isSyncingStrava ? 'Đang đồng bộ...' : 'Đồng bộ Strava'}</span>
-          </button>
         </div>
       </div>
 
@@ -521,18 +496,18 @@ export default function UserTracklogExplorer({
               Chưa có bài chạy nào trong danh sách
             </h3>
             <p className="text-xs text-slate-500 dark:text-slate-400">
-              Hãy liên kết Strava để đồng bộ hoặc nhập file GPX bài chạy của bạn.
+              Hãy vào tab &quot;Cá nhân&quot; để kết nối Strava đồng bộ tự động hoặc tải lên file GPX bài chạy của bạn.
             </p>
           </div>
-          <button
-            type="button"
-            onClick={onSyncStravaLive}
-            disabled={isSyncingStrava}
-            className="px-4 py-2 rounded-xl bg-[#FC4C02] hover:bg-[#E34402] text-white text-xs font-bold inline-flex items-center gap-1.5 transition cursor-pointer"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${isSyncingStrava ? 'animate-spin' : ''}`} />
-            <span>Đồng bộ Strava ngay</span>
-          </button>
+          {onGoToAccountSettings && (
+            <button
+              type="button"
+              onClick={onGoToAccountSettings}
+              className="px-4 py-2 rounded-xl bg-[#FC4C02] hover:bg-[#E34402] text-white text-xs font-bold inline-flex items-center gap-1.5 transition cursor-pointer"
+            >
+              <span>Vào Cài Đặt Cá Nhân &amp; Strava</span>
+            </button>
+          )}
         </div>
       ) : (
         <div className="max-w-3xl mx-auto space-y-5">

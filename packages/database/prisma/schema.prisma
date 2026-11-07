@@ -114,6 +114,7 @@ model User {
 
   // Danh hiệu & Huy hiệu danh dự đặc biệt (ANGEL_INVESTOR, FOUNDER, VIP_PATRON, ELITE_ATHLETE)
   honorBadge             String?
+  canDeepSync            Boolean         @default(false)
 
   expoPushToken          String?
   createdAt              DateTime        @default(now())

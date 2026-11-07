@@ -9,6 +9,7 @@ export interface AuthUser {
   avatarUrl?: string | null;
   role: string;
   honorBadge?: string | null;
+  canDeepSync?: boolean;
   departmentOrUnit?: string | null;
   phone?: string | null;
   gender?: string | null;

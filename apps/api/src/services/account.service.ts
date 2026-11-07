@@ -717,6 +717,21 @@ export class AccountService implements OnModuleInit {
     };
   }
 
+  async updateUserDeepSyncPermission(targetUserId: string, canDeepSync: boolean) {
+    const user = await prisma.user.findUnique({ where: { id: targetUserId } });
+    if (!user) throw new NotFoundException('Không tìm thấy tài khoản để cấu hình quyền đồng bộ sâu.');
+
+    const updated = await prisma.user.update({
+      where: { id: targetUserId },
+      data: { canDeepSync: Boolean(canDeepSync) },
+    });
+
+    return {
+      message: `Đã ${canDeepSync ? 'cấp quyền' : 'thu hồi quyền'} đồng bộ Strava chuyên sâu cho "${updated.fullName}".`,
+      user: this.sanitizeUser(updated),
+    };
+  }
+
   async deleteUser(targetUserId: string) {
     const user = await prisma.user.findUnique({ where: { id: targetUserId } });
     if (!user) throw new NotFoundException('Không tìm thấy tài khoản để xoá.');

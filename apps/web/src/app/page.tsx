@@ -446,6 +446,62 @@ export default function TopRunWebApp() {
     }
   };
 
+  const handleUpdateUserDeepSyncPermission = async (targetUserId: string, canDeepSync: boolean) => {
+    try {
+      const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1';
+      const token = typeof window !== 'undefined' ? localStorage.getItem('toprun_auth_token') : null;
+      const res = await fetch(`${apiBase}/admin/users/${targetUserId}/deep-sync-permission`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ canDeepSync }),
+      });
+      if (res.ok) {
+        setAdminUsers((prev) =>
+          prev.map((u) => (u.id === targetUserId ? { ...u, canDeepSync } : u))
+        );
+        setAdminUserActionMsg(`Đã ${canDeepSync ? 'cấp quyền' : 'thu hồi quyền'} đồng bộ Strava chuyên sâu thành công!`);
+        if (user && user.id === targetUserId) {
+          updateUserSession({ canDeepSync });
+        }
+        setTimeout(() => setAdminUserActionMsg(null), 4000);
+      } else {
+        const err = await res.json();
+        setAdminUserActionMsg(err.message || 'Không thể cập nhật quyền đồng bộ sâu');
+      }
+    } catch (err: any) {
+      setAdminUserActionMsg(err.message || 'Lỗi kết nối khi cập nhật quyền');
+    }
+  };
+
+  const handleAdminTriggerStravaSync = async (targetUserId: string, windowDays: number, isAllTime?: boolean) => {
+    try {
+      const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api/v1';
+      const token = typeof window !== 'undefined' ? localStorage.getItem('toprun_auth_token') : null;
+      const res = await fetch(`${apiBase}/admin/users/${targetUserId}/sync-strava`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ windowDays, isAllTime }),
+      });
+      const data = await res.json();
+      if (data.status === 'SUCCESS' || data.status === 'PARTIAL_QUEUED') {
+        setAdminUserActionMsg(`Đồng bộ Strava cho VĐV thành công! Đã thêm ${data.newlySyncedCount || 0} bài chạy mới.`);
+        setTimeout(() => setAdminUserActionMsg(null), 5000);
+        fetchActivitiesFromBackend();
+      } else {
+        setAdminUserActionMsg(data.message || 'Không thể đồng bộ Strava');
+      }
+      return data;
+    } catch (err: any) {
+      setAdminUserActionMsg(err.message || 'Lỗi kết nối');
+    }
+  };
+
   const handleDeleteUser = async (targetUserId: string, targetName: string) => {
     if (targetUserId === user?.id) {
       setAdminUserActionMsg('Bạn không thể tự xoá tài khoản Admin đang đăng nhập!');
@@ -2145,15 +2201,13 @@ export default function TopRunWebApp() {
                 navigateToTracklogDetail(id);
               }}
               onOpenShareModal={() => setShowShareModal(true)}
-              onGpxUpload={handleGpxFileUpload}
-              onSyncStravaLive={handleLiveStravaSyncFromTracklog}
               onToggleHideActivity={handleToggleHideActivity}
               onDeleteActivity={handleDeleteActivity}
-              isSyncingStrava={isSyncingStrava}
               theme={theme}
               viewingUser={filterTracklogUser}
               onClearViewingUser={() => setFilterTracklogUser(null)}
               onBackToTournament={() => navigateToTournamentDetail(selectedEventId, tournamentFrom || 'my-events')}
+              onGoToAccountSettings={() => setActiveTab('account')}
             />
           )}
 
@@ -2217,6 +2271,7 @@ export default function TopRunWebApp() {
                 setSyncBannerMessage(msg);
                 fetchActivitiesFromBackend(true);
               }}
+              onGpxUpload={handleGpxFileUpload}
             />
           )}
 
@@ -2236,6 +2291,8 @@ export default function TopRunWebApp() {
               onRefreshUsers={fetchAdminUsers}
               onUpdateUserRole={handleUpdateUserRole}
               onUpdateUserHonorBadge={handleUpdateUserHonorBadge}
+              onUpdateUserDeepSyncPermission={handleUpdateUserDeepSyncPermission}
+              onAdminTriggerStravaSync={handleAdminTriggerStravaSync}
               onDeleteUser={handleDeleteUser}
               adminEventSaveMsg={adminEventSaveMsg}
               eventsList={eventsList}
