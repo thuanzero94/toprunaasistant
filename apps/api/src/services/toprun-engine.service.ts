@@ -3436,8 +3436,8 @@ export class TopRunEngineService implements OnModuleInit {
         list = this.activities.filter((a) => a.userId === userId && !a.isHidden);
       }
     } else {
-      // Feed chung công khai toàn cộng đồng: lấy các bài không bị ẩn
-      list = this.activities.filter((a) => !a.isHidden);
+      // Feed chung công khai toàn cộng đồng: lấy các bài công khai + bài của chính chủ sở hữu
+      list = this.activities.filter((a) => !a.isHidden || Boolean(viewerUserId && a.userId === viewerUserId));
     }
 
     return list.map((a) => {

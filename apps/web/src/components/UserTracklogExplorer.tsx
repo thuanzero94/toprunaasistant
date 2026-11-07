@@ -124,6 +124,7 @@ export default function UserTracklogExplorer({
     onViewModeChange?.(mode);
   };
   const [ownerFilter, setOwnerFilter] = useState<'mine' | 'all'>('mine');
+  const [selectedAthleteId, setSelectedAthleteId] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<'all' | 'valid' | 'flagged' | 'hidden'>('all');
   const [sportListFilter, setSportListFilter] = useState<'all' | 'Run' | 'Ride' | 'Swim' | 'Other'>('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -134,23 +135,55 @@ export default function UserTracklogExplorer({
     return false;
   };
 
+  // Danh sách các VĐV có bài chạy để lọc nhanh trong chế độ "Toàn bộ VĐV" (ưu tiên chính mình lên đầu)
+  const availableAthletes = useMemo(() => {
+    const map = new Map<string, { id: string; name: string; count: number; totalKm: number; isMe: boolean }>();
+    for (const act of activities) {
+      if (!act.userId) continue;
+      if (act.isHidden && !isAdmin && !isMyActivity(act)) continue;
+      const existing = map.get(act.userId);
+      if (existing) {
+        existing.count += 1;
+        existing.totalKm = roundKm(existing.totalKm + (act.validDistanceKm || 0));
+      } else {
+        map.set(act.userId, {
+          id: act.userId,
+          name: act.userName || 'Vận động viên',
+          count: 1,
+          totalKm: roundKm(act.validDistanceKm || 0),
+          isMe: Boolean(currentUserId && act.userId === currentUserId),
+        });
+      }
+    }
+    return Array.from(map.values()).sort((a, b) => {
+      if (a.isMe && !b.isMe) return -1;
+      if (!a.isMe && b.isMe) return 1;
+      return b.totalKm - a.totalKm;
+    });
+  }, [activities, currentUserId, isAdmin]);
+
   const hiddenCount = useMemo(
-    () => activities.filter((a) => Boolean(a.isHidden)).length,
-    [activities]
+    () =>
+      activities.filter((a) => {
+        if (!a.isHidden) return false;
+        if (ownerFilter === 'mine') return isMyActivity(a);
+        return isAdmin || isMyActivity(a);
+      }).length,
+    [activities, ownerFilter, isAdmin, currentUserId]
   );
 
-  // Filter activities
+  // Filter activities (Mặc định ưu tiên bài chạy của chính mình)
   const filteredActivities = useMemo(() => {
-    return activities.filter((act) => {
+    const list = activities.filter((act) => {
       if (viewingUser) {
         if (act.userId !== viewingUser.id) return false;
         if (act.isHidden && !isAdmin && !isMyActivity(act)) return false;
       } else if (ownerFilter === 'mine') {
         if (!isMyActivity(act)) return false;
       } else {
-        // ownerFilter === 'all': xem toàn bộ VĐV (Cộng đồng)
-        // Chỉ hiện các bài công khai đối với người khác
+        // ownerFilter === 'all': xem toàn bộ VĐV (Cộng đồng) + lọc theo VĐV cụ thể nếu chọn
         if (act.isHidden && !isAdmin && !isMyActivity(act)) return false;
+        if (selectedAthleteId !== 'all' && act.userId !== selectedAthleteId) return false;
       }
       if (statusFilter === 'hidden') {
         if (!act.isHidden) return false;
@@ -174,7 +207,31 @@ export default function UserTracklogExplorer({
       }
       return true;
     });
-  }, [activities, viewingUser, ownerFilter, statusFilter, sportListFilter, searchQuery, isAdmin, currentUserId]);
+
+    // Khi xem "Toàn bộ VĐV" mà chưa lọc riêng 1 VĐV khác, mặc định ưu tiên đẩy bài chạy của chính mình lên đầu
+    if (!viewingUser && ownerFilter === 'all' && selectedAthleteId === 'all' && currentUserId) {
+      return [...list].sort((a, b) => {
+        const aMine = a.userId === currentUserId ? 1 : 0;
+        const bMine = b.userId === currentUserId ? 1 : 0;
+        if (aMine !== bMine) return bMine - aMine;
+        const tA = a.startDateIso ? new Date(a.startDateIso).getTime() : 0;
+        const tB = b.startDateIso ? new Date(b.startDateIso).getTime() : 0;
+        return tB - tA;
+      });
+    }
+
+    return list;
+  }, [
+    activities,
+    viewingUser,
+    ownerFilter,
+    selectedAthleteId,
+    statusFilter,
+    sportListFilter,
+    searchQuery,
+    isAdmin,
+    currentUserId,
+  ]);
 
   const selectedActivity = useMemo(() => {
     // 1. Ưu tiên tìm chính xác theo selectedActivityId trong toàn bộ activities (kể cả bài chạy VĐV khác vừa click từ BXH)
@@ -261,104 +318,7 @@ export default function UserTracklogExplorer({
   return (
     <div className="space-y-6">
       {/* =====================================================================
-          1. TOP SUMMARY BAR: KPIS + QUICK ACTIONS
-         ===================================================================== */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-stretch">
-        {/* Left 7 cols: KPI Cards */}
-        <div className="lg:col-span-7 rounded-2xl bg-white dark:bg-[#0F1420] border border-slate-200/80 dark:border-slate-800/80 p-5 sm:p-6 shadow-sm flex flex-col justify-between space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md bg-[#FC4C02]/10 text-[#FC4C02] text-xs font-semibold">
-                <Activity className="w-3.5 h-3.5" />
-                <span>Nhật Ký & Thống Kê Tracklog</span>
-              </div>
-              <h2 className="text-lg sm:text-xl font-black text-slate-900 dark:text-white mt-1">
-                Tổng Quan Hoạt Động Chạy Bộ
-              </h2>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <label className="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-xs font-semibold text-slate-700 dark:text-slate-300 inline-flex items-center gap-1.5 transition cursor-pointer">
-                <FileUp className="w-3.5 h-3.5 text-[#FC4C02]" />
-                <span>Nhập GPX</span>
-                <input
-                  type="file"
-                  accept=".gpx,.fit,.tcx"
-                  onChange={onGpxUpload}
-                  className="hidden"
-                />
-              </label>
-
-              <button
-                type="button"
-                onClick={onSyncStravaLive}
-                disabled={isSyncingStrava}
-                className="px-3.5 py-1.5 rounded-xl bg-[#FC4C02] hover:bg-[#E34402] text-white text-xs font-bold inline-flex items-center gap-1.5 shadow-sm transition cursor-pointer"
-              >
-                <RefreshCw className={`w-3.5 h-3.5 ${isSyncingStrava ? 'animate-spin' : ''}`} />
-                <span>{isSyncingStrava ? 'Đang đồng bộ...' : 'Đồng bộ Strava'}</span>
-              </button>
-            </div>
-          </div>
-
-          {/* 4 Quick Stat Tiles */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-1">
-            <div className="rounded-xl bg-slate-50 dark:bg-slate-900/60 p-3 space-y-0.5">
-              <span className="text-[10px] text-slate-400 font-semibold block">Tổng KM Hợp Lệ</span>
-              <div className="text-xl font-black font-mono text-slate-900 dark:text-white tabular-nums">
-                {summaryStats.totalValidKm} <span className="text-xs font-normal text-slate-400">km</span>
-              </div>
-            </div>
-
-            <div className="rounded-xl bg-slate-50 dark:bg-slate-900/60 p-3 space-y-0.5">
-              <span className="text-[10px] text-slate-400 font-semibold block">Số Buổi Chạy</span>
-              <div className="text-xl font-black font-mono text-[#FC4C02] tabular-nums">
-                {summaryStats.activeRunsCount} <span className="text-xs font-normal text-slate-400">buổi</span>
-              </div>
-            </div>
-
-            <div className="rounded-xl bg-slate-50 dark:bg-slate-900/60 p-3 space-y-0.5">
-              <span className="text-[10px] text-slate-400 font-semibold block">Pace TB Chung</span>
-              <div className="text-xl font-black font-mono text-emerald-500 tabular-nums">
-                {summaryStats.avgPaceFormatted}
-              </div>
-            </div>
-
-            <div className="rounded-xl bg-slate-50 dark:bg-slate-900/60 p-3 space-y-0.5">
-              <span className="text-[10px] text-slate-400 font-semibold block">Năng Lượng Tiêu Thụ</span>
-              <div className="text-xl font-black font-mono text-purple-500 tabular-nums">
-                {summaryStats.totalCalories} <span className="text-xs font-normal text-slate-400">kcal</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Right 5 cols: Anti-cheat info card */}
-        <div className="lg:col-span-5 rounded-2xl bg-gradient-to-br from-slate-900 to-[#131B2E] border border-slate-800 text-white p-5 sm:p-6 shadow-sm flex flex-col justify-between space-y-4">
-          <div className="space-y-2">
-            <div className="flex items-center gap-2">
-              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                AI Chống Gian Lận Tự Động
-              </span>
-              <span className="text-xs text-slate-400">Lọc từng KM</span>
-            </div>
-            <h3 className="text-sm sm:text-base font-bold text-white leading-snug">
-              Kiểm Duyệt Tốc Độ & Cắt Đoạn Bất Thường
-            </h3>
-            <p className="text-xs text-slate-300 leading-relaxed">
-              Mỗi bài chạy được phân tách thành từng km độc lập. Nếu phát hiện km có tốc độ phi lý (xe máy / ô tô &lt;2:30/km) hoặc đi bộ quá chậm, hệ thống sẽ tự động cắt riêng km đó và giữ lại các km hợp lệ để tính điểm công bằng.
-            </p>
-          </div>
-
-          <div className="text-[11px] text-slate-400 flex items-center justify-between pt-2 border-t border-white/10">
-            <span>Dữ liệu gốc từ Strava & GPX</span>
-            <span className="text-emerald-400 font-semibold">Tự động tính giải</span>
-          </div>
-        </div>
-      </div>
-
-      {/* =====================================================================
-          2. BIỂU ĐỒ QUÃNG ĐƯỜNG TẬP LUYỆN TƯƠNG TÁC THEO TUẦN / THÁNG / NĂM
+          1. BIỂU ĐỒ QUÃNG ĐƯỜNG TẬP LUYỆN TƯƠNG TÁC THEO TUẦN / THÁNG / NĂM
          ===================================================================== */}
       <TracklogDistanceChart
         activities={filteredActivities}
@@ -370,11 +330,11 @@ export default function UserTracklogExplorer({
       />
 
       {/* =====================================================================
-          3. FILTER & SEARCH TOOLBAR
+          2. FILTER & SEARCH TOOLBAR (KÈM LỌC USER TRONG CHẾ ĐỘ TOÀN BỘ VĐV)
          ===================================================================== */}
       <div className="rounded-2xl bg-white dark:bg-[#0F1420] border border-slate-200/80 dark:border-slate-800/80 p-3.5 flex flex-wrap items-center justify-between gap-3 shadow-sm">
         <div className="flex flex-wrap items-center gap-2">
-          {/* Owner Filter (Cho phép cả Runner & Admin xem bài của mình hoặc cộng đồng) */}
+          {/* Owner Filter (Mặc định ưu tiên hiện Tracklog của chính mình) */}
           {viewingUser ? (
             <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[#FC4C02]/10 border border-[#FC4C02]/30 text-xs font-bold text-[#FC4C02]">
               <div className="shrink-0 my-0.5">
@@ -403,7 +363,10 @@ export default function UserTracklogExplorer({
             <div className="inline-flex p-1 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-200/70 dark:border-slate-800">
               <button
                 type="button"
-                onClick={() => setOwnerFilter('mine')}
+                onClick={() => {
+                  setOwnerFilter('mine');
+                  setSelectedAthleteId('all');
+                }}
                 className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer ${
                   ownerFilter === 'mine'
                     ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-xs'
@@ -425,6 +388,32 @@ export default function UserTracklogExplorer({
                 <Users className="w-3.5 h-3.5" />
                 <span>Toàn bộ VĐV</span>
               </button>
+            </div>
+          )}
+
+          {/* Bộ lọc chọn VĐV muốn xem khi ở tab "Toàn bộ VĐV" */}
+          {!viewingUser && ownerFilter === 'all' && (
+            <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-orange-50/80 dark:bg-[#FC4C02]/10 border border-orange-200/80 dark:border-[#FC4C02]/30">
+              <Users className="w-3.5 h-3.5 text-[#FC4C02] shrink-0" />
+              <span className="text-[11px] font-bold text-[#FC4C02] shrink-0">Lọc VĐV:</span>
+              <select
+                value={selectedAthleteId}
+                onChange={(e) => setSelectedAthleteId(e.target.value)}
+                className="bg-transparent text-xs font-bold text-slate-800 dark:text-slate-100 max-w-[190px] sm:max-w-[240px] truncate focus:outline-hidden cursor-pointer"
+              >
+                <option value="all" className="bg-white dark:bg-[#0F1420] text-slate-900 dark:text-white">
+                  Tất cả VĐV (Ưu tiên bài của tôi)
+                </option>
+                {availableAthletes.map((ath) => (
+                  <option
+                    key={ath.id}
+                    value={ath.id}
+                    className="bg-white dark:bg-[#0F1420] text-slate-900 dark:text-white"
+                  >
+                    {ath.isMe ? `⭐ ${ath.name} (Tôi)` : ath.name} • {ath.count} bài ({ath.totalKm} km)
+                  </option>
+                ))}
+              </select>
             </div>
           )}
 
@@ -476,16 +465,39 @@ export default function UserTracklogExplorer({
           </div>
         </div>
 
-        {/* Search Input */}
-        <div className="relative flex-1 min-w-[200px] max-w-xs">
-          <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Tìm theo tên bài chạy, thiết bị..."
-            className="w-full pl-9 pr-3.5 py-1.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-hidden focus:border-[#FC4C02]"
-          />
+        {/* Search Input + Quick Actions (Nhập GPX & Đồng bộ Strava) */}
+        <div className="flex flex-wrap items-center gap-2 flex-1 justify-end min-w-[240px]">
+          <div className="relative flex-1 min-w-[180px] max-w-xs">
+            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Tìm bài chạy, VĐV, thiết bị..."
+              className="w-full pl-9 pr-3.5 py-1.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-hidden focus:border-[#FC4C02]"
+            />
+          </div>
+
+          <label className="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-xs font-semibold text-slate-700 dark:text-slate-300 inline-flex items-center gap-1.5 transition cursor-pointer shrink-0">
+            <FileUp className="w-3.5 h-3.5 text-[#FC4C02]" />
+            <span>Nhập GPX</span>
+            <input
+              type="file"
+              accept=".gpx,.fit,.tcx"
+              onChange={onGpxUpload}
+              className="hidden"
+            />
+          </label>
+
+          <button
+            type="button"
+            onClick={onSyncStravaLive}
+            disabled={isSyncingStrava}
+            className="px-3.5 py-1.5 rounded-xl bg-[#FC4C02] hover:bg-[#E34402] text-white text-xs font-bold inline-flex items-center gap-1.5 shadow-sm transition cursor-pointer shrink-0"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${isSyncingStrava ? 'animate-spin' : ''}`} />
+            <span>{isSyncingStrava ? 'Đang đồng bộ...' : 'Đồng bộ Strava'}</span>
+          </button>
         </div>
       </div>
 

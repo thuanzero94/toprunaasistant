@@ -14,8 +14,8 @@ import {
 import { formatDuration, formatPace, roundKm, normalizeSportCategory } from '@toprun/shared';
 import type { TracklogActivityItem } from '../UserTracklogExplorer';
 
-type SportTypeFilter = 'Run' | 'Ride' | 'Swim';
-type PeriodFilter = 'week' | 'month' | 'year';
+type SportTypeFilter = 'all' | 'Run' | 'Ride' | 'Swim' | 'Other';
+type PeriodFilter = 'week' | 'month' | 'year' | 'custom';
 
 interface TracklogDistanceChartProps {
   activities: TracklogActivityItem[];
@@ -43,8 +43,17 @@ export default function TracklogDistanceChart({
   const [offset, setOffset] = useState<number>(0);
   const [hoveredBucket, setHoveredBucket] = useState<BucketData | null>(null);
 
+  const todayIso = useMemo(() => new Date().toISOString().slice(0, 10), []);
+  const firstOfMonthIso = useMemo(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
+  }, []);
+  const [customStartIso, setCustomStartIso] = useState<string>(firstOfMonthIso);
+  const [customEndIso, setCustomEndIso] = useState<string>(todayIso);
+
   // Helper to normalize sport type strictly
   const matchSport = (act: TracklogActivityItem, filter: SportTypeFilter) => {
+    if (filter === 'all') return true;
     const cat = normalizeSportCategory(act.sportType);
     return cat === filter;
   };
@@ -125,6 +134,34 @@ export default function TracklogDistanceChart({
         };
       }
 
+      if (periodFilter === 'custom') {
+        const sRaw = customStartIso ? new Date(`${customStartIso}T00:00:00`) : new Date(year, month, 1);
+        const eRaw = customEndIso ? new Date(`${customEndIso}T23:59:59.999`) : new Date();
+        const firstDay = sRaw <= eRaw ? sRaw : eRaw;
+        const lastDay = sRaw <= eRaw ? eRaw : sRaw;
+        const diffDays = Math.max(1, Math.min(60, Math.round((lastDay.getTime() - firstDay.getTime()) / (24 * 60 * 60 * 1000)) + 1));
+        const label = `${customStartIso || '...'} → ${customEndIso || '...'}`;
+
+        return {
+          periodLabel: label,
+          startDate: firstDay,
+          endDate: lastDay,
+          bucketCount: diffDays,
+          getBucketIndex: (date: Date) => {
+            const idx = Math.floor((date.getTime() - firstDay.getTime()) / (24 * 60 * 60 * 1000));
+            return Math.min(diffDays - 1, Math.max(0, idx));
+          },
+          formatBucketLabel: (idx: number) => {
+            const cur = new Date(firstDay);
+            cur.setDate(firstDay.getDate() + idx);
+            return {
+              title: `${cur.getDate()}/${cur.getMonth() + 1}`,
+              sub: `${cur.getDate()}/${cur.getMonth() + 1}/${cur.getFullYear()}`,
+            };
+          },
+        };
+      }
+
       // Year filter
       const firstDay = new Date(year, 0, 1, 0, 0, 0, 0);
       const lastDay = new Date(year, 11, 31, 23, 59, 59, 999);
@@ -141,7 +178,7 @@ export default function TracklogDistanceChart({
           sub: `Thg ${idx + 1}`,
         }),
       };
-    }, [targetDate, periodFilter]);
+    }, [targetDate, periodFilter, customStartIso, customEndIso]);
 
   // Aggregate bucket data
   const { buckets, summary } = useMemo(() => {
@@ -216,6 +253,13 @@ export default function TracklogDistanceChart({
 
   // Accent theme per sport
   const sportTheme = {
+    all: {
+      accentColor: '#FC4C02',
+      badgeBg: 'bg-slate-500/10 text-slate-600 dark:text-slate-300 border-slate-500/30',
+      barGrad: 'from-[#FC4C02] to-[#FF7A00]',
+      hoverBar: 'hover:bg-[#FC4C02]',
+      iconName: '🏅 Tất cả bộ môn',
+    },
     Run: {
       accentColor: '#FC4C02',
       badgeBg: 'bg-[#FC4C02]/10 text-[#FC4C02] border-[#FC4C02]/30',
@@ -237,7 +281,16 @@ export default function TracklogDistanceChart({
       hoverBar: 'hover:bg-cyan-500',
       iconName: '🏊 Bơi lội',
     },
+    Other: {
+      accentColor: '#A855F7',
+      badgeBg: 'bg-purple-500/10 text-purple-500 border-purple-500/30',
+      barGrad: 'from-purple-500 to-indigo-400',
+      hoverBar: 'hover:bg-purple-500',
+      iconName: '🎾 Các môn còn lại',
+    },
   }[sportFilter];
+
+  const unitLabel = periodFilter === 'week' ? 'Tuần' : periodFilter === 'month' ? 'Tháng' : 'Năm';
 
   return (
     <div className="rounded-3xl bg-white dark:bg-[#0C101B] border border-slate-200/80 dark:border-slate-800/80 p-5 sm:p-6 shadow-xs space-y-6">
@@ -251,7 +304,7 @@ export default function TracklogDistanceChart({
             <Activity className="w-5 h-5 text-[#FC4C02]" />
           </div>
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <h3 className="text-base font-bold text-slate-900 dark:text-white tracking-tight">
                 Biểu Đồ Quãng Đường Tập Luyện
               </h3>
@@ -271,16 +324,25 @@ export default function TracklogDistanceChart({
         {/* Action Controls Group */}
         <div className="flex flex-wrap items-center gap-2 sm:gap-3">
           {/* Sport Filter Pills */}
-          <div className="flex items-center p-1 rounded-xl bg-slate-100 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 text-xs font-semibold">
-            {(['Run', 'Ride', 'Swim'] as SportTypeFilter[]).map((sport) => {
+          <div className="flex flex-wrap items-center p-1 rounded-xl bg-slate-100 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 text-xs font-semibold">
+            {(['Run', 'Ride', 'Swim', 'Other', 'all'] as SportTypeFilter[]).map((sport) => {
               const isActive = sportFilter === sport;
-              const label = sport === 'Run' ? 'Chạy' : sport === 'Ride' ? 'Đạp' : 'Bơi';
+              const label =
+                sport === 'Run'
+                  ? '🏃 Chạy'
+                  : sport === 'Ride'
+                  ? '🚴 Đạp xe'
+                  : sport === 'Swim'
+                  ? '🏊 Bơi'
+                  : sport === 'Other'
+                  ? '🎾 Môn khác'
+                  : 'Tất cả';
               return (
                 <button
                   key={sport}
                   type="button"
                   onClick={() => setSportFilter(sport)}
-                  className={`px-3 py-1.5 rounded-lg transition cursor-pointer ${
+                  className={`px-2.5 py-1.5 rounded-lg transition cursor-pointer ${
                     isActive
                       ? 'bg-white dark:bg-[#1E293B] text-slate-900 dark:text-white shadow-xs font-bold'
                       : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
@@ -292,11 +354,18 @@ export default function TracklogDistanceChart({
             })}
           </div>
 
-          {/* Period Filter (Tuần, Tháng, Năm) */}
+          {/* Period Filter (Tuần, Tháng, Năm, Khoảng ngày) */}
           <div className="flex items-center p-1 rounded-xl bg-slate-100 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 text-xs font-semibold">
-            {(['week', 'month', 'year'] as PeriodFilter[]).map((p) => {
+            {(['week', 'month', 'year', 'custom'] as PeriodFilter[]).map((p) => {
               const isActive = periodFilter === p;
-              const label = p === 'week' ? 'Tuần' : p === 'month' ? 'Tháng' : 'Năm';
+              const label =
+                p === 'week'
+                  ? 'Tuần'
+                  : p === 'month'
+                  ? 'Tháng'
+                  : p === 'year'
+                  ? 'Năm'
+                  : 'Khoảng ngày';
               return (
                 <button
                   key={p}
@@ -318,35 +387,58 @@ export default function TracklogDistanceChart({
           </div>
 
           {/* Quick Prev / Current / Next Controls */}
-          <div className="flex items-center gap-1">
-            <button
-              type="button"
-              onClick={() => setOffset((prev) => prev - 1)}
-              title="Kỳ trước"
-              className="p-1.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/80 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition cursor-pointer"
-            >
-              <ChevronLeft className="w-4 h-4" />
-            </button>
-            {offset !== 0 && (
+          {(periodFilter === 'week' || periodFilter === 'month' || periodFilter === 'year') && (
+            <div className="flex items-center gap-1">
               <button
                 type="button"
-                onClick={() => setOffset(0)}
-                title="Về hiện tại"
-                className="px-2.5 py-1.5 rounded-xl border border-[#FC4C02]/30 bg-[#FC4C02]/10 hover:bg-[#FC4C02]/20 text-[#FC4C02] text-xs font-bold flex items-center gap-1 transition cursor-pointer"
+                onClick={() => setOffset((prev) => prev - 1)}
+                title={`${unitLabel} trước`}
+                className="px-2.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/80 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-semibold flex items-center gap-1 transition cursor-pointer"
               >
-                <RotateCcw className="w-3 h-3" />
-                <span>Nay</span>
+                <ChevronLeft className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">{unitLabel} trước</span>
               </button>
-            )}
-            <button
-              type="button"
-              onClick={() => setOffset((prev) => prev + 1)}
-              title="Kỳ sau"
-              className="p-1.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/80 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition cursor-pointer"
-            >
-              <ChevronRight className="w-4 h-4" />
-            </button>
-          </div>
+              {offset !== 0 && (
+                <button
+                  type="button"
+                  onClick={() => setOffset(0)}
+                  title="Về hiện tại"
+                  className="px-2.5 py-1.5 rounded-xl border border-[#FC4C02]/30 bg-[#FC4C02]/10 hover:bg-[#FC4C02]/20 text-[#FC4C02] text-xs font-bold flex items-center gap-1 transition cursor-pointer"
+                >
+                  <RotateCcw className="w-3 h-3" />
+                  <span>Hiện tại</span>
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setOffset((prev) => prev + 1)}
+                title={`${unitLabel} sau`}
+                className="px-2.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/80 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-semibold flex items-center gap-1 transition cursor-pointer"
+              >
+                <span className="hidden sm:inline">{unitLabel} sau</span>
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+
+          {/* Custom Date Range Picker */}
+          {periodFilter === 'custom' && (
+            <div className="flex flex-wrap items-center gap-1.5 text-xs">
+              <input
+                type="date"
+                value={customStartIso}
+                onChange={(e) => setCustomStartIso(e.target.value)}
+                className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-200 font-mono text-xs"
+              />
+              <span className="text-slate-400">→</span>
+              <input
+                type="date"
+                value={customEndIso}
+                onChange={(e) => setCustomEndIso(e.target.value)}
+                className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-200 font-mono text-xs"
+              />
+            </div>
+          )}
         </div>
       </div>
 

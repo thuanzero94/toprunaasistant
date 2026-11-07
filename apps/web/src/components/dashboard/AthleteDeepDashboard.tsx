@@ -24,6 +24,11 @@ import {
 import { formatDuration, formatPace, roundKm, normalizeSportCategory } from '@toprun/shared';
 import type { TracklogActivityItem } from '../UserTracklogExplorer';
 import AthleteAvatar from '../AthleteAvatar';
+import DashboardFilterToolbar, {
+  type DashboardPeriodMode,
+  type DashboardSportFilter,
+  type SportCountSummary,
+} from './DashboardFilterToolbar';
 
 interface Props {
   activities: TracklogActivityItem[];
@@ -34,8 +39,6 @@ interface Props {
   onSelectActivity?: (id: string) => void;
 }
 
-type TimeRangeFilter = 'all' | '90d' | '30d';
-
 export default function AthleteDeepDashboard({
   activities,
   user,
@@ -44,24 +47,150 @@ export default function AthleteDeepDashboard({
   onNavigateToTournaments,
   onSelectActivity,
 }: Props) {
-  const [timeRange, setTimeRange] = useState<TimeRangeFilter>('all');
+  // Default to monthly view ('month') as requested
+  const [periodMode, setPeriodMode] = useState<DashboardPeriodMode>('month');
+  const [periodOffset, setPeriodOffset] = useState<number>(0);
+  const [sportFilter, setSportFilter] = useState<DashboardSportFilter>('Run');
 
-  // Filter valid user running activities (excl. non-running sports from running metrics)
-  const userActivities = useMemo(() => {
-    return activities.filter((a) => !a.isHidden && a.validDistanceKm > 0 && normalizeSportCategory(a.sportType) === 'Run');
-  }, [activities]);
+  const todayIso = useMemo(() => new Date().toISOString().slice(0, 10), []);
+  const firstOfMonthIso = useMemo(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
+  }, []);
+  const [customStartDate, setCustomStartDate] = useState<string>(firstOfMonthIso);
+  const [customEndDate, setCustomEndDate] = useState<string>(todayIso);
 
-  // Date filtering
-  const filteredActivities = useMemo(() => {
-    if (timeRange === 'all') return userActivities;
-    const now = Date.now();
-    const daysLimit = timeRange === '30d' ? 30 : 90;
-    const threshold = now - daysLimit * 24 * 60 * 60 * 1000;
-    return userActivities.filter((a) => {
-      if (!a.startDateIso) return true;
-      return new Date(a.startDateIso).getTime() >= threshold;
+  // 0. Strictly isolate personal activities for the logged-in athlete
+  const myValidActivities = useMemo(() => {
+    return activities.filter(
+      (a) => !a.isHidden && a.validDistanceKm > 0 && (!user?.id || a.userId === user.id),
+    );
+  }, [activities, user?.id]);
+
+  // Active period window & previous period window for comparison
+  const periodWindow = useMemo(() => {
+    const now = new Date();
+    if (periodMode === 'week') {
+      // Monday-based week with offset
+      const dayOfWeek = now.getDay(); // 0 (Sun) .. 6 (Sat)
+      const diffToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+      const start = new Date(now.getFullYear(), now.getMonth(), now.getDate() + diffToMonday + periodOffset * 7, 0, 0, 0, 0);
+      const end = new Date(start.getFullYear(), start.getMonth(), start.getDate() + 6, 23, 59, 59, 999);
+      const prevStart = new Date(start.getFullYear(), start.getMonth(), start.getDate() - 7, 0, 0, 0, 0);
+      const prevEnd = new Date(start.getFullYear(), start.getMonth(), start.getDate() - 1, 23, 59, 59, 999);
+      const fmt = (d: Date) => `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`;
+      const periodLabel =
+        periodOffset === 0
+          ? `Tuần này (${fmt(start)} - ${fmt(end)})`
+          : `Tuần ${fmt(start)} - ${fmt(end)}/${end.getFullYear()}`;
+      return {
+        startMs: start.getTime(),
+        endMs: end.getTime(),
+        prevStartMs: prevStart.getTime(),
+        prevEndMs: prevEnd.getTime(),
+        periodLabel,
+        comparisonLabel: 'vs tuần trước',
+      };
+    }
+
+    if (periodMode === 'month') {
+      const start = new Date(now.getFullYear(), now.getMonth() + periodOffset, 1, 0, 0, 0, 0);
+      const end = new Date(start.getFullYear(), start.getMonth() + 1, 0, 23, 59, 59, 999);
+      const prevStart = new Date(start.getFullYear(), start.getMonth() - 1, 1, 0, 0, 0, 0);
+      const prevEnd = new Date(start.getFullYear(), start.getMonth(), 0, 23, 59, 59, 999);
+      const m = start.getMonth() + 1;
+      const y = start.getFullYear();
+      const periodLabel =
+        periodOffset === 0 ? `Tháng này (Tháng ${m}/${y})` : `Tháng ${String(m).padStart(2, '0')}/${y}`;
+      return {
+        startMs: start.getTime(),
+        endMs: end.getTime(),
+        prevStartMs: prevStart.getTime(),
+        prevEndMs: prevEnd.getTime(),
+        periodLabel,
+        comparisonLabel: 'vs tháng trước',
+      };
+    }
+
+    if (periodMode === 'year') {
+      const targetYear = now.getFullYear() + periodOffset;
+      const start = new Date(targetYear, 0, 1, 0, 0, 0, 0);
+      const end = new Date(targetYear, 11, 31, 23, 59, 59, 999);
+      const prevStart = new Date(targetYear - 1, 0, 1, 0, 0, 0, 0);
+      const prevEnd = new Date(targetYear - 1, 11, 31, 23, 59, 59, 999);
+      const periodLabel = periodOffset === 0 ? `Năm nay (${targetYear})` : `Năm ${targetYear}`;
+      return {
+        startMs: start.getTime(),
+        endMs: end.getTime(),
+        prevStartMs: prevStart.getTime(),
+        prevEndMs: prevEnd.getTime(),
+        periodLabel,
+        comparisonLabel: 'vs năm trước',
+      };
+    }
+
+    if (periodMode === 'custom') {
+      const s = customStartDate ? new Date(`${customStartDate}T00:00:00`) : new Date(now.getFullYear(), now.getMonth(), 1);
+      const e = customEndDate ? new Date(`${customEndDate}T23:59:59.999`) : new Date();
+      const startMs = Math.min(s.getTime(), e.getTime());
+      const endMs = Math.max(s.getTime(), e.getTime());
+      const spanMs = Math.max(endMs - startMs, 24 * 60 * 60 * 1000);
+      return {
+        startMs,
+        endMs,
+        prevStartMs: startMs - spanMs,
+        prevEndMs: startMs - 1,
+        periodLabel: `${customStartDate || '...'} → ${customEndDate || '...'}`,
+        comparisonLabel: 'vs kỳ liền trước',
+      };
+    }
+
+    // 'all' mode: compare last 30 days vs previous 30 days
+    const nowMs = now.getTime();
+    const last30 = nowMs - 30 * 24 * 60 * 60 * 1000;
+    const prev30 = nowMs - 60 * 24 * 60 * 60 * 1000;
+    return {
+      startMs: 0,
+      endMs: Number.MAX_SAFE_INTEGER,
+      prevStartMs: prev30,
+      prevEndMs: last30,
+      periodLabel: 'Toàn thời gian',
+      comparisonLabel: 'vs 30 ngày trước',
+    };
+  }, [periodMode, periodOffset, customStartDate, customEndDate]);
+
+  // Activities within the active time window (across all sports, for sport pill counts)
+  const timeFilteredAllSports = useMemo(() => {
+    if (periodMode === 'all') return myValidActivities;
+    return myValidActivities.filter((a) => {
+      if (!a.startDateIso) return false;
+      const t = new Date(a.startDateIso).getTime();
+      return t >= periodWindow.startMs && t <= periodWindow.endMs;
     });
-  }, [userActivities, timeRange]);
+  }, [myValidActivities, periodMode, periodWindow]);
+
+  // Counts per sport within the selected time window
+  const sportCounts: SportCountSummary = useMemo(() => {
+    const counts: SportCountSummary = { all: 0, Run: 0, Ride: 0, Swim: 0, Other: 0 };
+    for (const a of timeFilteredAllSports) {
+      counts.all++;
+      const cat = normalizeSportCategory(a.sportType);
+      counts[cat] = (counts[cat] || 0) + 1;
+    }
+    return counts;
+  }, [timeFilteredAllSports]);
+
+  // Filter valid user activities by selected sport (used for all-time streak/PRs/prev-period comparison)
+  const userActivities = useMemo(() => {
+    if (sportFilter === 'all') return myValidActivities;
+    return myValidActivities.filter((a) => normalizeSportCategory(a.sportType) === sportFilter);
+  }, [myValidActivities, sportFilter]);
+
+  // Date + Sport filtered activities for current period KPIs & charts
+  const filteredActivities = useMemo(() => {
+    if (sportFilter === 'all') return timeFilteredAllSports;
+    return timeFilteredAllSports.filter((a) => normalizeSportCategory(a.sportType) === sportFilter);
+  }, [timeFilteredAllSports, sportFilter]);
 
   // 1. HERO KPIS & PREVIOUS PERIOD GROWTH
   const stats = useMemo(() => {
@@ -72,31 +201,30 @@ export default function AthleteDeepDashboard({
     const totalRuns = filteredActivities.length;
     const avgPaceSec = totalDist > 0 ? Math.round(totalTime / totalDist) : 0;
 
-    // Previous 30-day comparison
-    const now = Date.now();
-    const last30Start = now - 30 * 24 * 60 * 60 * 1000;
-    const prev30Start = now - 60 * 24 * 60 * 60 * 1000;
+    // Compare current period vs previous period
+    const currentDistForGrowth =
+      periodMode === 'all'
+        ? userActivities
+            .filter((a) => {
+              if (!a.startDateIso) return false;
+              const t = new Date(a.startDateIso).getTime();
+              return t >= periodWindow.prevEndMs;
+            })
+            .reduce((sum, a) => sum + a.validDistanceKm, 0)
+        : totalDist;
 
-    const current30Dist = userActivities
+    const prevDist = userActivities
       .filter((a) => {
         if (!a.startDateIso) return false;
         const t = new Date(a.startDateIso).getTime();
-        return t >= last30Start && t <= now;
-      })
-      .reduce((sum, a) => sum + a.validDistanceKm, 0);
-
-    const prev30Dist = userActivities
-      .filter((a) => {
-        if (!a.startDateIso) return false;
-        const t = new Date(a.startDateIso).getTime();
-        return t >= prev30Start && t < last30Start;
+        return t >= periodWindow.prevStartMs && t <= periodWindow.prevEndMs;
       })
       .reduce((sum, a) => sum + a.validDistanceKm, 0);
 
     const growthPercent =
-      prev30Dist > 0
-        ? Math.round(((current30Dist - prev30Dist) / prev30Dist) * 100)
-        : current30Dist > 0
+      prevDist > 0
+        ? Math.round(((currentDistForGrowth - prevDist) / prevDist) * 100)
+        : currentDistForGrowth > 0
         ? 100
         : 0;
 
@@ -108,9 +236,9 @@ export default function AthleteDeepDashboard({
       totalRuns,
       avgPaceSec,
       growthPercent,
-      current30Dist: roundKm(current30Dist),
+      comparisonLabel: periodWindow.comparisonLabel,
     };
-  }, [filteredActivities, userActivities]);
+  }, [filteredActivities, userActivities, periodMode, periodWindow]);
 
   // 2. STREAK & CONSISTENCY HEATMAP (Last 20 Weeks)
   const heatmapData = useMemo(() => {
@@ -340,28 +468,31 @@ export default function AthleteDeepDashboard({
             </div>
           </div>
 
-          {/* Quick Range Filter Pills */}
-          <div className="flex items-center self-start md:self-center p-1 rounded-2xl bg-slate-800/80 border border-slate-700/80 backdrop-blur-md text-xs font-semibold">
-            {(['all', '90d', '30d'] as TimeRangeFilter[]).map((r) => {
-              const isActive = timeRange === r;
-              const label = r === 'all' ? 'Toàn bộ' : r === '90d' ? '90 ngày' : '30 ngày';
-              return (
-                <button
-                  key={r}
-                  type="button"
-                  onClick={() => setTimeRange(r)}
-                  className={`px-3.5 py-1.5 rounded-xl transition cursor-pointer ${
-                    isActive
-                      ? 'bg-[#FC4C02] text-white font-bold shadow-md shadow-[#FC4C02]/30'
-                      : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  {label}
-                </button>
-              );
-            })}
+          {/* Period Badge in Top Right */}
+          <div className="flex items-center self-start md:self-center px-3.5 py-2 rounded-2xl bg-slate-800/80 border border-slate-700/80 backdrop-blur-md text-xs font-bold text-amber-300">
+            <Calendar className="w-3.5 h-3.5 mr-2 text-[#FC4C02]" />
+            <span>{periodWindow.periodLabel}</span>
           </div>
         </div>
+
+        {/* Multi-Sport & Period Filter Toolbar */}
+        <DashboardFilterToolbar
+          periodMode={periodMode}
+          onPeriodModeChange={(mode) => {
+            setPeriodMode(mode);
+            setPeriodOffset(0);
+          }}
+          periodOffset={periodOffset}
+          onPeriodOffsetChange={setPeriodOffset}
+          periodLabel={periodWindow.periodLabel}
+          customStartDate={customStartDate}
+          customEndDate={customEndDate}
+          onCustomStartDateChange={setCustomStartDate}
+          onCustomEndDateChange={setCustomEndDate}
+          sportFilter={sportFilter}
+          onSportFilterChange={setSportFilter}
+          sportCounts={sportCounts}
+        />
       </div>
 
       {/* =====================================================================
@@ -389,7 +520,7 @@ export default function AthleteDeepDashboard({
                 <ArrowDownRight className="w-3.5 h-3.5" /> {stats.growthPercent}%
               </span>
             )}
-            <span className="text-slate-400 truncate">vs 30 ngày trước</span>
+            <span className="text-slate-400 truncate">{stats.comparisonLabel}</span>
           </div>
         </div>
 

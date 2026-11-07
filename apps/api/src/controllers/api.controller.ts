@@ -645,7 +645,7 @@ export class ApiController {
         viewerUserId = decoded.userId;
       }
     }
-    const targetUserId = queryUserId || viewerUserId;
+    const targetUserId = queryUserId;
     return this.engine.getActivities(targetUserId, viewerRole, viewerUserId);
   }
 
