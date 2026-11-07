@@ -439,7 +439,7 @@ export default function AdminGpsModerationPanel({
 
                   <span className="flex items-center gap-1 font-mono">
                     <Gauge className="w-3.5 h-3.5 text-slate-400" />
-                    <span>Pace: {formatPace(act.avgPaceSecPerKm)}/km</span>
+                    <span>{getSpeedSplitLabel(act.sportType)}: {formatSportSpeed(act.avgPaceSecPerKm, act.sportType)}</span>
                   </span>
 
                   {act.deviceName && (

@@ -28,8 +28,15 @@ import {
   decodePolyline,
   formatDuration,
   formatPace,
+  formatSportSpeed,
+  formatSportDistance,
+  getSpeedMetricLabel,
+  getSpeedSplitLabel,
+  getSpeedUnit,
+  normalizeSportCategory,
   roundKm,
 } from '@toprun/shared';
+import TracklogTelemetryCharts from './TracklogTelemetryCharts';
 import type { TracklogActivityItem, TracklogSplitItem } from '../UserTracklogExplorer';
 import AthleteAvatar, { AthleteHonorPill } from '../AthleteAvatar';
 
@@ -57,6 +64,7 @@ export default function TracklogDetailView({
   theme,
 }: TracklogDetailViewProps) {
   const [hoveredSplitKm, setHoveredSplitKm] = useState<number | null>(null);
+  const sportCat = normalizeSportCategory(activity.sportType);
   const [mapStyle, setMapStyle] = useState<'dark' | 'street' | 'satellite'>(
     theme === 'dark' ? 'dark' : 'street'
   );
@@ -576,21 +584,21 @@ export default function TracklogDetailView({
         <div className="rounded-xl bg-white dark:bg-[#0F1420] border border-slate-200/80 dark:border-slate-800/80 p-3 space-y-1 shadow-sm">
           <span className="text-[10px] text-slate-400 font-semibold block">Quãng đường</span>
           <div className="text-lg font-black font-mono text-slate-900 dark:text-white tabular-nums">
-            {roundKm(activity.validDistanceKm)} <span className="text-xs font-normal text-slate-400">km</span>
+            {formatSportDistance(activity.validDistanceKm, activity.sportType)}
           </div>
           <span className="text-[9px] text-emerald-500 font-bold block">
-            {activity.invalidDistanceKm > 0 ? `Gốc ${roundKm(activity.rawDistanceKm)}km` : '100% Hợp lệ'}
+            {activity.invalidDistanceKm > 0 ? `Gốc ${formatSportDistance(activity.rawDistanceKm, activity.sportType)}` : '100% Hợp lệ'}
           </span>
         </div>
 
-        {/* 2. Pace trung bình */}
+        {/* 2. Pace / Vận tốc trung bình */}
         <div className="rounded-xl bg-white dark:bg-[#0F1420] border border-slate-200/80 dark:border-slate-800/80 p-3 space-y-1 shadow-sm">
-          <span className="text-[10px] text-slate-400 font-semibold block">Pace TB</span>
+          <span className="text-[10px] text-slate-400 font-semibold block">{getSpeedMetricLabel(activity.sportType)}</span>
           <div className="text-lg font-black font-mono text-[#FC4C02] tabular-nums">
-            {formatPace(activity.avgPaceSecPerKm)}
+            {formatSportSpeed(activity.avgPaceSecPerKm, activity.sportType)}
           </div>
           <span className="text-[9px] text-slate-400 font-mono block">
-            Best {formatPace(bestPaceSec)}
+            Best {formatSportSpeed(bestPaceSec, activity.sportType)}
           </span>
         </div>
 
@@ -642,18 +650,33 @@ export default function TracklogDetailView({
           <span className="text-[9px] text-slate-400 font-mono block">spm (bước/phút)</span>
         </div>
 
-        {/* 8. Năng lượng (Calo) */}
+        {/* 8. Công suất (Power) hoặc Năng lượng (Calo) */}
         <div className="rounded-xl bg-white dark:bg-[#0F1420] border border-slate-200/80 dark:border-slate-800/80 p-3 space-y-1 shadow-sm">
-          <span className="text-[10px] text-slate-400 font-semibold block">Năng lượng</span>
-          <div className="text-lg font-black font-mono text-purple-500 tabular-nums">
-            {activity.calories ? Math.round(activity.calories) : Math.round(activity.validDistanceKm * 65)}
+          <span className="text-[10px] text-slate-400 font-semibold block">
+            {activity.avgWatts ? 'Công suất TB' : 'Năng lượng'}
+          </span>
+          <div className="text-lg font-black font-mono text-amber-500 tabular-nums">
+            {activity.avgWatts ? `${activity.avgWatts}` : (activity.calories ? Math.round(activity.calories) : Math.round(activity.validDistanceKm * 65))}
           </div>
-          <span className="text-[9px] text-slate-400 font-mono block">kcal đốt cháy</span>
+          <span className="text-[9px] text-slate-400 font-mono block">
+            {activity.avgWatts ? 'Watts' : 'kcal đốt cháy'}
+          </span>
         </div>
       </div>
 
       {/* =====================================================================
-          4. PHÂN TÍCH TỪNG KM (SPLITS BREAKDOWN) VÀ BIỂU ĐỒ CAO ĐỘ
+          4. BIỂU ĐỒ TELEMETRY TƯƠNG TÁC ĐỒNG BỘ (TIM • TỐC ĐỘ • CÔNG SUẤT • GUỒNG CHÂN • ĐỘ CAO)
+         ===================================================================== */}
+      <TracklogTelemetryCharts
+        activity={activity}
+        splits={splits}
+        hoveredSplitKm={hoveredSplitKm}
+        onHoverSplitKm={setHoveredSplitKm}
+        theme={theme}
+      />
+
+      {/* =====================================================================
+          5. PHÂN TÍCH TỪNG KM (SPLITS BREAKDOWN) VÀ BIỂU ĐỒ CAO ĐỘ
          ===================================================================== */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         {/* Left 6 cols: Km-by-Km Splits List */}
@@ -694,7 +717,7 @@ export default function TracklogDetailView({
                     <div>
                       <div className="flex items-center gap-1.5">
                         <span className="font-mono font-bold text-slate-900 dark:text-white">
-                          Pace: {sp.formattedPace}
+                          {getSpeedSplitLabel(activity.sportType)}: {sp.formattedPace || formatSportSpeed(sp.paceSecPerKm, activity.sportType)}
                         </span>
                         {isFastest && (
                           <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-400/20 text-amber-500">

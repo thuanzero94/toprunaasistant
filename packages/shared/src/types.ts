@@ -157,6 +157,8 @@ export const EventRuleConfigSchema = z.object({
   ]),
   minPaceSecPerKm: z.number().min(120).default(180), // Mặc định 03:00 /km (180s) -> Nhanh hơn bị coi là xe máy
   maxPaceSecPerKm: z.number().max(2400).default(900), // Mặc định 15:00 /km (900s) -> Chậm hơn không tính
+  rideMinPaceSecPerKm: z.number().min(30).default(45), // Mặc định Đạp xe: 80 km/h (45s/km)
+  rideMaxPaceSecPerKm: z.number().max(3600).default(720), // Mặc định Đạp xe: 5 km/h (720s/km)
   minActivityDistanceKm: z.number().min(0).default(1.0), // Quãng đường tối thiểu mỗi buổi chạy (VD: >= 1km)
   minStepCadenceSpm: z.number().optional().nullable(),   // Ngưỡng guồng chân tối thiểu (VD: 110 spm)
   requireHeartRate: z.boolean().default(false),          // Bắt buộc có nhịp tim từ đồng hồ
@@ -214,6 +216,8 @@ export interface EvaluatedSplitResult {
   formattedPace: string;
   elevationDiffMeters: number;
   averageHeartrate: number | null;
+  averageCadenceSpm?: number | null;
+  averageWatts?: number | null;
   isValid: boolean;
   invalidReason: SplitInvalidReason | null;
 }

@@ -15,7 +15,14 @@ import {
   ExternalLink,
   Compass,
 } from 'lucide-react';
-import { formatPace, roundKm, normalizeSportCategory } from '@toprun/shared';
+import {
+  formatPace,
+  formatSportSpeed,
+  formatSportDistance,
+  getSpeedSplitLabel,
+  roundKm,
+  normalizeSportCategory,
+} from '@toprun/shared';
 import AthleteAvatar, { AthleteHonorPill } from './AthleteAvatar';
 
 export interface ParticipantDetailData {
@@ -306,7 +313,7 @@ export default function TournamentParticipantModal({
                               ? new Date(act.startDateIso).toLocaleDateString('vi-VN')
                               : act.dateStr || '—'}
                           </span>
-                          <span>• Pace: {formatPace(act.avgPaceSecPerKm)}</span>
+                          <span>• {getSpeedSplitLabel(act.sportType)}: {formatSportSpeed(act.avgPaceSecPerKm, act.sportType)}</span>
                           {act.elevationGain || act.elevationGainM ? <span>• +{act.elevationGain || act.elevationGainM}m</span> : null}
                         </div>
                       </div>

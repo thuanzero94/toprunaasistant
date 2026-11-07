@@ -21,6 +21,8 @@
     "averageHeartrate": 164,
     "maxHeartrate": 189,
     "averageCadenceSpm": 187,
+    "avgWatts": null,
+    "maxWatts": null,
     "calories": 687,
     "mapPolyline": "ctbaCkc_dSsLqBWQGORcAL}@VsAH{@R_AHy@Ns@Fo@^aCbAkHFQDIHGVAnANpE`@`BRP@z@Jb@DTLFP?\\QbAC^s@hEC\\s@`Fe@jCw@vFELIHOHy@I[KyAWcFy@sBa@KEKOAEBSFSf@mDZaBVwBPaANoAtAaJBMLKJCX@bCV~BPpBVlBNPDJHFJ@`@YfBIx@Q~@W|A_@tCOt@o@zEWvAOdAMt@GJQLM?s@SI??C?Bw@K}E}@WCc@KaBUOGKIGK@SFQBWj@mDj@cEf@qCv@cGP{@Fg@FOHIRCL@`Ht@tAJbANp@BPFHNB`@_AdGQz@CZs@tEGx@Mj@WjBg@fDGRIHKFS?u@QC?B@E@UCu@Q_C]kB_@w@IeAQKCS[bBuKbBsLTuADQFKPG~@D`AHv@NnDX|ARx@DPHHFFPAZeApGq@lFmAtHYxBEJOPKBMAk@OKAB@OAiCg@kAO}Ew@MKIM?MHYV}AFm@Lm@Dc@ZoB@Y^mBHy@RmAT_Bn@gEJQHGJAT@x@JbAHj@Jd@BJDR?VFbFb@PHHN@LARUnAQxAuAvIYzBOx@Iv@YzAQ~AELMNKFE?aAMsBc@cBS{AYiC_@OIMQ?MZyABw@Pi@\\yBLiAJg@rBoNFQHKLEJ?rNvARDJPBLARKbAk@rDOz@m@nEMj@SzAEJMfA_@dC",
     "deviceName": "Strava Webhook Sync (Garmin/Coros)",
@@ -38,6 +40,8 @@
         "formattedPace": "05:27 /km",
         "elevationDiffMeters": 0.6,
         "averageHeartrate": 136,
+        "averageCadenceSpm": null,
+        "averageWatts": null,
         "isValid": true,
         "invalidReason": null
       },
@@ -49,6 +53,8 @@
         "formattedPace": "04:55 /km",
         "elevationDiffMeters": 1,
         "averageHeartrate": 155,
+        "averageCadenceSpm": null,
+        "averageWatts": null,
         "isValid": true,
         "invalidReason": null
       },
@@ -60,6 +66,8 @@
         "formattedPace": "04:56 /km",
         "elevationDiffMeters": 0.6,
         "averageHeartrate": 160,
+        "averageCadenceSpm": null,
+        "averageWatts": null,
         "isValid": true,
         "invalidReason": null
       },
@@ -71,6 +79,8 @@
         "formattedPace": "05:02 /km",
         "elevationDiffMeters": -0.6,
         "averageHeartrate": 162,
+        "averageCadenceSpm": null,
+        "averageWatts": null,
         "isValid": true,
         "invalidReason": null
       },
@@ -82,6 +92,8 @@
         "formattedPace": "04:53 /km",
         "elevationDiffMeters": -0.2,
         "averageHeartrate": 167,
+        "averageCadenceSpm": null,
+        "averageWatts": null,
         "isValid": true,
         "invalidReason": null
       },
@@ -93,6 +105,8 @@
         "formattedPace": "04:58 /km",
         "elevationDiffMeters": -0.2,
         "averageHeartrate": 168,
+        "averageCadenceSpm": null,
+        "averageWatts": null,
         "isValid": true,
         "invalidReason": null
       },
@@ -104,6 +118,8 @@
         "formattedPace": "04:56 /km",
         "elevationDiffMeters": -1.2,
         "averageHeartrate": 172,
+        "averageCadenceSpm": null,
+        "averageWatts": null,
         "isValid": true,
         "invalidReason": null
       },
@@ -115,6 +131,8 @@
         "formattedPace": "04:47 /km",
         "elevationDiffMeters": 0.4,
         "averageHeartrate": 173,
+        "averageCadenceSpm": null,
+        "averageWatts": null,
         "isValid": true,
         "invalidReason": null
       },
@@ -126,6 +144,8 @@
         "formattedPace": "04:46 /km",
         "elevationDiffMeters": -1.2,
         "averageHeartrate": 175,
+        "averageCadenceSpm": null,
+        "averageWatts": null,
         "isValid": true,
         "invalidReason": null
       },
@@ -137,6 +157,8 @@
         "formattedPace": "04:30 /km",
         "elevationDiffMeters": 0.4,
         "averageHeartrate": 179,
+        "averageCadenceSpm": null,
+        "averageWatts": null,
         "isValid": true,
         "invalidReason": null
       },
@@ -148,6 +170,8 @@
         "formattedPace": "04:17 /km",
         "elevationDiffMeters": 0,
         "averageHeartrate": 185,
+        "averageCadenceSpm": null,
+        "averageWatts": null,
         "isValid": true,
         "invalidReason": null
       }
@@ -179,6 +203,8 @@
     "averageHeartrate": 128.8,
     "maxHeartrate": 152,
     "averageCadenceSpm": 180.4,
+    "avgWatts": null,
+    "maxWatts": null,
     "calories": 341,
     "mapPolyline": "ur`aCwuocS@EGBYh@AJOREB_@OKCE@CHBNAF]`@OF?HF^INa@Pc@JQ@c@?MFEF?HVn@Tt@Fp@?ZIV@XSHi@Hg@P{Ab@oATEHNn@L|@BFJDRAn@Qx@OdA]LAHEh@GBM]sAIi@ECi@R[DkAZi@ReAPE@CFXvAJZHFNElAUrBk@l@GHE?IU_AO{@GCa@LI?eBb@oAX_@FEJBXZxAFJH@F?lCu@x@QRGVCFEAMa@uBEEuAZwA`@uAZEDAHFb@XhADFFB\\Gz@U`@OjCi@AMYiAMo@AAI?QHc@HaCn@s@JQFCH?F`@jBBFL@t@O`A[fCg@BE?I[kAGk@CCK?yA`@i@He@PwAXCH@H^fBHLH?z@YhBe@rASFE?I_@oBEOI?kBb@}@ZwAZEF?JHXTfADJJB\\C~Bs@|AYHE@IGYEGWsACIK?w@ToAXSJcAP[LEF@T\\vABJFDLALG`AUf@OpAYf@IHE@IYmAIi@AEIA}@RkA\\oB`@KDAJBVXxADHP?tCu@|@Oj@O@GK_@WaBGG[HUJsEhAEH@N`@dBFHJ?t@Wj@KlA]jAUBI]yAGc@IEUF",
     "deviceName": "Strava Webhook Sync (Garmin/Coros)",
@@ -196,6 +222,8 @@
         "formattedPace": "08:10 /km",
         "elevationDiffMeters": 0.8,
         "averageHeartrate": 112,
+        "averageCadenceSpm": null,
+        "averageWatts": null,
         "isValid": true,
         "invalidReason": null
       },
@@ -207,6 +235,8 @@
         "formattedPace": "06:20 /km",
         "elevationDiffMeters": -1,
         "averageHeartrate": 126,
+        "averageCadenceSpm": null,
+        "averageWatts": null,
         "isValid": true,
         "invalidReason": null
       },
@@ -218,6 +248,8 @@
         "formattedPace": "05:57 /km",
         "elevationDiffMeters": -0.4,
         "averageHeartrate": 132,
+        "averageCadenceSpm": null,
+        "averageWatts": null,
         "isValid": true,
         "invalidReason": null
       },
@@ -229,6 +261,8 @@
         "formattedPace": "05:54 /km",
         "elevationDiffMeters": -0.4,
         "averageHeartrate": 137,
+        "averageCadenceSpm": null,
+        "averageWatts": null,
         "isValid": true,
         "invalidReason": null
       },
@@ -240,6 +274,8 @@
         "formattedPace": "06:29 /km",
         "elevationDiffMeters": -0.2,
         "averageHeartrate": 141,
+        "averageCadenceSpm": null,
+        "averageWatts": null,
         "isValid": true,
         "invalidReason": null
       },
@@ -251,6 +287,8 @@
         "formattedPace": "12:49 /km",
         "elevationDiffMeters": -0.4,
         "averageHeartrate": 117,
+        "averageCadenceSpm": null,
+        "averageWatts": null,
         "isValid": true,
         "invalidReason": null
       }
@@ -282,6 +320,8 @@
     "averageHeartrate": 138.2,
     "maxHeartrate": 164,
     "averageCadenceSpm": 182.6,
+    "avgWatts": null,
+    "maxWatts": null,
     "calories": 558,
     "mapPolyline": "yr`aCovocSCEAW?CDAJ?x@N`@B`@IfA_@REXKx@OH?LJ\\~@DXFdAHXDDF?NC\\Ud@Mx@g@l@UhAs@H@BF?RKn@@TJ\\`DhF\\x@b@r@Tj@FHHBRA|@QXCrBa@nBk@JGf@OTQDGAWH[Og@QgAa@qCY_BDOb@IJQ@OAc@Bo@A_DBu@?GIUHO?kBC_AB_AE{BB]?aAB]BsDF_BB_CNuCByALgB@mADIFGfCJLDPL^b@Tj@`@jBLfB@`AEhDG|@A`AOjCQb@m@`@e@R_@T]XYb@Ol@GnASvBCj@Gd@]fBGLKBGEAECu@Ie@FKBc@E_H@qBH{C?}AHeBFeDJuBRoFBIFGjCJ\\R\\d@N^Pj@Ll@Ht@Fp@BrBOxGIlA?^ETQ^{@j@s@Zk@j@OVKb@Gh@M~BSxBa@hBEHEBC?IGCW@cFAEG?DdC?XCBAABRAn@BVJJH@DALOFSJk@PoAPoBJuBNu@\\k@ZYl@Yb@OROR_@Lm@DyAFk@Am@Fm@DmCA{BIcASsA[aAQ]UYQOOEyBKS@GFCJGhCCv@EZ?XEr@IhC?t@InCAhBG~AArA@p@Ax@@nECR@j@CPF|AAd@?n@EVEHC@]DKDGPFpCPv@fAvGId@O`@ORoC`Ai@JmCr@SBOFM@ECKYyAwCm@gAu@gAg@m@e@{@CO@URw@?GEGO?uAx@e@PeAl@{@^KAQW[OG]?QWs@Ia@IMw@Lm@Pg@FWJUBu@CSEQGK@CH@RJDT?",
     "deviceName": "Strava Webhook Sync (Garmin/Coros)",
@@ -299,6 +339,8 @@
         "formattedPace": "06:56 /km",
         "elevationDiffMeters": 0,
         "averageHeartrate": 124,
+        "averageCadenceSpm": null,
+        "averageWatts": null,
         "isValid": true,
         "invalidReason": null
       },
@@ -310,6 +352,8 @@
         "formattedPace": "06:14 /km",
         "elevationDiffMeters": -1.6,
         "averageHeartrate": 132,
+        "averageCadenceSpm": null,
+        "averageWatts": null,
         "isValid": true,
         "invalidReason": null
       },
@@ -321,6 +365,8 @@
         "formattedPace": "05:55 /km",
         "elevationDiffMeters": -0.4,
         "averageHeartrate": 138,
+        "averageCadenceSpm": null,
+        "averageWatts": null,
         "isValid": true,
         "invalidReason": null
       },
@@ -332,6 +378,8 @@
         "formattedPace": "05:54 /km",
         "elevationDiffMeters": -0.8,
         "averageHeartrate": 138,
+        "averageCadenceSpm": null,
+        "averageWatts": null,
         "isValid": true,
         "invalidReason": null
       },
@@ -343,6 +391,8 @@
         "formattedPace": "05:50 /km",
         "elevationDiffMeters": 0.4,
         "averageHeartrate": 140,
+        "averageCadenceSpm": null,
+        "averageWatts": null,
         "isValid": true,
         "invalidReason": null
       },
@@ -354,6 +404,8 @@
         "formattedPace": "05:41 /km",
         "elevationDiffMeters": -0.8,
         "averageHeartrate": 140,
+        "averageCadenceSpm": null,
+        "averageWatts": null,
         "isValid": true,
         "invalidReason": null
       },
@@ -365,6 +417,8 @@
         "formattedPace": "05:08 /km",
         "elevationDiffMeters": 1.2,
         "averageHeartrate": 159,
+        "averageCadenceSpm": null,
+        "averageWatts": null,
         "isValid": true,
         "invalidReason": null
       },
@@ -376,6 +430,8 @@
         "formattedPace": "06:16 /km",
         "elevationDiffMeters": 1,
         "averageHeartrate": 144,
+        "averageCadenceSpm": null,
+        "averageWatts": null,
         "isValid": true,
         "invalidReason": null
       },
@@ -387,6 +443,8 @@
         "formattedPace": "11:53 /km",
         "elevationDiffMeters": 0.2,
         "averageHeartrate": 124,
+        "averageCadenceSpm": null,
+        "averageWatts": null,
         "isValid": true,
         "invalidReason": null
       }
@@ -418,6 +476,8 @@
     "averageHeartrate": 136.5,
     "maxHeartrate": 152,
     "averageCadenceSpm": 187,
+    "avgWatts": null,
+    "maxWatts": null,
     "calories": 479,
     "mapPolyline": "wsbaCoc_dSGAHDk@G}@QiAOw@Q}B[s@Qg@GMIKOAMH_@J{@b@}BZ}BD{@H[Fi@HWdBkLHSLGRCTBz@LL?~@F\\Hh@Bv@Lb@@nD^RFFFFTKfA_@zBQxAUfAuA~Je@dDOn@KNSL_@H]Eu@U]GGBENIQMGgIqAUKMUFSf@sDNm@ZyCHUd@}Cf@mD^{BHw@HOPKZ?hBT\\@RDlAHfBTx@DxAPTFPRAZQtAYzAa@xCq@hEm@tEKb@e@fDOVMHI?YG_@CIC?EJBaAO}A[c@EaB[gAMmAUSGQWl@{DH]`@{CB]VmAN}@X{BVwAd@qDDINO\\?fANbBJjANfAFjC\\\\@TFLN@ZUdBc@hC[nBI|@y@xFa@dCa@zCGNOLOB{@SE@{@MeAUqHmAYKIKAKZaBLkANo@VqBFUBe@VaBVmANoAj@oDTgBPUJCZ@zEh@pCRf@HvALNHHN?\\SvA[bBKx@[rBQzASfAuAtJOx@KLKDO@[Ic@CaASe@Mu@I@@h@B\\J`@B|@V",
     "deviceName": "Strava Webhook Sync (Garmin/Coros)",
@@ -435,6 +495,8 @@
         "formattedPace": "06:21 /km",
         "elevationDiffMeters": 1,
         "averageHeartrate": 131,
+        "averageCadenceSpm": null,
+        "averageWatts": null,
         "isValid": true,
         "invalidReason": null
       },
@@ -446,6 +508,8 @@
         "formattedPace": "06:21 /km",
         "elevationDiffMeters": 0.2,
         "averageHeartrate": 131,
+        "averageCadenceSpm": null,
+        "averageWatts": null,
         "isValid": true,
         "invalidReason": null
       },
@@ -457,6 +521,8 @@
         "formattedPace": "06:01 /km",
         "elevationDiffMeters": 0.8,
         "averageHeartrate": 135,
+        "averageCadenceSpm": null,
+        "averageWatts": null,
         "isValid": true,
         "invalidReason": null
       },
@@ -468,6 +534,8 @@
         "formattedPace": "05:56 /km",
         "elevationDiffMeters": -0.4,
         "averageHeartrate": 134,
+        "averageCadenceSpm": null,
+        "averageWatts": null,
         "isValid": true,
         "invalidReason": null
       },
@@ -479,6 +547,8 @@
         "formattedPace": "05:48 /km",
         "elevationDiffMeters": -0.2,
         "averageHeartrate": 141,
+        "averageCadenceSpm": null,
+        "averageWatts": null,
         "isValid": true,
         "invalidReason": null
       },
@@ -490,6 +560,8 @@
         "formattedPace": "05:34 /km",
         "elevationDiffMeters": 0,
         "averageHeartrate": 142,
+        "averageCadenceSpm": null,
+        "averageWatts": null,
         "isValid": true,
         "invalidReason": null
       },
@@ -501,6 +573,8 @@
         "formattedPace": "06:22 /km",
         "elevationDiffMeters": 0.6,
         "averageHeartrate": 143,
+        "averageCadenceSpm": null,
+        "averageWatts": null,
         "isValid": true,
         "invalidReason": null
       },
@@ -512,6 +586,8 @@
         "formattedPace": "12:23 /km",
         "elevationDiffMeters": 0,
         "averageHeartrate": 118,
+        "averageCadenceSpm": null,
+        "averageWatts": null,
         "isValid": true,
         "invalidReason": null
       }
@@ -543,6 +619,8 @@
     "averageHeartrate": 140.8,
     "maxHeartrate": 167,
     "averageCadenceSpm": 182.6,
+    "avgWatts": null,
+    "maxWatts": null,
     "calories": 712,
     "mapPolyline": "qr`aCkvocSG_@UUi@c@YOKIQGQCKi@MEQAo@JI?S_@Ia@DKFE~@a@bAk@tAuARMr@s@lB{AX[HMBYFgAPkBFyBFs@@GBABKCe@MUq@]c@YuBgAGECGLq@`AkCf@gBNa@j@kBh@}AT}@Zq@hAkDLWFEH?ZDb@RhBj@xAj@v@Th@RXDn@Br@CbAKnA[xBUxAD\\JVLRVd@lAFHLFXBFDDNEd@?\\IlBKzAE`BCZ@b@Ev@@lBEX@l@A^Ef@IvC@tN@TFFFBLGJQXwALcBPkBFcAPy@P[X_@\\S`A_@ROPYJi@V}G?y@DwACeAKwA_@iBUk@g@o@OGi@Gm@C{@BMLGTAR@ACpBI`AAj@MdCIrGMlE?vG@`DAjA@PFJJ?JIJQLc@ZaCHsAPwBRw@PW`@_@j@YTG\\SZc@HYTsG?cADo@?}@IyBUuAYcAUa@UYMKSGy@Gs@C[BKHGTGzBOlCQdHAv@Br@M|CA~BBrAChC?dADzA?t@@JFDH?LKPc@H]RuBDaAR{BF[Pg@Va@\\[LIl@Q\\QRSHUHg@ByADYJ}DB{BAeAW{BMo@Uo@c@o@YS[EuAG]?IBMRCV?JB?CAAB?AE|BUbFGpDCb@CrBGlB?tPDRFFJ?HEPa@Ha@V{BX_EF[FW\\o@FGXStAk@NMRa@Fq@PeFFwDCeAKsAUkAMc@K[OUSWYSc@GsAEQ?OFKVERAjAKhBElBGz@KjHGjBGPOHy@Mc@?k@EoDAOHKLy@|Au@TGFAHVf@CHo@j@IPITCTAb@Hh@EXIZMLy@TU@e@EQFIHCHg@j@c@rBc@vAQZk@~@KT@`@HVz@~AAJOLUNg@NWPIASY]MGYASUo@Ea@EIEEa@@c@NwAXKFUD[Cm@JEMND?BIB@FA@DL?ABC",
     "deviceName": "Strava Webhook Sync (Garmin/Coros)",
@@ -560,6 +638,8 @@
         "formattedPace": "06:49 /km",
         "elevationDiffMeters": 4.6,
         "averageHeartrate": 123,
+        "averageCadenceSpm": null,
+        "averageWatts": null,
         "isValid": true,
         "invalidReason": null
       },
@@ -571,6 +651,8 @@
         "formattedPace": "06:23 /km",
         "elevationDiffMeters": -5.4,
         "averageHeartrate": 127,
+        "averageCadenceSpm": null,
+        "averageWatts": null,
         "isValid": true,
         "invalidReason": null
       },
@@ -582,6 +664,8 @@
         "formattedPace": "05:57 /km",
         "elevationDiffMeters": -0.8,
         "averageHeartrate": 135,
+        "averageCadenceSpm": null,
+        "averageWatts": null,
         "isValid": true,
         "invalidReason": null
       },
@@ -593,6 +677,8 @@
         "formattedPace": "05:48 /km",
         "elevationDiffMeters": -0.2,
         "averageHeartrate": 138,
+        "averageCadenceSpm": null,
+        "averageWatts": null,
         "isValid": true,
         "invalidReason": null
       },
@@ -604,6 +690,8 @@
         "formattedPace": "05:37 /km",
         "elevationDiffMeters": 0,
         "averageHeartrate": 142,
+        "averageCadenceSpm": null,
+        "averageWatts": null,
         "isValid": true,
         "invalidReason": null
       },
@@ -615,6 +703,8 @@
         "formattedPace": "05:24 /km",
         "elevationDiffMeters": 0.4,
         "averageHeartrate": 148,
+        "averageCadenceSpm": null,
+        "averageWatts": null,
         "isValid": true,
         "invalidReason": null
       },
@@ -626,6 +716,8 @@
         "formattedPace": "05:19 /km",
         "elevationDiffMeters": 0.4,
         "averageHeartrate": 153,
+        "averageCadenceSpm": null,
+        "averageWatts": null,
         "isValid": true,
         "invalidReason": null
       },
@@ -637,6 +729,8 @@
         "formattedPace": "05:08 /km",
         "elevationDiffMeters": 0.2,
         "averageHeartrate": 153,
+        "averageCadenceSpm": null,
+        "averageWatts": null,
         "isValid": true,
         "invalidReason": null
       },
@@ -648,6 +742,8 @@
         "formattedPace": "05:00 /km",
         "elevationDiffMeters": 1,
         "averageHeartrate": 159,
+        "averageCadenceSpm": null,
+        "averageWatts": null,
         "isValid": true,
         "invalidReason": null
       },
@@ -659,6 +755,8 @@
         "formattedPace": "07:12 /km",
         "elevationDiffMeters": 0,
         "averageHeartrate": 142,
+        "averageCadenceSpm": null,
+        "averageWatts": null,
         "isValid": true,
         "invalidReason": null
       },
@@ -670,6 +768,8 @@
         "formattedPace": "05:27 /km",
         "elevationDiffMeters": 0.4,
         "averageHeartrate": 140,
+        "averageCadenceSpm": null,
+        "averageWatts": null,
         "isValid": true,
         "invalidReason": null
       }
@@ -701,6 +801,8 @@
     "averageHeartrate": 144.9,
     "maxHeartrate": 178,
     "averageCadenceSpm": 118.6,
+    "avgWatts": null,
+    "maxWatts": null,
     "calories": 0,
     "mapPolyline": "is`aCqvocSCD@AC?AE@ECDBDADBACC@@BC?CBD@CEC@FA?AGA?B?DDACAB@@CIAB@?DFA@AGE@BDBG?BA?@EGA@FCEF?@DEEA@F??C?BA@?AEABDEI@BEF?EGEBFRAADBGIB?ABDCCD@@CIAABH@AB?CG?@CCAFDAD@EBACAD@CE@??F@CEA?DCGA@F@?BEGABDBA@?GC@BEBHEIA@D@AHBGD?CC@DCBAGE?HFCIBHCAD?EMADDJCO?LEGDD@C@DGG@?CBB??T@ECQBAAB@E?D@B@AICJF@AGEF@CA@@AA?BC?@@CCACBAEDHBAEE?B@?AB?ABA@EGDFIKF@C@DDA?AEDBC?DCEDD@CEBAE@BF?CE?B@CC@EAF@BD?GEA?B??D@AEI@JAGADBECAHHEKB@@FBA?GCDEGC?D@@BCC?BDDGAFBIIFDAB?GBB?CEA@ADBABBAE?@BCCB?E@B@?CGA?CBDB?CGEBD@C?B@BDAGC?BAC?DJ@CEKDFC@@CABAEA?@@@C@FCGCB@?@C@HEC@EABBA@JC?BICABH@ACCDDAGA@@D?C?BC?BCA@AE?CABA?@?@F@?AEA?B@CEBBAD?GBBC??G?F@BBAE?H?GABDAAA??GA@B?@D?EI@B??EDCBKAAA@CEA@BAA@FDAA?A@BEF?GBC?DCCDG?JEM@d@AIBFC@CC?BD?CC@??@@A@@?DAGC@CABGDHEEB@?BIA?ADB@AGE@C@DB@CEABDDA?CMBHEA@ABH?EB@E?ABFCAA?EAB@FCEBDCA?GA@B@A@@BBAE??G?FB?CIDBE??D@C?BAG@CB@@BEAC@@A@DAI@DCB@IEFHBAC?B@AEIHEEC@@@?EGHDGG?CFLGE@AA@BEDLEAADBKABCC?BD@CAF@?CEABDQIDDC@J@CHBLGK@DDAEBBFAIEG?E?@DD@DGCBGA@B?A?@@AHEGBABFCA@BCIF?ADG@?EB@ACB?@FEABICBACB?@BAF@CBDGM?NBMEBFJBAIIFDEE?FHCCE@?CB?CB@EDAIA?@AE@HHA@AIBDAE?FCC@E?BBHA?AOCBB?@A?B?EAJCIDL@?CECCBEC@?BFAC?@J?IC?@CDHEAF@C@EAB@@?AK?LBE@@C?@EAFBE?FEGAG@@B?ABACBLCI@CAHB@CC@AG?BAAB?CFD@AA@AE@FGIDDC@@I@J@CCB@@AA?@?QDJGB?@BAAEFBCCADB@ACC?ACC@DD@CEEB?EGAD@@BCB@CN?ODHCA?@AAB?A@@AA??CCEBJ?GCADAED@BGGH@?@CADFAGC?D@AGANAIB@?ECBFA?DAA?FACCB?GH@AA@?C?EGLCAMABDFAC?F",
     "deviceName": "Strava Webhook Sync (Garmin/Coros)",
@@ -739,6 +841,8 @@
     "averageHeartrate": 139,
     "maxHeartrate": 154,
     "averageCadenceSpm": 165.6,
+    "avgWatts": null,
+    "maxWatts": null,
     "calories": 348,
     "mapPolyline": "yf_aCudpcS@ULiAH}APmBJe@Zi@ZYf@[VERKB@`@k@Pi@?UFaB?c@LoC@{A@UAcBEg@]sBI]EIAB?Fb@~BLzAErDGpCOxCK^ILCPKNc@B_Ab@k@f@MVO`ASrDIv@Id@KXSbA?BBB@?Ro@VwADs@Fa@PkCJy@Pg@T]XSREd@Qf@YPYJWHmAFsBAWF}@?y@FcBCoBIe@Cc@WqAMe@OWa@i@SMu@E[@g@AO?SFGJAF?v@I`ASbFEXIxF@bBGr@EjBAfABhAClCBvBDdBBHDBFABINs@P[H_@X_CNcCD[Nc@NYZYVOj@Qb@YV]FSDSFqAFeBAe@Dg@?g@Dg@A}CIiAUyAc@oAa@i@YMu@ES?k@EI@YJERAh@Gz@[zG@VEpCGtAB`@Ad@IxAAdD@dACr@@bAD|BCfADf@@FDDL?HKFKLk@TaB^cFRu@LYLO^WfAc@",
     "deviceName": "Strava Webhook Sync (Garmin/Coros)",
@@ -756,6 +860,8 @@
         "formattedPace": "11:26 /km",
         "elevationDiffMeters": -0.8,
         "averageHeartrate": 137,
+        "averageCadenceSpm": null,
+        "averageWatts": null,
         "isValid": true,
         "invalidReason": null
       },
@@ -767,6 +873,8 @@
         "formattedPace": "09:10 /km",
         "elevationDiffMeters": -0.2,
         "averageHeartrate": 138,
+        "averageCadenceSpm": null,
+        "averageWatts": null,
         "isValid": true,
         "invalidReason": null
       },
@@ -778,6 +886,8 @@
         "formattedPace": "07:56 /km",
         "elevationDiffMeters": 0.6,
         "averageHeartrate": 142,
+        "averageCadenceSpm": null,
+        "averageWatts": null,
         "isValid": true,
         "invalidReason": null
       },
@@ -789,6 +899,8 @@
         "formattedPace": "08:10 /km",
         "elevationDiffMeters": 1,
         "averageHeartrate": 141,
+        "averageCadenceSpm": null,
+        "averageWatts": null,
         "isValid": true,
         "invalidReason": null
       },
@@ -800,6 +912,8 @@
         "formattedPace": "07:47 /km",
         "elevationDiffMeters": 0.6,
         "averageHeartrate": 137,
+        "averageCadenceSpm": null,
+        "averageWatts": null,
         "isValid": true,
         "invalidReason": null
       },
@@ -811,6 +925,8 @@
         "formattedPace": "07:39 /km",
         "elevationDiffMeters": -0.4,
         "averageHeartrate": 139,
+        "averageCadenceSpm": null,
+        "averageWatts": null,
         "isValid": true,
         "invalidReason": null
       }
@@ -842,6 +958,8 @@
     "averageHeartrate": 152.4,
     "maxHeartrate": 198,
     "averageCadenceSpm": 185.4,
+    "avgWatts": null,
+    "maxWatts": null,
     "calories": 477,
     "mapPolyline": "o`_aC_spcSVQTu@LuCJ_FA_B?]McBKo@Q}@Sc@]g@UQKC[C_BEkAIMDIFITANEbA?pAIn@StEK|E@fBI|A@vLAhA?j@A\\H`AFLTPR?PIHw@Pm@Re@Le@VsBRgDHs@Ja@h@w@d@W|@]TSR_@Ha@AUH}AHyEDiACmBWmB[sAWe@W]UOc@EM@oCOK@QHKRE\\EtBOdCEpBC\\ArAGfBCzA?f@GvB@pAAbABz@EjC@jFL`ABFLHJBLAFCHKFUHg@Re@Po@VgB\\gFHa@Na@T]TUTOh@Od@UFGZk@DSBq@Ak@HmDJyBA_BEeAU_BKa@]_AMQY[KGaDM]GYDONGTIbDUjDQpH?hBEjAAjDDlCEvB@TFZFdA@fAA|@BDJFR@PIRiA^qAXwAJy@PcC@k@TeATe@d@c@lAa@Z[LWHg@JeBHuCB_CBk@AeAGy@OeA_@yAQ]Ya@QM[EuAEkAKM?KDIHIRGRI|@@DGdBQvCEzCIpBC~CEzABD@x@Cz@@jACzD@fGC~A",
     "deviceName": "Strava Webhook Sync (Garmin/Coros)",
@@ -859,6 +977,8 @@
         "formattedPace": "04:26 /km",
         "elevationDiffMeters": 0.4,
         "averageHeartrate": 147,
+        "averageCadenceSpm": null,
+        "averageWatts": null,
         "isValid": true,
         "invalidReason": null
       },
@@ -870,6 +990,8 @@
         "formattedPace": "04:21 /km",
         "elevationDiffMeters": -0.4,
         "averageHeartrate": 147,
+        "averageCadenceSpm": null,
+        "averageWatts": null,
         "isValid": true,
         "invalidReason": null
       },
@@ -881,6 +1003,8 @@
         "formattedPace": "04:17 /km",
         "elevationDiffMeters": 0.4,
         "averageHeartrate": 145,
+        "averageCadenceSpm": null,
+        "averageWatts": null,
         "isValid": true,
         "invalidReason": null
       },
@@ -892,6 +1016,8 @@
         "formattedPace": "04:25 /km",
         "elevationDiffMeters": -0.6,
         "averageHeartrate": 146,
+        "averageCadenceSpm": null,
+        "averageWatts": null,
         "isValid": true,
         "invalidReason": null
       },
@@ -903,6 +1029,8 @@
         "formattedPace": "04:16 /km",
         "elevationDiffMeters": -0.4,
         "averageHeartrate": 136,
+        "averageCadenceSpm": null,
+        "averageWatts": null,
         "isValid": true,
         "invalidReason": null
       },
@@ -914,6 +1042,8 @@
         "formattedPace": "04:32 /km",
         "elevationDiffMeters": 0.2,
         "averageHeartrate": 154,
+        "averageCadenceSpm": null,
+        "averageWatts": null,
         "isValid": true,
         "invalidReason": null
       },
@@ -925,6 +1055,8 @@
         "formattedPace": "04:08 /km",
         "elevationDiffMeters": -0.2,
         "averageHeartrate": 192,
+        "averageCadenceSpm": null,
+        "averageWatts": null,
         "isValid": true,
         "invalidReason": null
       },
@@ -936,6 +1068,8 @@
         "formattedPace": "03:50 /km",
         "elevationDiffMeters": 0,
         "averageHeartrate": 198,
+        "averageCadenceSpm": null,
+        "averageWatts": null,
         "isValid": true,
         "invalidReason": null
       }
@@ -967,6 +1101,8 @@
     "averageHeartrate": null,
     "maxHeartrate": null,
     "averageCadenceSpm": null,
+    "avgWatts": null,
+    "maxWatts": null,
     "calories": 349,
     "mapPolyline": "subaCsc_dS@DWGOKQCSI}@GcASCESGYASGKKSD_@E_@IM@WOOWPmA@SNm@JmA\\mBJ}@Py@Be@ReARyA@WRy@?WFW@QFa@DKD[A?@GN_APONC\\B^H|AJt@Jn@DNAZJfCPvAVLLBPAJIZIh@C\\Q|@Gt@Mf@SlAEp@Mh@Kz@KZEZ?NGT?NIREf@I`@Ef@Mh@CVIZMdAOh@C`@GJKFU@OIy@Sg@EQK[AmAQw@Oa@MQ@o@S[G[Ac@ISGS]To@LcA@c@JQFOAKXeC`@gCHM?EEKFWFOJm@n@iFTw@Hw@FMPML@NJNDXBFCJ@f@BXH\\?~BZ`@BxCX^JHN?VCVc@|BGt@AVWlA_@dC@HGJI`@Iz@Mf@Gp@Mf@@PK`@?LMj@Gj@UhAGp@GNGFQ@q@QO?SIK?]IQMW?s@MYCa@KQAkCe@a@O]CIEQW@KJ]@SL_@Lu@H_ALa@@UJaAXyAFM@i@N_A@]\\eB@[d@yCDa@Nq@NQPA^Nb@?v@L|@DHDXA`ANTFb@@l@HR?RBRF\\Ah@LFFDJ?^W~@QlAC\\If@CVKVAd@ETSv@AXQdAA\\ILCNEf@GTc@lDINk@tDOLO@_AWKG",
     "deviceName": "Strava Webhook Sync (Garmin/Coros)",
@@ -984,6 +1120,8 @@
         "formattedPace": "05:43 /km",
         "elevationDiffMeters": 3.4,
         "averageHeartrate": null,
+        "averageCadenceSpm": null,
+        "averageWatts": null,
         "isValid": true,
         "invalidReason": null
       },
@@ -995,6 +1133,8 @@
         "formattedPace": "05:28 /km",
         "elevationDiffMeters": -0.2,
         "averageHeartrate": null,
+        "averageCadenceSpm": null,
+        "averageWatts": null,
         "isValid": true,
         "invalidReason": null
       },
@@ -1006,6 +1146,8 @@
         "formattedPace": "05:23 /km",
         "elevationDiffMeters": -1.7,
         "averageHeartrate": null,
+        "averageCadenceSpm": null,
+        "averageWatts": null,
         "isValid": true,
         "invalidReason": null
       },
@@ -1017,6 +1159,8 @@
         "formattedPace": "05:24 /km",
         "elevationDiffMeters": 5.2,
         "averageHeartrate": null,
+        "averageCadenceSpm": null,
+        "averageWatts": null,
         "isValid": true,
         "invalidReason": null
       },
@@ -1028,6 +1172,8 @@
         "formattedPace": "05:17 /km",
         "elevationDiffMeters": -5.1,
         "averageHeartrate": null,
+        "averageCadenceSpm": null,
+        "averageWatts": null,
         "isValid": true,
         "invalidReason": null
       },
@@ -1039,6 +1185,8 @@
         "formattedPace": "05:29 /km",
         "elevationDiffMeters": -1.5,
         "averageHeartrate": null,
+        "averageCadenceSpm": null,
+        "averageWatts": null,
         "isValid": true,
         "invalidReason": null
       }
@@ -1070,6 +1218,8 @@
     "averageHeartrate": 144.4,
     "maxHeartrate": 157,
     "averageCadenceSpm": 186.6,
+    "avgWatts": null,
+    "maxWatts": null,
     "calories": 682,
     "mapPolyline": "gxbaCqw~cSMDm@z@aAfBc@l@GRMTQROBSA]MUOyBiAg@[oCsAYSGUDWt@{A~AoDj@cAN]f@u@Tm@JKLCN@dDn@lC^hAV`BTNHDFBNAPKRqD`GKRq@~@_@r@cA~Ac@z@QJW@aA_@sDsB_CkAIGEICSFYLQf@_AVo@\\m@Ne@f@_AXs@|@_BN[HKFEJCRBtAXN@bBXVB\\Hf@DtAZ|ATLHFF@HAVKVsApBq@jAMPE^Q^GFM@IDo@bAc@|@}@pASb@GJKFOBKAyAo@oGgDUMCIEUDOt@uA|@wBh@_An@{Af@{@^}@x@gFf@_EX_BTsBLi@Jy@FWPwANm@LeABKLQREzI|@X?RFt@Jz@DTHJPAb@Mr@Dd@Il@UnAs@fF[lBEd@a@|BMdAQx@_@jC}ChF]l@a@f@EPO@OJi@~@aBjC]t@QLQ@KCeFqCcCkAQQEY@Ix@{Ah@qAzA_Dx@wAZy@N_ADk@N}@VqAZuBHeATaAZgC|@yFRwAPUXEfALTDpHp@t@JT@d@HLHDH@HAZoAxHe@lDOx@k@rEs@zDi@vAmChEUh@Ql@EDOBOP{@zAg@n@s@rAOTIFUDOCyAq@{@i@i@S_CsAk@WMQAUh@cAh@sAZi@Ni@NSJWd@u@Tm@j@eANa@hAwHReAJeAFSLw@ToB@MHULcAPy@ZiCHc@JUFIHCLApANjBNzATb@BlALnBNLDDFDH@LMfAqAlIC^Mr@u@rFUnAMbAUrA[z@y@zAgBpCu@tAkAdBi@`AKVWXW^AJBBHCLOt@wAf@q@Tc@",
     "deviceName": "Strava Webhook Sync (Garmin/Coros)",
@@ -1087,6 +1237,8 @@
         "formattedPace": "06:03 /km",
         "elevationDiffMeters": 0,
         "averageHeartrate": 129,
+        "averageCadenceSpm": null,
+        "averageWatts": null,
         "isValid": true,
         "invalidReason": null
       },
@@ -1098,6 +1250,8 @@
         "formattedPace": "05:52 /km",
         "elevationDiffMeters": 0.6,
         "averageHeartrate": 140,
+        "averageCadenceSpm": null,
+        "averageWatts": null,
         "isValid": true,
         "invalidReason": null
       },
@@ -1109,6 +1263,8 @@
         "formattedPace": "05:49 /km",
         "elevationDiffMeters": -0.2,
         "averageHeartrate": 141,
+        "averageCadenceSpm": null,
+        "averageWatts": null,
         "isValid": true,
         "invalidReason": null
       },
@@ -1120,6 +1276,8 @@
         "formattedPace": "05:57 /km",
         "elevationDiffMeters": 1.2,
         "averageHeartrate": 143,
+        "averageCadenceSpm": null,
+        "averageWatts": null,
         "isValid": true,
         "invalidReason": null
       },
@@ -1131,6 +1289,8 @@
         "formattedPace": "05:52 /km",
         "elevationDiffMeters": -0.4,
         "averageHeartrate": 145,
+        "averageCadenceSpm": null,
+        "averageWatts": null,
         "isValid": true,
         "invalidReason": null
       },
@@ -1142,6 +1302,8 @@
         "formattedPace": "05:49 /km",
         "elevationDiffMeters": -0.2,
         "averageHeartrate": 145,
+        "averageCadenceSpm": null,
+        "averageWatts": null,
         "isValid": true,
         "invalidReason": null
       },
@@ -1153,6 +1315,8 @@
         "formattedPace": "05:47 /km",
         "elevationDiffMeters": 0.6,
         "averageHeartrate": 150,
+        "averageCadenceSpm": null,
+        "averageWatts": null,
         "isValid": true,
         "invalidReason": null
       },
@@ -1164,6 +1328,8 @@
         "formattedPace": "05:54 /km",
         "elevationDiffMeters": -1.6,
         "averageHeartrate": 147,
+        "averageCadenceSpm": null,
+        "averageWatts": null,
         "isValid": true,
         "invalidReason": null
       },
@@ -1175,6 +1341,8 @@
         "formattedPace": "05:51 /km",
         "elevationDiffMeters": -0.2,
         "averageHeartrate": 151,
+        "averageCadenceSpm": null,
+        "averageWatts": null,
         "isValid": true,
         "invalidReason": null
       },
@@ -1186,6 +1354,8 @@
         "formattedPace": "05:51 /km",
         "elevationDiffMeters": -1.4,
         "averageHeartrate": 154,
+        "averageCadenceSpm": null,
+        "averageWatts": null,
         "isValid": true,
         "invalidReason": null
       },
@@ -1197,6 +1367,8 @@
         "formattedPace": "08:42 /km",
         "elevationDiffMeters": 0,
         "averageHeartrate": 154,
+        "averageCadenceSpm": null,
+        "averageWatts": null,
         "isValid": true,
         "invalidReason": null
       }
@@ -1228,6 +1400,8 @@
     "averageHeartrate": 140.6,
     "maxHeartrate": 158,
     "averageCadenceSpm": 185.6,
+    "avgWatts": null,
+    "maxWatts": null,
     "calories": 809,
     "mapPolyline": "kj~`CkyucSFDZGJKFQFCD?JDTVP\\@TNb@Fh@h@zB?XJR@XVnAJr@hAzFPrA^dBf@nEbA|HvBpHt@`Cj@vBPd@jAzDf@nBJPTPVJFHVz@`@`BPf@@TVvBHjA?n@BXFBbAR@A?Ce@MOASFEJElBM`BOdAg@dCkC`La@pB]vBGn@GrAAnADzAFpAPnAVvAN`@l@|B|@|CHPJd@b@nACJODK?GEWo@Ia@kA_EgA_EWoASuBIgB@uAFuBJgAJs@AMRe@?OF[|@uDReAZiA`@qBj@_CHq@Pk@BUCM?UJiAF_@D}@CqAEMGa@?a@CS?UMcA]mAMYEYSk@m@cCYw@Qq@m@oBMYIc@_A}Ce@eBy@mCUcASk@I_@O_@WuAEq@Ke@QoAEk@Kg@Cm@Mi@AQJCLBLNLp@LlALx@VtBb@tBRr@JXR|@Pd@FZXz@lAjEk@o@UKIQ{C{Ke@}CKiAA[Ka@Ky@S_AI_A[mBScBmAeGg@yCKc@Is@IYKq@Oe@UqAQc@GCm@De@JpBl@FFp@xCPjAl@rCZtBt@vDXfBThBd@l@Nh@d@`DXlCL^P`An@~BVr@D`@FLr@dCTj@Hb@Rh@b@bBv@~Br@pCdBzFb@xCHhA?tBEdBO~AU`BaAfEOf@o@|CUz@WnA]tAa@vCKjCAhAFrAH`AZ|BHd@XdAlBnGAB_@JKCCGG]kBqGUaAKw@UmBGoAAgBJgCV_CP}@dAuE@QHSPo@~AiH`@oCN_C@gACeAQuBMy@u@yCQe@W}@EWi@aBk@uBYs@Ic@aA}CiCcJ]cAw@qFEe@GUKuAI[Ic@IaAIYe@qDc@_CUu@YmB]_Bq@uD",
     "deviceName": "Strava Webhook Sync (Garmin/Coros)",
@@ -1245,6 +1419,8 @@
         "formattedPace": "05:57 /km",
         "elevationDiffMeters": -2.2,
         "averageHeartrate": 124,
+        "averageCadenceSpm": null,
+        "averageWatts": null,
         "isValid": true,
         "invalidReason": null
       },
@@ -1256,6 +1432,8 @@
         "formattedPace": "05:59 /km",
         "elevationDiffMeters": -1.4,
         "averageHeartrate": 138,
+        "averageCadenceSpm": null,
+        "averageWatts": null,
         "isValid": true,
         "invalidReason": null
       },
@@ -1267,6 +1445,8 @@
         "formattedPace": "05:57 /km",
         "elevationDiffMeters": 0.4,
         "averageHeartrate": 138,
+        "averageCadenceSpm": null,
+        "averageWatts": null,
         "isValid": true,
         "invalidReason": null
       },
@@ -1278,6 +1458,8 @@
         "formattedPace": "05:57 /km",
         "elevationDiffMeters": -0.6,
         "averageHeartrate": 139,
+        "averageCadenceSpm": null,
+        "averageWatts": null,
         "isValid": true,
         "invalidReason": null
       },
@@ -1289,6 +1471,8 @@
         "formattedPace": "05:53 /km",
         "elevationDiffMeters": 2.8,
         "averageHeartrate": 143,
+        "averageCadenceSpm": null,
+        "averageWatts": null,
         "isValid": true,
         "invalidReason": null
       },
@@ -1300,6 +1484,8 @@
         "formattedPace": "05:56 /km",
         "elevationDiffMeters": -0.2,
         "averageHeartrate": 144,
+        "averageCadenceSpm": null,
+        "averageWatts": null,
         "isValid": true,
         "invalidReason": null
       },
@@ -1311,6 +1497,8 @@
         "formattedPace": "06:04 /km",
         "elevationDiffMeters": 5.2,
         "averageHeartrate": 135,
+        "averageCadenceSpm": null,
+        "averageWatts": null,
         "isValid": true,
         "invalidReason": null
       },
@@ -1322,6 +1510,8 @@
         "formattedPace": "05:41 /km",
         "elevationDiffMeters": -5.2,
         "averageHeartrate": 139,
+        "averageCadenceSpm": null,
+        "averageWatts": null,
         "isValid": true,
         "invalidReason": null
       },
@@ -1333,6 +1523,8 @@
         "formattedPace": "05:52 /km",
         "elevationDiffMeters": 1.2,
         "averageHeartrate": 143,
+        "averageCadenceSpm": null,
+        "averageWatts": null,
         "isValid": true,
         "invalidReason": null
       },
@@ -1344,6 +1536,8 @@
         "formattedPace": "05:53 /km",
         "elevationDiffMeters": -0.8,
         "averageHeartrate": 146,
+        "averageCadenceSpm": null,
+        "averageWatts": null,
         "isValid": true,
         "invalidReason": null
       },
@@ -1355,6 +1549,8 @@
         "formattedPace": "05:50 /km",
         "elevationDiffMeters": 1,
         "averageHeartrate": 147,
+        "averageCadenceSpm": null,
+        "averageWatts": null,
         "isValid": true,
         "invalidReason": null
       },
@@ -1366,6 +1562,8 @@
         "formattedPace": "05:49 /km",
         "elevationDiffMeters": 0.8,
         "averageHeartrate": 151,
+        "averageCadenceSpm": null,
+        "averageWatts": null,
         "isValid": true,
         "invalidReason": null
       }

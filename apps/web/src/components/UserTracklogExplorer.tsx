@@ -36,7 +36,8 @@ export interface TracklogSplitItem {
   formattedPace: string;
   elevationDiffMeters: number;
   averageHeartrate: number | null;
-  cadenceSpm?: number;
+  cadenceSpm?: number | null;
+  watts?: number | null;
   isValid: boolean;
   invalidReason: string | null;
 }
@@ -65,6 +66,8 @@ export interface TracklogActivityItem {
   avgHr: number;
   maxHr?: number;
   avgCadence: number;
+  avgWatts?: number | null;
+  maxWatts?: number | null;
   calories?: number;
   deviceName: string;
   isHidden?: boolean;

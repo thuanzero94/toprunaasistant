@@ -14,7 +14,7 @@ import {
   normalizeSportCategory,
   SportCategory,
 } from './types';
-import { calculatePaceSecPerKm, formatPace, roundKm } from './pace';
+import { calculatePaceSecPerKm, formatPace, formatSportSpeed, roundKm } from './pace';
 import { toVietnamDateString, isVietnamWeekend } from './date-utils';
 
 /**
@@ -147,8 +147,8 @@ export function evaluateActivitySplits(
   let effectiveMinPace = rules.minPaceSecPerKm;
   let effectiveMaxPace = rules.maxPaceSecPerKm;
   if (sportCat === 'Ride') {
-    effectiveMinPace = 80;  // 45 km/h
-    effectiveMaxPace = 360; // 10 km/h
+    effectiveMinPace = rules.rideMinPaceSecPerKm ?? 45;  // 80 km/h (45s/km)
+    effectiveMaxPace = rules.rideMaxPaceSecPerKm ?? 720; // 5 km/h (720s/km)
   } else if (sportCat === 'Swim') {
     effectiveMinPace = 700;  // ~1:10 /100m
     effectiveMaxPace = 2400; // ~4:00 /100m
@@ -182,9 +182,11 @@ export function evaluateActivitySplits(
       distanceMeters: split.distanceMeters,
       movingTimeSec: split.movingTimeSec,
       paceSecPerKm,
-      formattedPace: formatPace(paceSecPerKm),
+      formattedPace: formatSportSpeed(paceSecPerKm, activity.sportType),
       elevationDiffMeters: split.elevationDiffMeters ?? 0,
       averageHeartrate: split.averageHeartrate ?? null,
+      averageCadenceSpm: split.averageCadenceSpm ?? null,
+      averageWatts: (split as any).averageWatts ?? null,
       isValid,
       invalidReason,
     });
@@ -201,7 +203,7 @@ export function evaluateActivitySplits(
   if (!rules.allowSplitFiltering && fastSplitCount > 0) {
     return {
       antiCheatStatus: AntiCheatStatus.REJECTED,
-      rejectionReason: `Phát hiện ${fastSplitCount} km vi phạm tốc độ tối đa cho phép (${formatPace(rules.minPaceSecPerKm)}).`,
+      rejectionReason: sportCat === 'Ride' ? `Phát hiện ${fastSplitCount} km vi phạm tốc độ tối đa cho phép (> 80 km/h).` : `Phát hiện ${fastSplitCount} km vi phạm tốc độ tối đa cho phép (${formatPace(rules.minPaceSecPerKm)}).`,
       rawDistanceKm,
       validDistanceKm: 0,
       invalidDistanceKm: rawDistanceKm,
@@ -240,7 +242,7 @@ export function evaluateActivitySplits(
   let antiCheatStatus = AntiCheatStatus.VALID;
   if (fastSplitCount > 0) {
     flagReasons.push(
-      `Đã tự động cắt bỏ ${fastSplitCount} km có tốc độ nhanh bất thường (< ${formatPace(rules.minPaceSecPerKm)}).`
+      sportCat === 'Ride' ? `Đã tự động cắt bỏ ${fastSplitCount} km có tốc độ nhanh bất thường (> 80 km/h).` : `Đã tự động cắt bỏ ${fastSplitCount} km có tốc độ nhanh bất thường (< ${formatPace(rules.minPaceSecPerKm)}).`
     );
     // Nếu hơn 40% số km bị quá tốc độ -> Đưa vào diện FLAGGED để Admin chú ý
     if (invalidDistanceKm / rawDistanceKm > 0.4) {

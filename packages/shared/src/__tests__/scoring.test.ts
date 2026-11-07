@@ -4,6 +4,7 @@ import {
   AntiCheatStatus,
   ChallengeConditionType,
   EventRuleConfigSchema,
+  RawActivityInput,
   RunMode,
   SplitInvalidReason,
   SportType,
@@ -12,6 +13,13 @@ import {
   encodePolyline,
   evaluateActivitySplits,
   formatPace,
+  formatSportSpeed,
+  formatSportDistance,
+  getSpeedMetricLabel,
+  getSpeedSplitLabel,
+  calculateSpeedKmh,
+  formatSpeedKmh,
+  formatSwimPace,
 } from '../index';
 
 describe('@toprun/shared - Split-Level Anti-Cheat & Dual-Goal Scoring Engine', () => {
@@ -143,5 +151,64 @@ describe('@toprun/shared - Split-Level Anti-Cheat & Dual-Goal Scoring Engine', (
     assert.equal(decoded.length, 2);
     assert.ok(Math.abs(decoded[0].lat - coords[0].lat) < 0.001);
   });
+  it('5. Định dạng Tốc độ / Cự ly cho Đạp xe (km/h) và Bơi lội (phút/100m, mét)', () => {
+    // Đạp xe: 67s/km -> 53.7 km/h, 106s/km -> 34.0 km/h
+    assert.equal(formatSportSpeed(67, 'Ride'), '53.7 km/h');
+    assert.equal(formatSportSpeed(106, 'Ride'), '34.0 km/h');
+    assert.equal(getSpeedMetricLabel('Ride'), 'Tốc độ TB (km/h)');
+    assert.equal(getSpeedSplitLabel('Ride'), 'Tốc độ');
+
+    // Bơi lội: 2030s/km (33:50/km) -> 203s/100m -> 03:23 /100m
+    assert.equal(formatSportSpeed(2030, 'Swim'), '03:23 /100m');
+    assert.equal(getSpeedMetricLabel('Swim'), 'Pace TB (phút/100m)');
+    assert.equal(getSpeedSplitLabel('Swim'), 'Pace');
+
+    // Cự ly bơi < 10km hiển thị mét
+    assert.equal(formatSportDistance(0.9, 'Swim'), '900 m');
+    assert.equal(formatSportDistance(1.5, 'Swim'), '1.500 m');
+    assert.equal(formatSportDistance(12.0, 'Swim'), '12 km');
+    assert.equal(formatSportDistance(10.5, 'Ride'), '10.5 km');
+  });
+
+  it('6. Chống gian lận Đạp xe: Cho phép tốc độ lên tới 80 km/h (Pace 45s/km)', () => {
+    const rideRules = EventRuleConfigSchema.parse({
+      allowedSportTypes: [SportType.RIDE, SportType.RUN],
+      enableCrossTrainingConversion: true,
+      minActivityDistanceKm: 1.0,
+      rideMinPaceSecPerKm: 45, // 80 km/h
+    });
+
+    const rideActivity: RawActivityInput = {
+      externalId: 'strava_ride_80kmh',
+      name: 'Thử thách đổ đèo xe đạp',
+      sportType: SportType.RIDE,
+      startDateIso: '2026-11-04T07:00:00.000Z',
+      distanceMeters: 3000,
+      movingTimeSec: 212,
+      elapsedTimeSec: 220,
+      totalElevationGainMeters: 50,
+      averageHeartrate: 145,
+      isManual: false,
+      splits: [
+        { splitIndex: 1, distanceMeters: 1000, movingTimeSec: 106 }, // ~34.0 km/h -> Hợp lệ
+        { splitIndex: 2, distanceMeters: 1000, movingTimeSec: 67 },  // ~53.7 km/h -> Hợp lệ (trước đây bị PACE_TOO_FAST)
+        { splitIndex: 3, distanceMeters: 1000, movingTimeSec: 39 },  // ~92.3 km/h > 80 km/h -> Bị LOẠI
+      ],
+    };
+
+    const result = evaluateActivitySplits(rideActivity, rideRules);
+    assert.equal(result.evaluatedSplits[0].isValid, true);
+    assert.equal(result.evaluatedSplits[0].formattedPace, '34.0 km/h');
+
+    // Km thứ 2 đạt 53.7 km/h: HỢP LỆ THEO LUẬT MỚI 80 KM/H!
+    assert.equal(result.evaluatedSplits[1].isValid, true);
+    assert.equal(result.evaluatedSplits[1].formattedPace, '53.7 km/h');
+
+    // Km thứ 3 vượt 80 km/h (92.3 km/h): LOẠI PACE_TOO_FAST
+    assert.equal(result.evaluatedSplits[2].isValid, false);
+    assert.equal(result.evaluatedSplits[2].invalidReason, SplitInvalidReason.PACE_TOO_FAST);
+    assert.equal(result.validDistanceKm, 2);
+  });
 });
+
 

@@ -21,6 +21,10 @@ import {
   encodePolyline,
   evaluateActivitySplits,
   formatPace,
+  formatSportSpeed,
+  formatSportDistance,
+  getSpeedMetricLabel,
+  getSpeedSplitLabel,
   normalizeSportCategory,
   parseGpxToActivityInput,
   roundKm,
@@ -85,6 +89,8 @@ export interface StoredActivity {
   averageHeartrate: number | null;
   maxHeartrate: number | null;
   averageCadenceSpm: number | null;
+  avgWatts?: number | null;
+  maxWatts?: number | null;
   calories: number;
   mapPolyline: string;
   deviceName: string;
@@ -101,6 +107,8 @@ export interface StoredActivity {
     formattedPace: string;
     elevationDiffMeters: number;
     averageHeartrate: number | null;
+    averageCadenceSpm?: number | null;
+    averageWatts?: number | null;
     isValid: boolean;
     invalidReason: string | null;
   }>;
@@ -1136,47 +1144,92 @@ export class TopRunEngineService implements OnModuleInit {
       });
 
       if (dbActivities.length > 0) {
-        this.activities = dbActivities.map((da) => ({
-          id: da.id,
-          userId: da.userId,
-          userName: da.user.fullName,
-          userAvatar: da.user.avatarUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${da.userId}`,
-          userDepartment: da.user.departmentOrUnit || 'Runner Community',
-          source: da.source as any,
-          externalId: da.externalId,
-          name: da.name,
-          sportType: da.sportType,
-          startDateIso: da.startDate.toISOString(),
-          rawDistanceKm: roundKm(da.distanceMeters / 1000),
-          validDistanceKm: da.validDistanceKm,
-          invalidDistanceKm: roundKm(Math.max(0, da.distanceMeters / 1000 - da.validDistanceKm)),
-          movingTimeSec: da.movingTimeSec,
-          elapsedTimeSec: da.elapsedTimeSec,
-          avgPaceSecPerKm: da.avgPaceSecPerKm,
-          formattedPace: formatPace(da.avgPaceSecPerKm),
-          totalElevationGainMeters: da.totalElevationGain,
-          averageHeartrate: da.avgHeartrate,
-          maxHeartrate: da.maxHeartrate,
-          averageCadenceSpm: da.avgCadenceSpm,
-          calories: da.calories || Math.round(da.validDistanceKm * 68),
-          mapPolyline: da.mapPolyline || '',
-          deviceName: da.deviceName || 'Strava Sync',
-          isManual: da.isManual,
-          isHidden: da.isHidden,
-          antiCheatStatus: da.antiCheatStatus as any,
-          flagReasons: Array.isArray(da.flagReasons) ? (da.flagReasons as string[]) : [],
-          adminReviewNote: da.adminReviewNote,
-          splits: da.splits.map((sp) => ({
-            splitIndex: sp.splitIndex,
-            distanceMeters: sp.distanceMeters,
-            movingTimeSec: sp.movingTimeSec,
-            paceSecPerKm: sp.paceSecPerKm,
-            formattedPace: formatPace(sp.paceSecPerKm),
-            elevationDiffMeters: sp.elevationDiffMeters,
-            averageHeartrate: sp.avgHeartrate,
-            isValid: sp.isValid,
-            invalidReason: sp.invalidReason,
-          })),
+        // Tự động kiểm tra và re-evaluate hoạt động Đạp xe theo ngưỡng mới 80km/h
+        for (const da of dbActivities) {
+          if (normalizeSportCategory(da.sportType) === 'Ride') {
+            let updatedAnySplit = false;
+            for (const sp of da.splits) {
+              // Ngưỡng 80 km/h tương đương paceSecPerKm >= 45s/km
+              if (!sp.isValid && sp.invalidReason === 'PACE_TOO_FAST' && sp.paceSecPerKm >= 45) {
+                sp.isValid = true;
+                sp.invalidReason = null;
+                updatedAnySplit = true;
+                try {
+                  await prisma.activitySplit.update({
+                    where: { id: sp.id },
+                    data: { isValid: true, invalidReason: null },
+                  });
+                } catch {}
+              }
+            }
+            if (updatedAnySplit) {
+              const newValidDistanceKm = roundKm(
+                da.splits.filter((s) => s.isValid).reduce((acc, cur) => acc + cur.distanceMeters, 0) / 1000
+              );
+              da.validDistanceKm = newValidDistanceKm;
+              try {
+                await prisma.activity.update({
+                  where: { id: da.id },
+                  data: {
+                    validDistanceKm: newValidDistanceKm,
+                    antiCheatStatus: da.splits.some((s) => !s.isValid) ? AntiCheatStatus.PARTIAL_VALID : AntiCheatStatus.VALID,
+                  },
+                });
+              } catch {}
+            }
+          }
+        }
+
+        this.activities = dbActivities.map((da) => {
+          const raw = (da.rawPayload as any) || {};
+          const avgWatts = raw.average_watts ? Math.round(Number(raw.average_watts)) : null;
+          const maxWatts = raw.max_watts ? Math.round(Number(raw.max_watts)) : null;
+
+          return {
+            id: da.id,
+            userId: da.userId,
+            userName: da.user.fullName,
+            userAvatar: da.user.avatarUrl || `https://api.dicebear.com/7.x/avataaars/svg?seed=${da.userId}`,
+            userDepartment: da.user.departmentOrUnit || 'Runner Community',
+            source: da.source as any,
+            externalId: da.externalId,
+            name: da.name,
+            sportType: da.sportType,
+            startDateIso: da.startDate.toISOString(),
+            rawDistanceKm: roundKm(da.distanceMeters / 1000),
+            validDistanceKm: da.validDistanceKm,
+            invalidDistanceKm: roundKm(Math.max(0, da.distanceMeters / 1000 - da.validDistanceKm)),
+            movingTimeSec: da.movingTimeSec,
+            elapsedTimeSec: da.elapsedTimeSec,
+            avgPaceSecPerKm: da.avgPaceSecPerKm,
+            formattedPace: formatSportSpeed(da.avgPaceSecPerKm, da.sportType),
+            totalElevationGainMeters: da.totalElevationGain,
+            averageHeartrate: da.avgHeartrate,
+            maxHeartrate: da.maxHeartrate,
+            averageCadenceSpm: da.avgCadenceSpm,
+            avgWatts,
+            maxWatts,
+            calories: da.calories || Math.round(da.validDistanceKm * 68),
+            mapPolyline: da.mapPolyline || '',
+            deviceName: da.deviceName || 'Strava Sync',
+            isManual: da.isManual,
+            isHidden: da.isHidden,
+            antiCheatStatus: da.antiCheatStatus as any,
+            flagReasons: Array.isArray(da.flagReasons) ? (da.flagReasons as string[]) : [],
+            adminReviewNote: da.adminReviewNote,
+            splits: da.splits.map((sp) => ({
+              splitIndex: sp.splitIndex,
+              distanceMeters: sp.distanceMeters,
+              movingTimeSec: sp.movingTimeSec,
+              paceSecPerKm: sp.paceSecPerKm,
+              formattedPace: formatSportSpeed(sp.paceSecPerKm, da.sportType),
+              elevationDiffMeters: sp.elevationDiffMeters,
+              averageHeartrate: sp.avgHeartrate,
+              averageCadenceSpm: sp.avgCadenceSpm,
+              averageWatts: (sp as any).avgWatts ?? null,
+              isValid: sp.isValid,
+              invalidReason: sp.invalidReason,
+            })),
           kudosCount: da.kudosCount || da.kudos.length,
           kudoedByUserIds: da.kudos.map((k) => k.userId),
           comments: da.comments.map((cm) => ({
@@ -1187,8 +1240,9 @@ export class TopRunEngineService implements OnModuleInit {
             createdAtIso: cm.createdAt.toISOString(),
           })),
           eventContributions: [],
-        }));
-        this.deduplicateInMemoryActivities();
+        };
+      });
+      this.deduplicateInMemoryActivities();
       }
     } catch (err) {
       console.warn('[TopRunEngine] Lỗi đồng bộ activities với DB:', err);
@@ -3941,7 +3995,9 @@ export class TopRunEngineService implements OnModuleInit {
       movingTimeSec: rawInput.movingTimeSec,
       elapsedTimeSec: rawInput.elapsedTimeSec,
       avgPaceSecPerKm: evaluation.validAvgPaceSecPerKm,
-      formattedPace: formatPace(evaluation.validAvgPaceSecPerKm),
+      formattedPace: formatSportSpeed(evaluation.validAvgPaceSecPerKm, rawInput.sportType),
+      avgWatts: (rawInput as any).averageWatts ?? null,
+      maxWatts: (rawInput as any).maxWatts ?? null,
       totalElevationGainMeters: rawInput.totalElevationGainMeters,
       averageHeartrate: rawInput.averageHeartrate ?? null,
       maxHeartrate: rawInput.maxHeartrate ?? null,

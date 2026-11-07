@@ -23,6 +23,11 @@ import {
   AntiCheatStatus,
   formatDuration,
   formatPace,
+  formatSportSpeed,
+  formatSportDistance,
+  getSpeedMetricLabel,
+  getSpeedSplitLabel,
+  getSpeedUnit,
   polylineToSvgPath,
   roundKm,
   normalizeSportCategory,
@@ -134,7 +139,7 @@ export default function TracklogActivityCard({
       if (!fastestSplit || sp.paceSecPerKm < fastestSplit.paceSec) {
         fastestSplit = {
           index: sp.splitIndex,
-          paceFormatted: sp.formattedPace || formatPace(sp.paceSecPerKm),
+          paceFormatted: sp.formattedPace || formatSportSpeed(sp.paceSecPerKm, activity.sportType),
           paceSec: sp.paceSecPerKm,
         };
       }
@@ -428,14 +433,14 @@ export default function TracklogActivityCard({
           <div>
             <span className="text-[11px] text-slate-500 dark:text-slate-400 block">Quãng đường</span>
             <span className="text-base sm:text-xl font-extrabold font-mono text-slate-900 dark:text-white tabular-nums">
-              {countedKm} <span className="text-xs sm:text-sm font-semibold">km</span>
+              {formatSportDistance(countedKm, activity.sportType)}
             </span>
           </div>
 
           <div>
-            <span className="text-[11px] text-slate-500 dark:text-slate-400 block">Nhịp độ</span>
+            <span className="text-[11px] text-slate-500 dark:text-slate-400 block">{getSpeedMetricLabel(activity.sportType)}</span>
             <span className="text-base sm:text-xl font-extrabold font-mono text-slate-900 dark:text-white tabular-nums">
-              {formatPace(activity.avgPaceSecPerKm)} <span className="text-xs sm:text-sm font-semibold">/km</span>
+              {formatSportSpeed(activity.avgPaceSecPerKm, activity.sportType)}
             </span>
           </div>
 
@@ -466,9 +471,9 @@ export default function TracklogActivityCard({
                 PR
               </div>
               <div className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate">
-                Km nhanh nhất: Km #{achievementSummary.fastestSplit.index} (Pace{' '}
+                {getSpeedSplitLabel(activity.sportType)} tốt nhất: Mốc #{achievementSummary.fastestSplit.index} ({' '}
                 <span className="font-mono text-[#FC4C02]">
-                  {achievementSummary.fastestSplit.paceFormatted}/km
+                  {achievementSummary.fastestSplit.paceFormatted}
                 </span>
                 )
                 {activity.avgHr > 0 && (
