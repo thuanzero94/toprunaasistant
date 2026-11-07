@@ -811,6 +811,24 @@ export default function TopRunWebApp() {
     };
   }, []);
 
+  const deduplicateUiActivities = useCallback((items: TracklogActivityItem[]) => {
+    const seen = new Set<string>();
+    return items.filter((a) => {
+      if (!a) return false;
+      const extKey = a.externalId ? `ext:${a.userId}:${String(a.externalId).trim()}` : '';
+      const ts = a.startDateIso ? Math.floor(new Date(a.startDateIso).getTime() / 120000) : 0;
+      const distBucket = Math.round(Number(a.rawDistanceKm || a.validDistanceKm || 0) * 50);
+      const fpKey = ts > 0 ? `fp:${a.userId}:${ts}:${distBucket}` : '';
+      if ((extKey && seen.has(extKey)) || (fpKey && seen.has(fpKey)) || seen.has(`id:${a.id}`)) {
+        return false;
+      }
+      if (extKey) seen.add(extKey);
+      if (fpKey) seen.add(fpKey);
+      seen.add(`id:${a.id}`);
+      return true;
+    });
+  }, []);
+
   const fetchActivitiesFromBackend = useCallback(
     async (selectNewestMine = false) => {
       try {
@@ -823,7 +841,7 @@ export default function TopRunWebApp() {
         if (!res.ok) return;
         const list = await res.json();
         if (Array.isArray(list)) {
-          const mapped = list.map(mapBackendActivityToUi);
+          const mapped = deduplicateUiActivities(list.map(mapBackendActivityToUi));
           setActivities(mapped);
           const firstMine = user?.id
             ? mapped.find((a) => a.userId === user.id)
@@ -950,12 +968,8 @@ export default function TopRunWebApp() {
           if (res.ok) {
             const list = await res.json();
             if (Array.isArray(list) && list.length > 0) {
-              const mapped = list.map(mapBackendActivityToUi);
-              setActivities((prev) => {
-                const prevIds = new Set(prev.map((a) => a.id));
-                const added = mapped.filter((m) => !prevIds.has(m.id));
-                return [...added, ...prev];
-              });
+              const mapped = deduplicateUiActivities(list.map(mapBackendActivityToUi));
+              setActivities((prev) => deduplicateUiActivities([...mapped, ...prev]));
               userActivities = mapped;
             }
           }
@@ -965,14 +979,16 @@ export default function TopRunWebApp() {
       }
 
       // Nếu mở từ giải đấu: chỉ hiển thị bài trong thời gian giải và hợp lệ (không bị từ chối)
-      let filteredActs = fromEvent
-        ? userActivities.filter((a) => {
-            if (a.isHidden || a.antiCheatStatus === AntiCheatStatus.REJECTED) return false;
-            return a.startDateIso
-              ? isActivityInEventRange(a.startDateIso, currentEventData?.startDateIso, currentEventData?.endDateIso)
-              : false;
-          })
-        : userActivities.filter((a) => !a.isHidden && a.antiCheatStatus !== AntiCheatStatus.REJECTED);
+      let filteredActs = deduplicateUiActivities(
+        fromEvent
+          ? userActivities.filter((a) => {
+              if (a.isHidden || a.antiCheatStatus === AntiCheatStatus.REJECTED) return false;
+              return a.startDateIso
+                ? isActivityInEventRange(a.startDateIso, currentEventData?.startDateIso, currentEventData?.endDateIso)
+                : false;
+            })
+          : userActivities.filter((a) => !a.isHidden && a.antiCheatStatus !== AntiCheatStatus.REJECTED)
+      );
 
       let challengeFilterMeta: any = undefined;
       if (challengeContext) {

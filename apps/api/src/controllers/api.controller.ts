@@ -531,7 +531,7 @@ export class ApiController {
     const syncRes = await this.engine.syncLiveStravaActivities(userId, windowDays);
 
     const validCount = syncRes.syncedActivities.filter(
-      (a) => a.antiCheatStatus === AntiCheatStatus.VALID
+      (a: any) => a.antiCheatStatus === AntiCheatStatus.VALID
     ).length;
     const flaggedCount = syncRes.syncedActivities.length - validCount;
 
@@ -647,6 +647,13 @@ export class ApiController {
     }
     const targetUserId = queryUserId || viewerUserId;
     return this.engine.getActivities(targetUserId, viewerRole, viewerUserId);
+  }
+
+  @Post('admin/activities/deduplicate')
+  @HttpCode(200)
+  @ApiOperation({ summary: '[Admin] Quét và xoá toàn bộ Tracklog bị trùng lặp (RAM + PostgreSQL), tính lại KM chuẩn cho mọi VĐV' })
+  async deduplicateActivities() {
+    return this.engine.deduplicateActivitiesAndRecalculate();
   }
 
   @Get('activities/:id')

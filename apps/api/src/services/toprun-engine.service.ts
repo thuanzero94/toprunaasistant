@@ -241,6 +241,7 @@ export class TopRunEngineService implements OnModuleInit {
   };
 
   private deletedExternalIds = new Set<string>();
+  private activeUserSyncLocks = new Map<string, Promise<any>>();
 
   private getDataFilePath(): string {
     if (process.env.DATA_DIR) {
@@ -386,8 +387,9 @@ export class TopRunEngineService implements OnModuleInit {
       // 3. Đồng bộ bảng Participations & RaceKitOrders
       await this.syncParticipationsWithDatabase();
 
-      // 4. Đồng bộ bảng Activities & Splits
+      // 4. Đồng bộ bảng Activities & Splits + Tự động khử trùng lặp (Deduplicate)
       await this.syncActivitiesWithDatabase();
+      await this.deduplicateActivitiesAndRecalculate();
 
       // 5. Đồng bộ bảng Clubs
       await this.syncClubsWithDatabase();
@@ -396,6 +398,7 @@ export class TopRunEngineService implements OnModuleInit {
       for (const u of this.users) {
         this.recalculateUserParticipation(u.id);
       }
+      this.saveEngineState();
 
       console.log(
         `✅ [TopRunEngine] Đồng bộ PostgreSQL hoàn tất! (${this.events.length} giải đấu, ${this.participations.length} lượt tham gia, ${this.activities.length} tracklogs, ${this.users.length} vận động viên).`
@@ -958,14 +961,167 @@ export class TopRunEngineService implements OnModuleInit {
     }
   }
 
-  private async syncActivitiesWithDatabase() {
+  private getActivityDedupKeys(
+    userId: string,
+    externalId?: string | null,
+    startDateIso?: string | Date | null,
+    distanceMeters?: number | null
+  ): string[] {
+    const keys: string[] = [];
+    const uid = String(userId || '').trim();
+    const ext = String(externalId || '').trim();
+    if (uid && ext) {
+      keys.push(`ext:${uid}:${ext}`);
+    }
+    if (uid && startDateIso) {
+      const ts = new Date(startDateIso).getTime();
+      if (!Number.isNaN(ts) && ts > 0) {
+        // Làm tròn thời gian bắt đầu theo khung 2 phút + quãng đường làm tròn 20m để bắt mọi bản ghi trùng
+        const timeBucket = Math.floor(ts / 120000);
+        const distBucket = Math.round(Number(distanceMeters || 0) / 20);
+        keys.push(`fp:${uid}:${timeBucket}:${distBucket}`);
+      }
+    }
+    return keys;
+  }
+
+  public deduplicateInMemoryActivities(): { removedCount: number; affectedUserIds: string[] } {
+    const seenKeys = new Set<string>();
+    const deduplicated: StoredActivity[] = [];
+    const affectedUserIds = new Set<string>();
+    let removedCount = 0;
+
+    for (const act of this.activities) {
+      if (!act || !act.userId) continue;
+      if (act.externalId && this.deletedExternalIds.has(String(act.externalId))) {
+        removedCount++;
+        affectedUserIds.add(act.userId);
+        continue;
+      }
+      const keys = this.getActivityDedupKeys(
+        act.userId,
+        act.externalId,
+        act.startDateIso,
+        Math.round(Number(act.rawDistanceKm || act.validDistanceKm || 0) * 1000)
+      );
+      const isDuplicate = keys.some((k) => seenKeys.has(k));
+      if (isDuplicate) {
+        removedCount++;
+        affectedUserIds.add(act.userId);
+        continue;
+      }
+      for (const k of keys) {
+        seenKeys.add(k);
+      }
+      if (act.externalId && act.source === ActivitySource.STRAVA && /^act_\d+$/.test(act.id)) {
+        act.id = `act_strava_${String(act.externalId).trim()}`;
+      }
+      deduplicated.push(act);
+    }
+
+    if (removedCount > 0) {
+      this.activities = deduplicated;
+    }
+    return { removedCount, affectedUserIds: Array.from(affectedUserIds) };
+  }
+
+  public async deduplicateActivitiesAndRecalculate(): Promise<{
+    removedFromMemory: number;
+    removedFromDb: number;
+    affectedUserIds: string[];
+  }> {
+    const affectedUsers = new Set<string>();
+    const memRes = this.deduplicateInMemoryActivities();
+    for (const uid of memRes.affectedUserIds) {
+      affectedUsers.add(uid);
+    }
+
+    let removedFromDb = 0;
     try {
-      const dbCount = await prisma.activity.count();
-      if (dbCount === 0) {
-        for (const act of this.activities) {
-          await this.persistActivityToDb(act);
+      const allDbActs = await prisma.activity.findMany({
+        select: {
+          id: true,
+          userId: true,
+          externalId: true,
+          startDate: true,
+          distanceMeters: true,
+          createdAt: true,
+        },
+        orderBy: [{ startDate: 'desc' }, { createdAt: 'asc' }],
+      });
+
+      const seenDbKeys = new Set<string>();
+      const duplicateDbIds: string[] = [];
+
+      for (const row of allDbActs) {
+        if (row.externalId && this.deletedExternalIds.has(String(row.externalId))) {
+          duplicateDbIds.push(row.id);
+          affectedUsers.add(row.userId);
+          continue;
+        }
+        const keys = this.getActivityDedupKeys(
+          row.userId,
+          row.externalId,
+          row.startDate,
+          row.distanceMeters
+        );
+        if (keys.some((k) => seenDbKeys.has(k))) {
+          duplicateDbIds.push(row.id);
+          affectedUsers.add(row.userId);
+        } else {
+          for (const k of keys) {
+            seenDbKeys.add(k);
+          }
         }
       }
+
+      if (duplicateDbIds.length > 0) {
+        await prisma.activity.deleteMany({
+          where: { id: { in: duplicateDbIds } },
+        });
+        removedFromDb = duplicateDbIds.length;
+        const dupIdSet = new Set(duplicateDbIds);
+        this.activities = this.activities.filter((a) => !dupIdSet.has(a.id));
+      }
+    } catch (err) {
+      console.warn('[TopRunEngine] Cảnh báo khi khử trùng lặp Activities trong DB:', err);
+    }
+
+    const memResAfter = this.deduplicateInMemoryActivities();
+    for (const uid of memResAfter.affectedUserIds) {
+      affectedUsers.add(uid);
+    }
+
+    const totalRemovedMem = memRes.removedCount + memResAfter.removedCount;
+    if (totalRemovedMem > 0 || removedFromDb > 0 || affectedUsers.size > 0) {
+      for (const u of this.users) {
+        this.recalculateUserParticipation(u.id);
+      }
+      this.saveEngineState();
+      console.log(
+        `🧹 [TopRunEngine] Đã dọn dẹp Tracklog trùng lặp: Xoá ${totalRemovedMem} bản ghi RAM, ${removedFromDb} bản ghi DB (Cập nhật lại KM cho ${affectedUsers.size} VĐV).`
+      );
+    }
+
+    return {
+      removedFromMemory: totalRemovedMem,
+      removedFromDb,
+      affectedUserIds: Array.from(affectedUsers),
+    };
+  }
+
+  private async syncActivitiesWithDatabase() {
+    try {
+      // 1. Khử trùng lặp bộ nhớ RAM trước khi đồng bộ xuống PostgreSQL
+      this.deduplicateInMemoryActivities();
+
+      // 2. Đảm bảo toàn bộ bài chạy hợp lệ trong RAM (nếu trước đó bị kẹt do trùng ID act_Date.now()) được lưu xuống DB
+      for (const act of this.activities) {
+        await this.persistActivityToDb(act);
+      }
+
+      // 3. Khử trùng lặp trực tiếp trong bảng activities của PostgreSQL
+      await this.deduplicateActivitiesAndRecalculate();
 
       const dbActivities = await prisma.activity.findMany({
         include: {
@@ -1030,6 +1186,7 @@ export class TopRunEngineService implements OnModuleInit {
           })),
           eventContributions: [],
         }));
+        this.deduplicateInMemoryActivities();
       }
     } catch (err) {
       console.warn('[TopRunEngine] Lỗi đồng bộ activities với DB:', err);
@@ -1041,55 +1198,64 @@ export class TopRunEngineService implements OnModuleInit {
       const userExists = await prisma.user.findUnique({ where: { id: act.userId } });
       if (!userExists) return;
 
+      const extId = String(act.externalId || act.id).trim();
+      act.externalId = extId;
+      const safeCreateId =
+        act.source === ActivitySource.STRAVA && extId
+          ? `act_strava_${extId}`
+          : act.id && !/^act_\d+$/.test(act.id)
+            ? act.id
+            : `act_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
       const savedAct = await prisma.activity.upsert({
         where: {
           source_externalId: {
             source: act.source as any,
-            externalId: act.externalId,
+            externalId: extId,
           },
         },
         update: {
           user: { connect: { id: act.userId } },
           name: act.name,
           sportType: String(act.sportType),
-          validDistanceKm: act.validDistanceKm,
-          movingTimeSec: act.movingTimeSec,
-          elapsedTimeSec: act.elapsedTimeSec,
-          avgPaceSecPerKm: act.avgPaceSecPerKm,
-          totalElevationGain: act.totalElevationGainMeters,
-          avgHeartrate: act.averageHeartrate,
-          maxHeartrate: act.maxHeartrate,
-          avgCadenceSpm: act.averageCadenceSpm,
-          calories: act.calories,
-          mapPolyline: act.mapPolyline,
+          validDistanceKm: Number(act.validDistanceKm || 0),
+          movingTimeSec: Math.round(Number(act.movingTimeSec || 0)),
+          elapsedTimeSec: Math.round(Number(act.elapsedTimeSec || 0)),
+          avgPaceSecPerKm: Math.round(Number(act.avgPaceSecPerKm || 0)),
+          totalElevationGain: Number(act.totalElevationGainMeters || 0),
+          avgHeartrate: act.averageHeartrate ?? null,
+          maxHeartrate: act.maxHeartrate ?? null,
+          avgCadenceSpm: act.averageCadenceSpm ?? null,
+          calories: Number(act.calories || 0),
+          mapPolyline: act.mapPolyline || '',
           deviceName: act.deviceName,
-          isManual: act.isManual,
+          isManual: Boolean(act.isManual),
           isHidden: act.isHidden ?? false,
           antiCheatStatus: act.antiCheatStatus as any,
           flagReasons: (act.flagReasons || []) as any,
           adminReviewNote: act.adminReviewNote,
         },
         create: {
-          id: act.id,
+          id: safeCreateId,
           userId: act.userId,
           source: act.source as any,
-          externalId: act.externalId,
+          externalId: extId,
           name: act.name,
           sportType: String(act.sportType),
           startDate: new Date(act.startDateIso),
-          distanceMeters: act.rawDistanceKm * 1000,
-          validDistanceKm: act.validDistanceKm,
-          movingTimeSec: act.movingTimeSec,
-          elapsedTimeSec: act.elapsedTimeSec,
-          avgPaceSecPerKm: act.avgPaceSecPerKm,
-          totalElevationGain: act.totalElevationGainMeters,
-          avgHeartrate: act.averageHeartrate,
-          maxHeartrate: act.maxHeartrate,
-          avgCadenceSpm: act.averageCadenceSpm,
-          calories: act.calories,
-          mapPolyline: act.mapPolyline,
+          distanceMeters: Number(act.rawDistanceKm || 0) * 1000,
+          validDistanceKm: Number(act.validDistanceKm || 0),
+          movingTimeSec: Math.round(Number(act.movingTimeSec || 0)),
+          elapsedTimeSec: Math.round(Number(act.elapsedTimeSec || 0)),
+          avgPaceSecPerKm: Math.round(Number(act.avgPaceSecPerKm || 0)),
+          totalElevationGain: Number(act.totalElevationGainMeters || 0),
+          avgHeartrate: act.averageHeartrate ?? null,
+          maxHeartrate: act.maxHeartrate ?? null,
+          avgCadenceSpm: act.averageCadenceSpm ?? null,
+          calories: Number(act.calories || 0),
+          mapPolyline: act.mapPolyline || '',
           deviceName: act.deviceName,
-          isManual: act.isManual,
+          isManual: Boolean(act.isManual),
           isHidden: act.isHidden ?? false,
           antiCheatStatus: act.antiCheatStatus as any,
           flagReasons: (act.flagReasons || []) as any,
@@ -1097,18 +1263,20 @@ export class TopRunEngineService implements OnModuleInit {
         },
       });
 
+      act.id = savedAct.id;
+
       if (act.splits && act.splits.length > 0) {
         await prisma.activitySplit.deleteMany({ where: { activityId: savedAct.id } });
         await prisma.activitySplit.createMany({
-          data: act.splits.map((sp) => ({
+          data: act.splits.map((sp, idx) => ({
             activityId: savedAct.id,
-            splitIndex: sp.splitIndex,
-            distanceMeters: sp.distanceMeters,
-            movingTimeSec: sp.movingTimeSec,
-            paceSecPerKm: sp.paceSecPerKm,
-            elevationDiffMeters: sp.elevationDiffMeters || 0,
-            avgHeartrate: sp.averageHeartrate,
-            isValid: sp.isValid,
+            splitIndex: Math.round(Number(sp.splitIndex || idx + 1)),
+            distanceMeters: Number(sp.distanceMeters || 0),
+            movingTimeSec: Math.round(Number(sp.movingTimeSec || 0)),
+            paceSecPerKm: Math.round(Number(sp.paceSecPerKm || 0)),
+            elevationDiffMeters: Number(sp.elevationDiffMeters || 0),
+            avgHeartrate: sp.averageHeartrate ?? null,
+            isValid: Boolean(sp.isValid),
             invalidReason: sp.invalidReason,
           })),
         });
@@ -1228,6 +1396,29 @@ export class TopRunEngineService implements OnModuleInit {
    * bằng Client ID và Token của từng VĐV để kéo Tracklog thật về hệ thống
    */
   async syncLiveStravaActivities(
+    userId = 'usr_admin_01',
+    windowDays: number = 30,
+    options?: {
+      triggerType?: 'MANUAL_SYNC' | 'WEBHOOK' | 'QUEUE_WORKER';
+      bypassCooldown?: boolean;
+      singleActivityExtId?: string;
+      priority?: 1 | 2 | 3;
+    }
+  ): Promise<any> {
+    const lockKey = `${userId}:${options?.singleActivityExtId || 'LIST'}`;
+    const existingLock = this.activeUserSyncLocks.get(lockKey) || this.activeUserSyncLocks.get(`${userId}:LIST`);
+    if (existingLock) {
+      return existingLock;
+    }
+
+    const syncPromise = this.executeLiveStravaActivitiesSync(userId, windowDays, options).finally(() => {
+      this.activeUserSyncLocks.delete(lockKey);
+    });
+    this.activeUserSyncLocks.set(lockKey, syncPromise);
+    return syncPromise;
+  }
+
+  private async executeLiveStravaActivitiesSync(
     userId = 'usr_admin_01',
     windowDays: number = 30,
     options?: {
@@ -1468,6 +1659,7 @@ export class TopRunEngineService implements OnModuleInit {
     const syncedActivities: StoredActivity[] = [];
     let deferredCount = 0;
 
+    const seenBatchKeys = new Set<string>();
     for (const summaryAct of stravaList) {
       const extId = String(summaryAct.id);
       if (this.deletedExternalIds.has(extId)) {
@@ -1480,7 +1672,30 @@ export class TopRunEngineService implements OnModuleInit {
         continue;
       }
 
-      const existingAct = this.activities.find((a) => a.externalId === extId && a.userId === user.id);
+      const candKeys = this.getActivityDedupKeys(
+        user.id,
+        extId,
+        summaryAct.start_date,
+        Number(summaryAct.distance || 0)
+      );
+      if (candKeys.some((k) => seenBatchKeys.has(k))) {
+        continue;
+      }
+      for (const k of candKeys) {
+        seenBatchKeys.add(k);
+      }
+
+      const existingAct = this.activities.find((a) => {
+        if (a.userId !== user.id) return false;
+        if (String(a.externalId).trim() === extId) return true;
+        const aKeys = this.getActivityDedupKeys(
+          a.userId,
+          a.externalId,
+          a.startDateIso,
+          Math.round(Number(a.rawDistanceKm || a.validDistanceKm || 0) * 1000)
+        );
+        return candKeys.some((k) => aKeys.includes(k));
+      });
       if (existingAct) {
         continue;
       }
@@ -1558,9 +1773,10 @@ export class TopRunEngineService implements OnModuleInit {
       this.poolLimiter.markUserManualSynced(user.id);
     }
 
+    await this.deduplicateActivitiesAndRecalculate();
     this.activities.sort((a, b) => new Date(b.startDateIso).getTime() - new Date(a.startDateIso).getTime());
     this.recalculateUserParticipation(user.id);
-    this.saveActivitiesCache();
+    this.saveEngineState();
 
     return {
       status: deferredCount > 0 ? 'PARTIAL_QUEUED' : 'SUCCESS',
@@ -3200,6 +3416,14 @@ export class TopRunEngineService implements OnModuleInit {
   // --------------------------------------------------------------------------
 
   getActivities(userId?: string, role?: string, viewerUserId?: string) {
+    const dedup = this.deduplicateInMemoryActivities();
+    if (dedup.removedCount > 0) {
+      for (const uid of dedup.affectedUserIds) {
+        this.recalculateUserParticipation(uid);
+      }
+      this.saveEngineState();
+    }
+
     let list: StoredActivity[] = [];
     if (role === 'ADMIN') {
       list = userId ? this.activities.filter((a) => a.userId === userId) : this.activities;
@@ -3238,6 +3462,7 @@ export class TopRunEngineService implements OnModuleInit {
    * Chỉ tính các hoạt động hợp lệ và KHÔNG bị ẩn (`!a.isHidden`)
    */
   recalculateUserParticipation(userId: string) {
+    this.deduplicateInMemoryActivities();
     const userActivities = this.activities.filter(
       (a) => a.userId === userId && !a.isHidden
     );
@@ -3507,14 +3732,41 @@ export class TopRunEngineService implements OnModuleInit {
       }
     }
 
+    const extIdClean = String(rawInput.externalId || '').trim();
+    const inputDedupKeys = this.getActivityDedupKeys(
+      user.id,
+      extIdClean,
+      rawInput.startDateIso,
+      rawInput.distanceMeters
+    );
+
+    const existingIdx = this.activities.findIndex((a) => {
+      if (a.userId !== user.id) return false;
+      if (extIdClean && String(a.externalId).trim() === extIdClean) return true;
+      const aKeys = this.getActivityDedupKeys(
+        a.userId,
+        a.externalId,
+        a.startDateIso,
+        Math.round(Number(a.rawDistanceKm || a.validDistanceKm || 0) * 1000)
+      );
+      return inputDedupKeys.some((k) => aKeys.includes(k));
+    });
+    const existingAct = existingIdx >= 0 ? this.activities[existingIdx] : null;
+
+    const deterministicId =
+      existingAct?.id ||
+      (source === ActivitySource.STRAVA && extIdClean
+        ? `act_strava_${extIdClean}`
+        : `act_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`);
+
     const storedAct: StoredActivity = {
-      id: `act_${Date.now()}`,
+      id: deterministicId,
       userId: user.id,
       userName: user.fullName,
       userAvatar: user.avatarUrl,
       userDepartment: user.departmentOrUnit,
       source,
-      externalId: rawInput.externalId,
+      externalId: extIdClean || deterministicId,
       name: rawInput.name,
       sportType: rawInput.sportType,
       startDateIso: rawInput.startDateIso,
@@ -3532,54 +3784,53 @@ export class TopRunEngineService implements OnModuleInit {
       calories: Math.round(evaluation.validDistanceKm * 68),
       mapPolyline:
         rawInput.mapPolyline ||
+        existingAct?.mapPolyline ||
         this.activities[0]?.mapPolyline ||
         '',
       deviceName: source === ActivitySource.GPX_UPLOAD ? 'GPX File Upload' : 'Strava Webhook Sync (Garmin/Coros)',
       isManual: rawInput.isManual,
+      isHidden: existingAct?.isHidden ?? false,
       antiCheatStatus: evaluation.antiCheatStatus,
       flagReasons: evaluation.flagReasons,
       splits: evaluation.evaluatedSplits,
-      kudosCount: 1,
-      kudoedByUserIds: [user.id],
-      comments: [],
+      kudosCount: existingAct?.kudosCount ?? 1,
+      kudoedByUserIds: existingAct?.kudoedByUserIds ?? [user.id],
+      comments: existingAct?.comments ?? [],
       eventContributions,
     };
 
-    this.activities.unshift(storedAct);
+    if (existingIdx >= 0) {
+      this.activities[existingIdx] = storedAct;
+    } else {
+      this.activities.unshift(storedAct);
+    }
 
-    // Cập nhật thống kê User
-    user.totalDistanceKm = roundKm(user.totalDistanceKm + evaluation.validDistanceKm);
-    user.totalActivities += 1;
     user.lastStravaSyncAt = new Date().toISOString();
 
-    // Tạo thông báo Push Notification
-    this.notifications.unshift({
-      id: `notif_${Date.now()}`,
-      userId: user.id,
-      title: `🟠 Đồng bộ ${source === ActivitySource.STRAVA ? 'Strava' : 'GPX'} hoàn tất: ${storedAct.name}`,
-      body:
-        evaluation.invalidDistanceKm > 0
-          ? `Hệ thống ghi nhận ${evaluation.validDistanceKm} km hợp lệ (đã lọc bỏ ${evaluation.invalidDistanceKm} km vi phạm tốc độ) -> Cộng ${evaluation.finalCountedDistanceKm} km vào giải đấu!`
-          : `Chúc mừng! Bạn vừa được cộng ${evaluation.finalCountedDistanceKm} km (Hệ số x${evaluation.appliedMultiplier}) vào bảng xếp hạng.`,
-      type: 'STRAVA_SYNC',
-      createdAtIso: new Date().toISOString(),
-      isRead: false,
-    });
+    // Tính toán lại thống kê User & tiến độ giải đấu từ danh sách đã khử trùng lặp (không cộng dồn mù quáng)
+    this.recalculateUserParticipation(user.id);
+
+    if (!existingAct) {
+      // Tạo thông báo Push Notification chỉ khi là bài chạy mới
+      this.notifications.unshift({
+        id: `notif_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        userId: user.id,
+        title: `🟠 Đồng bộ ${source === ActivitySource.STRAVA ? 'Strava' : 'GPX'} hoàn tất: ${storedAct.name}`,
+        body:
+          evaluation.invalidDistanceKm > 0
+            ? `Hệ thống ghi nhận ${evaluation.validDistanceKm} km hợp lệ (đã lọc bỏ ${evaluation.invalidDistanceKm} km vi phạm tốc độ) -> Cộng ${evaluation.finalCountedDistanceKm} km vào giải đấu!`
+            : `Chúc mừng! Bạn vừa được cộng ${evaluation.finalCountedDistanceKm} km (Hệ số x${evaluation.appliedMultiplier}) vào bảng xếp hạng.`,
+        type: 'STRAVA_SYNC',
+        createdAtIso: new Date().toISOString(),
+        isRead: false,
+      });
+    }
 
     this.saveEngineState();
     this.persistActivityToDb(storedAct).catch(() => {});
     for (const p of updatedParticipations) {
       this.persistParticipationToDb(p).catch(() => {});
     }
-    prisma.user
-      .update({
-        where: { id: user.id },
-        data: {
-          totalDistanceKm: user.totalDistanceKm,
-          totalActivities: user.totalActivities,
-        },
-      })
-      .catch(() => {});
 
     return {
       activity: storedAct,
