@@ -47,3 +47,22 @@
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(148, 163, 184, 0.45);
 }
+
+/* Subtle Leaflet Attribution Overlay */
+.leaflet-container .leaflet-control-attribution {
+  background-color: rgba(15, 20, 32, 0.72) !important;
+  color: #94a3b8 !important;
+  font-size: 9px !important;
+  padding: 1px 6px !important;
+  border-top-left-radius: 6px;
+  backdrop-filter: blur(4px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: none;
+  border-right: none;
+}
+
+.leaflet-container .leaflet-control-attribution a {
+  color: #cbd5e1 !important;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+}

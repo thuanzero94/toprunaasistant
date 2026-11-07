@@ -91,6 +91,7 @@ services:
       PATH: /app/apps/web/node_modules/.bin:/app/apps/api/node_modules/.bin:/app/node_modules/.bin:/usr/local/bin:/usr/bin:/bin
       WATCHPACK_POLLING: 'true'
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:4000/api/v1}
+      NEXT_PUBLIC_CARTO_API_KEY: ${NEXT_PUBLIC_CARTO_API_KEY:-}
     volumes:
       - ./apps/web:/app/apps/web
       - ./packages/shared:/app/packages/shared

@@ -152,8 +152,11 @@ export default function TracklogDetailView({
     if (!mapInstanceRef.current) {
       const map = L.map(mapContainerRef.current, {
         zoomControl: true,
-        attributionControl: false,
+        attributionControl: true,
       });
+      if (map.attributionControl) {
+        map.attributionControl.setPrefix(false);
+      }
       mapInstanceRef.current = map;
       layerGroupRef.current = L.layerGroup().addTo(map);
     }
@@ -166,22 +169,27 @@ export default function TracklogDetailView({
       map.removeLayer(tileLayerRef.current);
     }
 
-    let tileUrl = 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
+    const cartoApiKey = (process.env.NEXT_PUBLIC_CARTO_API_KEY || '').trim();
+    const cartoAuthQuery = cartoApiKey ? `?key=${cartoApiKey}` : '';
+
+    let tileUrl = `https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png${cartoAuthQuery}`;
     let subdomains = 'abcd';
     let maxZoom = 19;
+    let attribution = '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions" target="_blank" rel="noreferrer">CARTO</a>';
 
     if (mapStyle === 'satellite') {
-      tileUrl = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{m}';
       tileUrl = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
       subdomains = '';
       maxZoom = 19;
+      attribution = 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community';
     } else if (mapStyle === 'dark') {
-      tileUrl = 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
+      tileUrl = `https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png${cartoAuthQuery}`;
     }
 
     tileLayerRef.current = L.tileLayer(tileUrl, {
       subdomains,
       maxZoom,
+      attribution,
     }).addTo(map);
 
     // Draw Route Polyline & Km Markers

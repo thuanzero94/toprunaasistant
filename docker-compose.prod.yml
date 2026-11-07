@@ -73,6 +73,7 @@ services:
       dockerfile: apps/web/Dockerfile
       args:
         NEXT_PUBLIC_API_URL: https://api.toprunassistant.io.vn/api/v1
+        NEXT_PUBLIC_CARTO_API_KEY: ${NEXT_PUBLIC_CARTO_API_KEY:-}
     container_name: toprun-prod-web
     restart: always
     depends_on:
@@ -82,6 +83,7 @@ services:
       NODE_ENV: production
       PORT: 3000
       NEXT_PUBLIC_API_URL: https://api.toprunassistant.io.vn/api/v1
+      NEXT_PUBLIC_CARTO_API_KEY: ${NEXT_PUBLIC_CARTO_API_KEY:-}
     networks:
       - toprun-network
 
